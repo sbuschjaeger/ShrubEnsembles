@@ -1,0 +1,18 @@
+name: prime
+channels:
+  - conda-forge
+  - gurobi
+dependencies:
+  - python=3.8
+  - numpy
+  - pylint
+  - scikit-learn
+  - pip
+  - pandas
+  - setuptools
+  - matplotlib
+  - jupyter
+  - tqdm
+  - pdoc3
+  # - pip:
+  #   - -e file:.
