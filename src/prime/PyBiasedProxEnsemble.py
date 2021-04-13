@@ -8,6 +8,9 @@ import time
 import os
 from tqdm import tqdm
 
+from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.base import BaseEstimator, ClassifierMixin
+
 def to_prob_simplex(x):
     if x is None or len(x) == 0:
         return x
@@ -43,8 +46,48 @@ def create_mini_batches(inputs, targets, batch_size, shuffle=False, sliding_wind
 
         yield inputs[excerpt], targets[excerpt]
 
-# TODO SKLEARN BaseEstimator?
-class PyBiasedProxEnsemble:
+# TODO Add Regressor
+class PyBiasedProxEnsemble(ClassifierMixin, BaseEstimator):
+    """ 
+
+    Attributes
+    ----------
+    max_depth : int
+        Maximum depth of DTs trained on each batch
+    step_size : float
+        The step_size used for stochastic gradient descent for opt 
+    loss : str
+        The loss function for training. Should be one of `{"mse", "cross-entropy", "hinge2"}`
+    normalize_weights : boolean
+        True if nonzero weights should be projected onto the probability simplex, that is they should sum to 1. 
+    ensemble_regularizer : str
+        The ensemble_regularizer. Should be one of `{None, "L0", "L1", "hard-L1"}`
+    l_ensemble_reg : float
+        The ensemble_regularizer regularization strength. 
+    tree_regularizer : str
+        The tree_regularizer. Should be one of `{None,"node"}`
+    l_tree_reg : float
+        The tree_regularizer regularization strength. 
+    init_weight : str, number
+        The weight initialization for each new tree. If this is `"max`" then the largest weight across the entire ensemble is used. If this is `"average"` then the average weight  across the entire ensemble is used. If this is a number, then the supplied value is used. 
+    batch_size: int
+        The batch sized used for SGD
+    update_leaves : boolean
+        If true, then leave nodes of each tree are also updated via SGD.
+    epochs : int
+        The number of epochs SGD is run.
+    verbose : boolean
+        If true, shows a progress bar via tqdm and some statistics
+    out_path: str
+        If set, stores a file called epoch_$i.npy with the statistics for epoch $i under the given path.
+    seed : None or number
+        Random seed for tree construction. If None, then the seed 1234 is used.
+    estimators_ : list of objects
+        The list of estimators which are used to built the ensemble. Each estimator must offer a predict_proba method.
+    estimator_weights_ : np.array of floats
+        The list of weights corresponding to their respective estimator in self.estimators_. 
+    """
+
     def __init__(self,
                 max_depth,
                 loss = "cross-entropy",
@@ -55,8 +98,7 @@ class PyBiasedProxEnsemble:
                 l_tree_reg = 0,
                 normalize_weights = False,
                 init_weight = 0,
-                n_jobs = 1,
-                update_trees = False,
+                update_leaves = False,
                 batch_size = 256,
                 verbose = False,
                 out_path = None,
@@ -103,11 +145,10 @@ class PyBiasedProxEnsemble:
         self.l_tree_reg = l_tree_reg
         self.normalize_weights = normalize_weights
         self.max_depth = max_depth
-        self.n_jobs = n_jobs
         self.estimators_ = []
         self.estimator_weights_ = []
         self.dt_seed = self.seed
-        self.update_trees = update_trees
+        self.update_leaves = update_leaves
 
         self.batch_size = batch_size
         self.verbose = verbose
@@ -116,42 +157,102 @@ class PyBiasedProxEnsemble:
         
 
     def _individual_proba(self, X):
+        ''' Predict class probabilities for each individual learner in the ensemble without considering the weights.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix, shape (n_samples, n_features)
+            The samples to be predicted.
+
+        Returns
+        -------
+        y : array, shape (n_samples,C)
+            The predicted class probabilities for each learner.
+        '''
         assert self.estimators_ is not None, "Call fit before calling predict_proba!"
-        # def single_predict_proba(h,X):
-        #     return h.predict_proba(X)
-        
-        # TODO MAKE SURE THAT THE ORDER OF H FITS TO ORDER OF WEIGHTS
-        # all_proba = Parallel(n_jobs=self.n_jobs, backend="threading")(
-        #     delayed(single_predict_proba) (h,X) for h in self.estimators_
-        # )
         all_proba = []
 
         for e in self.estimators_:
             tmp = np.zeros(shape=(X.shape[0], self.n_classes_), dtype=np.float32)
-            tmp[:, e.classes_.astype(int)] += e.predict_proba(X)
+            tmp[:, self.classes_.astype(int)] += e.predict_proba(X)
             all_proba.append(tmp)
 
-        #all_proba = np.array([h.predict_proba(X) for h in self.estimators_])
-        return np.array(all_proba)
+        if len(all_proba) == 0:
+            return np.zeros(shape=(1, X.shape[0], self.n_classes_), dtype=np.float32)
+        else:
+            return np.array(all_proba)
 
-    def _combine_proba(self, all_proba):
+        # # def single_predict_proba(h,X):
+        # #     return h.predict_proba(X)
+        
+        # # TODO MAKE SURE THAT THE ORDER OF H FITS TO ORDER OF WEIGHTS
+        # # all_proba = Parallel(n_jobs=self.n_jobs, backend="threading")(
+        # #     delayed(single_predict_proba) (h,X) for h in self.estimators_
+        # # )
+        # all_proba = []
+
+        # for e in self.estimators_:
+        #     tmp = np.zeros(shape=(X.shape[0], self.n_classes_), dtype=np.float32)
+        #     tmp[:, e.classes_.astype(int)] += e.predict_proba(X)
+        #     all_proba.append(tmp)
+
+        # #all_proba = np.array([h.predict_proba(X) for h in self.estimators_])
+        # return np.array(all_proba)
+
+    def predict_proba(self, X):
+        ''' Predict class probabilities using the pruned model.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix, shape (n_samples, n_features)
+            The samples to be predicted.
+
+        Returns
+        -------
+        y : array, shape (n_samples,C)
+            The predicted class probabilities. 
+        '''
+
+        # Check is fit had been called
+        check_is_fitted(self, ['X_', 'y_'])
+
+        # Input validation
+        X = check_array(X)
+
+        all_proba = self._individual_proba(X)
         scaled_prob = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)])
         combined_proba = np.sum(scaled_prob, axis=0)
         return combined_proba
 
-    def predict_proba(self, X):
-        if (len(self.estimators_)) == 0:
-            return np.zeros((X.shape[0], self.n_classes_))
-        else:
-            all_proba = self._individual_proba(X)
-            return self._combine_proba(all_proba)
+    def predict(self, X):
+        ''' Predict classes using the pruned model.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix, shape (n_samples, n_features)
+            The samples to be predicted.
+
+        Returns
+        -------
+        y : array, shape (n_samples,)
+            The predicted classes. 
+
+        '''
+        proba = self.predict_proba(X)
+        return self.classes_.take(proba.argmax(axis=1), axis=0)
+
+    # def _combine_proba(self, all_proba):
+    #     scaled_prob = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)])
+    #     combined_proba = np.sum(scaled_prob, axis=0)
+    #     return combined_proba
 
     def next(self, data, target, train = False):
         if (len(self.estimators_)) == 0:
             output = np.zeros((data.shape[0], self.n_classes_))
         else:
             all_proba = self._individual_proba(data)
-            output = self._combine_proba(all_proba)
+            output = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)]).sum(axis=0)
+
 
         if train:
             # Compute the appropriate loss. 
@@ -200,7 +301,7 @@ class PyBiasedProxEnsemble:
                 # and thus performed _after_ this update.
                 tmp_w = self.estimator_weights_ - self.step_size*directions - self.step_size*node_deriv
                 
-                if self.update_trees:
+                if self.update_leaves:
                     for i, h in enumerate(self.estimators_):
                         tree_grad = (self.estimator_weights_[i] * loss_deriv)[:,np.newaxis,:]
                         # find idx
@@ -302,9 +403,14 @@ class PyBiasedProxEnsemble:
 
     def fit(self, X, y, sample_weight = None):
         # TODO respect sample weights in loss
+        X, y = check_X_y(X, y)
+        
         self.classes_ = unique_labels(y)
         self.n_classes_ = len(self.classes_)
         self.n_outputs_ = self.n_classes_
+        
+        self.X_ = X
+        self.y_ = y
         
         for epoch in range(self.epochs):
             mini_batches = create_mini_batches(X, y, self.batch_size, False, False) 
