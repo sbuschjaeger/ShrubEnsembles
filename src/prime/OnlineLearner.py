@@ -2,22 +2,9 @@ import os
 import numpy as np
 import random
 from tqdm import tqdm
-import json
 import time
 
-import jax
-from jax import grad
-from jax import value_and_grad
-from jax import jit
-from jax import vmap
-from jax import pmap
-
-from functools import partial
-
-from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.utils.validation import check_is_fitted
 from sklearn.utils.multiclass import unique_labels
-from sklearn.metrics import accuracy_score
 
 from scipy.special import softmax
 

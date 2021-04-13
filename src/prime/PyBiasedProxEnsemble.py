@@ -1,12 +1,12 @@
 import numpy as np
-from joblib import Parallel, delayed
 import numbers
-from sklearn.metrics import accuracy_score
-
+import random
 from scipy.special import softmax
 from sklearn.tree import DecisionTreeClassifier
-
-from OnlineLearner import OnlineLearner
+from sklearn.utils.multiclass import unique_labels
+import time
+import os
+from tqdm import tqdm
 
 def to_prob_simplex(x):
     if x is None or len(x) == 0:
@@ -22,7 +22,29 @@ def to_prob_simplex(x):
     
     return [max(xi + l, 0.0) for xi in x]
 
-class PyBiasedProxEnsemble(OnlineLearner):
+# Modified from https://stackoverflow.com/questions/38157972/how-to-implement-mini-batch-gradient-descent-in-python
+def create_mini_batches(inputs, targets, batch_size, shuffle=False, sliding_window=False):
+    assert inputs.shape[0] == targets.shape[0]
+    indices = np.arange(inputs.shape[0])
+    if shuffle:
+        np.random.shuffle(indices)
+    
+    start_idx = 0
+    while start_idx < len(indices):
+        if start_idx + batch_size > len(indices) - 1:
+            excerpt = indices[start_idx:]
+        else:
+            excerpt = indices[start_idx:start_idx + batch_size]
+        
+        if sliding_window:
+            start_idx += 1
+        else:
+            start_idx += batch_size
+
+        yield inputs[excerpt], targets[excerpt]
+
+# TODO SKLEARN BaseEstimator?
+class PyBiasedProxEnsemble:
     def __init__(self,
                 max_depth,
                 loss = "cross-entropy",
@@ -35,8 +57,12 @@ class PyBiasedProxEnsemble(OnlineLearner):
                 init_weight = 0,
                 n_jobs = 1,
                 update_trees = False,
-                *args, **kwargs
-                ):
+                batch_size = 256,
+                verbose = False,
+                out_path = None,
+                seed = None,
+                epochs = None
+        ):
 
         assert loss in ["mse","cross-entropy","hinge2"], "Currently only {{mse, cross-entropy, hinge2}} loss is supported"
         assert ensemble_regularizer is None or ensemble_regularizer in ["none","L0", "L1", "hard-L1"], "Currently only {{none,L0, L1, hard-L1}} the ensemble regularizer is supported"
@@ -45,13 +71,9 @@ class PyBiasedProxEnsemble(OnlineLearner):
         assert l_tree_reg >= 0, "l_tree_reg must be greate or equal to 0"
         assert tree_regularizer is None or tree_regularizer in ["node"], "Currently only {{none, node}} regularizer is supported for tree the regularizer."
         
-        if "batch_size" in args and args["batch_size"] <= 1:
-            print("WARNING: batch_size should be 2 for PyBiasedProxEnsemble for optimal performance, but was {}. Fixing it for you.".format(args["batch_size"]))
-            args["batch_size"] = 2
-
-        if "batch_size" in kwargs and kwargs["batch_size"] <= 1:
-            print("WARNING: batch_size should be 2 for PyBiasedProxEnsemble for optimal performance, but was {}. Fixing it for you.".format(kwargs["batch_size"]))
-            kwargs["batch_size"] = 2
+        if batch_size is None or batch_size < 1:
+            print("WARNING: batch_size should be 2 for PyBiasedProxEnsemble for optimal performance, but was {}. Fixing it for you.".format(batch_size))
+            batch_size = 2
 
         if ensemble_regularizer == "hard-L1" and l_ensemble_reg < 1:
             print("WARNING: You set l_ensemble_reg to {}, but regularizer is hard-L1. In this mode, l_ensemble_reg should be an integer 1 <= l_ensemble_reg <= max_trees where max_trees is the number of estimators trained by base_estimator!".format(l_ensemble_reg))
@@ -63,8 +85,13 @@ class PyBiasedProxEnsemble(OnlineLearner):
         if (l_ensemble_reg == 0 and (ensemble_regularizer != "none" and ensemble_regularizer is not None)):
             print("WARNING: You set l_ensemble_reg to 0, but choose regularizer {}.".format(ensemble_regularizer))
 
-        super().__init__(*args, **kwargs)
+        if seed is None:
+            self.seed = 1234
+        else:
+            self.seed = seed
 
+        np.random.seed(self.seed)
+        random.seed(self.seed)
         
         self.step_size = step_size
         self.loss = loss
@@ -81,6 +108,12 @@ class PyBiasedProxEnsemble(OnlineLearner):
         self.estimator_weights_ = []
         self.dt_seed = self.seed
         self.update_trees = update_trees
+
+        self.batch_size = batch_size
+        self.verbose = verbose
+        self.out_path = out_path
+        self.epochs = epochs
+        
 
     def _individual_proba(self, X):
         assert self.estimators_ is not None, "Call fit before calling predict_proba!"
@@ -113,7 +146,7 @@ class PyBiasedProxEnsemble(OnlineLearner):
             all_proba = self._individual_proba(X)
             return self._combine_proba(all_proba)
 
-    def next(self, data, target, train = False, new_epoch = False):
+    def next(self, data, target, train = False):
         if (len(self.estimators_)) == 0:
             output = np.zeros((data.shape[0], self.n_classes_))
         else:
@@ -169,7 +202,7 @@ class PyBiasedProxEnsemble(OnlineLearner):
                 
                 if self.update_trees:
                     for i, h in enumerate(self.estimators_):
-                        tree_grad = (self.weights_[i] * loss_deriv)[:,np.newaxis,:]
+                        tree_grad = (self.estimator_weights_[i] * loss_deriv)[:,np.newaxis,:]
                         # find idx
                         idx = h.apply(data)
                         h.tree_.value[idx] = h.tree_.value[idx] - self.step_size * tree_grad[:,:,h.classes_.astype(int)]
@@ -259,7 +292,7 @@ class PyBiasedProxEnsemble(OnlineLearner):
         accuracy = (output.argmax(axis=1) == target) * 100.0
         n_trees = [self.num_trees() for _ in range(data.shape[0])]
         n_param = [self.num_parameters() for _ in range(data.shape[0])]
-        return {"accuracy": accuracy, "num_trees": n_trees, "num_parameters" : n_param}, output
+        return {"loss" : loss, "accuracy": accuracy, "num_trees": n_trees, "num_parameters" : n_param}, output
 
     def num_trees(self):
         return np.count_nonzero(self.estimator_weights_)
@@ -268,4 +301,74 @@ class PyBiasedProxEnsemble(OnlineLearner):
         return sum( [ est.tree_.node_count if w != 0 else 0 for w, est in zip(self.estimator_weights_, self.estimators_)] )
 
     def fit(self, X, y, sample_weight = None):
-        super().fit(X, y, sample_weight)
+        # TODO respect sample weights in loss
+        self.classes_ = unique_labels(y)
+        self.n_classes_ = len(self.classes_)
+        self.n_outputs_ = self.n_classes_
+        
+        for epoch in range(self.epochs):
+            mini_batches = create_mini_batches(X, y, self.batch_size, False, False) 
+
+            # times = []
+            # total_time = 0
+            
+            metrics = {}
+
+            # first_batch = True
+            example_cnt = 0
+
+            with tqdm(total=X.shape[0], ncols=150, disable = not self.verbose) as pbar:
+                for batch in mini_batches: 
+                    data, target = batch 
+                    
+                    # Update Model                    
+                    start_time = time.time()
+                    batch_metrics, output = self.next(data, target, train = True)
+                    batch_time = time.time() - start_time
+
+                    # Extract statistics
+                    for key,val in batch_metrics.items():
+                        metrics[key] = np.concatenate( (metrics.get(key,[]), val), axis=None )
+                        metrics[key + "_sum"] = metrics.get( key + "_sum",0) + np.sum(val)
+
+                        # if self.sliding_window and not first_batch:
+                        #     metrics[key] = np.concatenate( (metrics.get(key,[]), [val[-1]]), axis=None )
+                        #     metrics[key + "_sum"] = metrics.get( key + "_sum",0) + val[-1]
+                        # else:
+                        #     metrics[key] = np.concatenate( (metrics.get(key,[]), val), axis=None )
+                        #     metrics[key + "_sum"] = metrics.get( key + "_sum",0) + np.sum(val)
+                    metrics["time"] = np.concatenate( (metrics.get("time",[]), batch_time / data.shape[0]), axis=None )
+                    metrics["time_sum"] = metrics.get( "time_sum",0) + np.sum(batch_time / data.shape[0])
+                    # if self.sliding_window and not first_batch:
+                    #     loss = self.loss_(output[np.newaxis,-1,:], [target[-1]]).mean(axis=1).sum()
+                    #     example_cnt += 1
+                    #     pbar.update(1)
+                    # else:
+                    #     loss = self.loss_(output, target).mean(axis=1).sum()
+                    #     example_cnt += data.shape[0]
+                    #     pbar.update(data.shape[0])
+                    
+                    # TODO ADD times and losses to metrics and write it to disk
+                    # times.append(batch_time)
+                    # total_time += batch_time
+
+                    # losses.append(loss)
+                    # total_loss += loss
+
+                    example_cnt += data.shape[0]
+                    m_str = ""
+                    for key,val in metrics.items():
+                        if "_sum" in key:
+                            m_str += "{} {:2.4f} ".format(key.split("_sum")[0], val / example_cnt)
+                    
+                    desc = '[{}/{}] {}'.format(
+                        epoch, 
+                        self.epochs-1, 
+                        #total_loss / example_cnt, 
+                        # total_time / example_cnt,
+                        m_str
+                    )
+                    pbar.set_description(desc)
+                
+                if self.out_path is not None:
+                    np.save(os.path.join(self.out_path, "epoch_{}.npy".format(epoch)), metrics, allow_pickle=True)

@@ -1,7 +1,6 @@
 name: prime
 channels:
   - conda-forge
-  - gurobi
 dependencies:
   - python=3.8
   - numpy

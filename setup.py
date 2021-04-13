@@ -1,12 +1,9 @@
-import multiprocessing
-import os
-import platform
-import re
-import subprocess
-import sys
-from distutils.version import LooseVersion
 
+from setuptools import find_packages    
 from setuptools import setup
+from os.path import splitext
+from glob import glob
+from os.path import basename
 
 setup(
     name='PRIME',
@@ -16,15 +13,9 @@ setup(
     author_email='sebastian.buschjaeger@tu-dortmund.de',
     description='Ensemble Learning via (biased) proximal gradient descent implemented in Python and C++.',
     long_description='Ensemble Learning via (biased) proximal gradient descent implemented in Python and C++. ',
-    zip_safe=False,
-    license='MIT',
-    packages=['PRIME'],
-    install_requires = [
-        "numpy",
-        "scikit-learn",
-        "pip",
-        "setuptools",
-        "tqdm",
-        "cvxpy"
-    ]
+    packages=find_packages('src'),
+    package_dir={'': 'src'},
+    py_modules=[splitext(basename(path))[0] for path in glob('src/*.py')],
+    include_package_data=True,
+    zip_safe=False
 )
