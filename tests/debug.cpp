@@ -345,17 +345,18 @@ int main() {
     std::vector<unsigned int> batch_idx(X.size());
     std::iota(std::begin(batch_idx), std::end(batch_idx), 0); 
 
-    unsigned int epochs = 50;
+    unsigned int epochs = 10;
     unsigned int batch_size = 8;
 
     unsigned int max_depth = 5;
     unsigned int max_trees = 0;
     unsigned long seed = 12345;
     data_t step_size = 1e-2;
-    data_t l_reg = 1e-3;
+    data_t l_ensemble_reg = 16;
+    data_t l_tree_reg = 1e-5;
     data_t init_weight = 0.0;
 
-    BiasedProxEnsemble<TREE_INIT::FULLY_RANDOM, TREE_NEXT::GRADIENT, double> est(max_depth, max_trees, n_classes, seed, step_size, l_reg, init_weight, is_nominal, LOSS::CROSS_ENTROPY, REGULARIZER::L1);
+    BiasedProxEnsemble<TREE_INIT::FULLY_RANDOM, TREE_NEXT::GRADIENT, double> est(max_depth, max_trees, n_classes, seed, true, INIT_MODE::CONSTANT, step_size, l_ensemble_reg, l_tree_reg, init_weight, is_nominal, LOSS::MSE, ENSEMBLE_REGULARIZER::hard_L1, TREE_REGULARIZER::NODES);
     auto start = std::chrono::steady_clock::now();
 
     for (unsigned int i = 0; i < epochs; ++i) {

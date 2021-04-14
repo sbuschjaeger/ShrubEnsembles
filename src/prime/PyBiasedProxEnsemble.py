@@ -462,6 +462,7 @@ class PyBiasedProxEnsemble(ClassifierMixin, BaseEstimator):
                     # total_loss += loss
 
                     example_cnt += data.shape[0]
+                    pbar.update(data.shape[0])
                     m_str = ""
                     for key,val in metrics.items():
                         if "_sum" in key:

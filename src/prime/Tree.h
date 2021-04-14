@@ -407,13 +407,12 @@ public:
         }
     }
 
-    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, xt::xarray<data_t> const &tree_grad, data_t step_size, unsigned int tree_num) {
+    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad, data_t step_size) {
         if constexpr (tree_next == GRADIENT) {
-            step_size = step_size / tree_grad.shape()[0];
             for (unsigned int i = 0; i < X.size(); ++i) {
                 auto idx = node_index(X[i]);
                 for (unsigned int j = 0; j < n_classes; ++j) {
-                    nodes[idx].preds[j] = nodes[idx].preds[j] - step_size * tree_grad(tree_num, i, j);
+                    nodes[idx].preds[j] = nodes[idx].preds[j] - step_size * tree_grad[i][j];
                 } 
             }
         } else if constexpr (tree_next == INCREMENTAL) {
@@ -426,23 +425,26 @@ public:
         }
     }
 
-    void predict_proba(std::vector<std::vector<data_t>> const &X, xt::xarray<data_t> &place_to_put, int row) {
-        for (unsigned int i = 0; i < X.size(); ++i) {
-            std::vector<data_t> const & xpred = nodes[node_index(X[i])].preds;
-            for (unsigned int j = 0; j < xpred.size(); ++j) {
-                place_to_put(row, i, j) = xpred[j];
-            }
-        }
-    }
-
-    // std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
-    //     std::vector<std::vector<data_t>> preds(X.size());
+    // void predict_proba(std::vector<std::vector<data_t>> const &X, xt::xarray<data_t> &place_to_put, int row) {
     //     for (unsigned int i = 0; i < X.size(); ++i) {
     //         std::vector<data_t> const & xpred = nodes[node_index(X[i])].preds;
-    //         preds.push_back(xpred);
+    //         for (unsigned int j = 0; j < xpred.size(); ++j) {
+    //             place_to_put(row, i, j) = xpred[j];
+    //         }
     //     }
-    //     return preds;
     // }
+
+    std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
+        std::vector<std::vector<data_t>> preds(X.size());
+        for (unsigned int i = 0; i < X.size(); ++i) {
+            preds[i] = nodes[node_index(X[i])].preds;
+        }
+        return preds;
+    }
+
+    unsigned int get_num_nodes() const {
+        return n_nodes;
+    }
 };
 
 #endif

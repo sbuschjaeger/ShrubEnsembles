@@ -20,20 +20,20 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -ffast-math -march=native -mtune=native")
 #   https://stackoverflow.com/questions/58541131/why-is-cmake-removing-some-include-directories-from-include-directories-calls/58589570#58589570 
 #   https://gitlab.kitware.com/cmake/cmake/-/issues/17966
 
-unset(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES)
-unset(CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES)
+#unset(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES)
+#unset(CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES)
 
-add_subdirectory(pybind11)
+add_subdirectory(lib/pybind11)
 
 find_package(xtl REQUIRED)
 find_package(xtensor REQUIRED)
 
-include_directories("./include")
+include_directories("src/prime")
 
-add_executable(debug debug.cpp)
+add_executable(debug tests/debug.cpp)
 target_include_directories(debug PUBLIC ${xtensor_INCLUDE_DIRS})
 target_link_libraries(debug PRIVATE xtensor xtensor::optimize xtensor::use_xsimd)
 
-pybind11_add_module(PyBPE include/Python.cpp)
-target_include_directories(PyBPE PRIVATE ${xtensor_INCLUDE_DIRS})
-target_link_libraries(PyBPE PRIVATE xtensor xtensor::optimize xtensor::use_xsimd)
+# pybind11_add_module(PyBPE include/Python.cpp)
+# target_include_directories(PyBPE PRIVATE ${xtensor_INCLUDE_DIRS})
+# target_link_libraries(PyBPE PRIVATE xtensor xtensor::optimize xtensor::use_xsimd)

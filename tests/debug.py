@@ -8,6 +8,7 @@ from sklearn.model_selection import KFold
 # from sklearn.metrics import make_scorer, accuracy_score
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.ensemble import RandomForestClassifier
 
 from prime.PyBiasedProxEnsemble import PyBiasedProxEnsemble
 
@@ -310,33 +311,97 @@ X = df.values
 n_splits = 5
 kf = KFold(n_splits=n_splits)
 
-accuracies = []
+models = {
+    "PyBiasedProxEnsemble d = 5, T = 32, leaves updated" : [
+        PyBiasedProxEnsemble(
+            max_depth = 5,
+            loss = "cross-entropy",
+            step_size = 1e-2,
+            ensemble_regularizer = "hard-L1",
+            l_ensemble_reg = 32,
+            tree_regularizer = None,
+            l_tree_reg = 0, 
+            normalize_weights = True,
+            init_weight = "average",
+            update_leaves = True,
+            batch_size = 64,
+            epochs = 50,
+            verbose = False
+        ) for _ in range(n_splits)
+    ], 
+    "PyBiasedProxEnsemble d = 2, T = 32, leaves updated" : [
+        PyBiasedProxEnsemble(
+            max_depth = 2,
+            loss = "cross-entropy",
+            step_size = 1e-2,
+            ensemble_regularizer = "hard-L1",
+            l_ensemble_reg = 32,
+            tree_regularizer = None,
+            l_tree_reg = 0, 
+            normalize_weights = True,
+            init_weight = "average",
+            update_leaves = True,
+            batch_size = 64,
+            epochs = 50,
+            verbose = False
+        ) for _ in range(n_splits)
+    ],
+    "PyBiasedProxEnsemble d = 5, T = 32, leaves not updated" : [
+        PyBiasedProxEnsemble(
+            max_depth = 5,
+            loss = "cross-entropy",
+            step_size = 1e-2,
+            ensemble_regularizer = "hard-L1",
+            l_ensemble_reg = 32,
+            tree_regularizer = None,
+            l_tree_reg = 0, 
+            normalize_weights = True,
+            init_weight = "average",
+            update_leaves = False,
+            batch_size = 64,
+            epochs = 50,
+            verbose = False
+        ) for _ in range(n_splits)
+    ],
+    "PyBiasedProxEnsemble d = 2, T = 32, leaves not updated" : [
+        PyBiasedProxEnsemble(
+            max_depth = 2,
+            loss = "cross-entropy",
+            step_size = 1e-2,
+            ensemble_regularizer = "hard-L1",
+            l_ensemble_reg = 64,
+            tree_regularizer = None,
+            l_tree_reg = 0, 
+            normalize_weights = True,
+            init_weight = "average",
+            update_leaves = False,
+            batch_size = 32,
+            epochs = 50,
+            verbose = False
+        ) for _ in range(n_splits)
+    ],
+    "RandomForestClassifier d = 2, T = 32": [
+        RandomForestClassifier(n_estimators = 32, max_depth = 2) for _ in range(n_splits)
+    ],
+    "RandomForestClassifier d = 5, T = 32": [
+        RandomForestClassifier(n_estimators = 32, max_depth = 5) for _ in range(n_splits)
+    ]
+}
+
+accuracies = {}
 for i, (train_index, test_index) in enumerate(kf.split(X)):
     print("Testing fold {}".format(i))
 
     Xtrain, Xtest = X[train_index], X[test_index]
     Ytrain, Ytest = Y[train_index], Y[test_index]
 
-    model = PyBiasedProxEnsemble(
-        max_depth = 5,
-        loss = "cross-entropy",
-        step_size = 1e-2,
-        ensemble_regularizer = "hard-L1",
-        l_ensemble_reg = 32,
-        tree_regularizer = None,
-        l_tree_reg = 0, 
-        normalize_weights = True,
-        init_weight = "average",
-        update_trees = True,
-        batch_size = 256,
-        epochs = 50,
-        verbose = True
-    )
+    for m in models:
+        models[m][i].fit(Xtrain,Ytrain)
+        proba = models[m][i].predict_proba(Xtest)
+        if m not in accuracies:
+            accuracies[m] = []
 
-    model.fit(Xtrain,Ytrain)
-    proba = model.predict_proba(Xtest)
-    
-    accuracies.append( accuracy_score(Ytest, proba.argmax(axis=1)) )
-    print("Accuracy for fold {} was {} \n".format(i, accuracies[-1]))
+        accuracies[m].append( accuracy_score(Ytest, proba.argmax(axis=1)) )
 
-print("Accuracy {} +- {}".format(np.mean(accuracies), np.std(accuracies)))
+for key, val in accuracies.items():
+    print("Accuracy {}: {} +- {}".format(key, np.mean(val), np.std(val)))
