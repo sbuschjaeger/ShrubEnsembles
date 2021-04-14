@@ -340,23 +340,41 @@ void print_progress(unsigned int cur_idx, unsigned int max_idx, std::string cons
 }
 
 int main() {
-    auto n_classes = 2;
-
     std::vector<unsigned int> batch_idx(X.size());
     std::iota(std::begin(batch_idx), std::end(batch_idx), 0); 
 
     unsigned int epochs = 10;
     unsigned int batch_size = 8;
 
-    unsigned int max_depth = 5;
-    unsigned int max_trees = 0;
-    unsigned long seed = 12345;
-    data_t step_size = 1e-2;
-    data_t l_ensemble_reg = 16;
-    data_t l_tree_reg = 1e-5;
-    data_t init_weight = 0.0;
+	unsigned int n_classes = 2;
+	unsigned int max_depth = 5;
+	unsigned long seed = 12345;
+	bool normalize_weights = true;
+	INIT_MODE init_mode = INIT_MODE::CONSTANT;
+	data_t step_size = 1e-5;
+	data_t init_weight = 0.0;
+	std::vector<bool> const & is_nominal = {};
+	LOSS loss = LOSS::MSE;
+	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::NO;
+	data_t l_ensemble_reg = 0.0;
+	TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO;
+	data_t l_tree_reg = 0.0;
 
-    BiasedProxEnsemble<TREE_INIT::FULLY_RANDOM, TREE_NEXT::GRADIENT, double> est(max_depth, max_trees, n_classes, seed, true, INIT_MODE::CONSTANT, step_size, l_ensemble_reg, l_tree_reg, init_weight, is_nominal, LOSS::MSE, ENSEMBLE_REGULARIZER::hard_L1, TREE_REGULARIZER::NODES);
+    BiasedProxEnsemble<TREE_INIT::FULLY_RANDOM, TREE_NEXT::GRADIENT, double> est(
+		n_classes,
+		max_depth,
+		seed,
+		normalize_weights,
+		loss,
+		step_size,
+		init_mode,
+		init_weight,
+		is_nominal,
+		ensemble_regularizer,
+		l_ensemble_reg,
+		tree_regularizer,
+		l_tree_reg
+	);
     auto start = std::chrono::steady_clock::now();
 
     for (unsigned int i = 0; i < epochs; ++i) {

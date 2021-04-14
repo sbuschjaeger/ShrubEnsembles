@@ -383,20 +383,9 @@ private:
 public:
 
     Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), gen(seed) {
+        // TODO Do we want to refactor / remove this? I dont think is_nominal has that much overhead, does it?
         std::vector<bool> is_nominal(X[0].size());
-        std::fill(X.begin(), X.end(), false);
-        start_leaf = std::pow(2,max_depth) - 1;
-        n_nodes = std::pow(2,max_depth + 1) - 1;
-
-        if constexpr (tree_init == FULLY_RANDOM) {
-            random_nodes(X, Y, is_nominal);
-        } else {
-            trained_nodes(X, Y);
-        }
-    }
-
-    Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal) : n_classes(n_classes), gen(seed) {
-
+        std::fill(is_nominal.begin(), is_nominal.end(), false);
         start_leaf = std::pow(2,max_depth) - 1;
         n_nodes = std::pow(2,max_depth + 1) - 1;
 
@@ -404,6 +393,22 @@ public:
             random_nodes(X, Y, is_nominal);
         } else {
             trained_nodes(X, Y, is_nominal);
+        }
+    }
+
+    Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal) : n_classes(n_classes), gen(seed) {
+        std::vector<bool> _is_nominal(X[0].size(), false);
+        if (is_nominal.size() == X[0].size()) {
+            _is_nominal = is_nominal;
+        }
+
+        start_leaf = std::pow(2,max_depth) - 1;
+        n_nodes = std::pow(2,max_depth + 1) - 1;
+
+        if constexpr (tree_init == FULLY_RANDOM) {
+            random_nodes(X, Y, _is_nominal);
+        } else {
+            trained_nodes(X, Y, _is_nominal);
         }
     }
 
@@ -424,15 +429,6 @@ public:
             /* Do nothing */
         }
     }
-
-    // void predict_proba(std::vector<std::vector<data_t>> const &X, xt::xarray<data_t> &place_to_put, int row) {
-    //     for (unsigned int i = 0; i < X.size(); ++i) {
-    //         std::vector<data_t> const & xpred = nodes[node_index(X[i])].preds;
-    //         for (unsigned int j = 0; j < xpred.size(); ++j) {
-    //             place_to_put(row, i, j) = xpred[j];
-    //         }
-    //     }
-    // }
 
     std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
         std::vector<std::vector<data_t>> preds(X.size());

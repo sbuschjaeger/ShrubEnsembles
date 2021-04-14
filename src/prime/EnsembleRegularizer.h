@@ -8,7 +8,10 @@
 
 #include "Datatypes.h"
 
-enum class ENSEMBLE_REGULARIZER {NO,L0,L1,hard_L1};
+
+namespace ENSEMBLE_REGULARIZER {
+
+enum class TYPE {NO,L0,L1,hard_L1};
 
 std::vector<data_t> no_reg(std::vector<data_t> const &w, data_t scale) {
     return w;
@@ -71,20 +74,6 @@ std::vector<data_t> hard_L1_reg(std::vector<data_t> const &w, data_t K) {
     return tmp_w;
 }
 
-/*
-* if x is None or len(x) == 0:
-        return x
-    sorted_x = np.sort(x)
-    x_sum = sorted_x[0]
-    l = 1.0 - sorted_x[0]
-    for i in range(1,len(sorted_x)):
-        x_sum += sorted_x[i]
-        tmp = 1.0 / (i + 1.0) * (1.0 - x_sum)
-        if (sorted_x[i] + tmp) > 0:
-            l = tmp 
-    
-    return [max(xi + l, 0.0) for xi in x]
-*/
 std::vector<data_t> to_prob_simplex(std::vector<data_t> const &w) {
     if (w.size() == 0) {
         return w;
@@ -109,74 +98,33 @@ std::vector<data_t> to_prob_simplex(std::vector<data_t> const &w) {
     return sorted_w;
 }
 
-// inline data_t no_reg(xt::xarray<data_t> &w){
-//     return 0.0;
-// }
-
-// inline xt::xarray<data_t> no_prox(xt::xarray<data_t> &w, data_t step_size, data_t lambda){
-//     return w;
-// }
-
-// inline data_t L0_reg(xt::xarray<data_t> &w){
-//     data_t cnt = 0;
-//     for (unsigned int i = 0; i < w.shape()[0]; ++i) {
-//         cnt += (w(i) != 0.0);
-//     }
-
-//     return cnt;
-// }
-
-// inline xt::xarray<data_t> L0_prox(xt::xarray<data_t> &w, data_t step_size, data_t lambda){
-//     data_t tmp = std::sqrt(2 * lambda * step_size);
-//     for (unsigned int i = 0; i < w.shape()[0]; ++i) {
-//         if (std::abs(w(i)) < tmp)  {
-//             w(i) = 0.0;
-//         }
-//     }
-//     return w;
-// }
-
-// inline data_t L1_reg(xt::xarray<data_t> &w){
-//     data_t cnt = 0;
-//     for (unsigned int i = 0; i < w.shape()[0]; ++i) {
-//         cnt += std::abs(w(i));
-//     }
-
-//     return cnt;
-// }
-
-// inline xt::xarray<data_t> L1_prox(xt::xarray<data_t> &w, data_t step_size, data_t lambda){
-//     xt::xarray<data_t> sign = xt::sign(w);
-//     w = xt::abs(w) - step_size * lambda;
-//     return sign*xt::maximum(w,0);
-// }
-
-auto reg_from_enum(ENSEMBLE_REGULARIZER reg) {
-    if (reg == ENSEMBLE_REGULARIZER::NO) {
+auto from_enum(TYPE reg) {
+    if (reg == TYPE::NO) {
         return no_reg;
-    } else if (reg == ENSEMBLE_REGULARIZER::L0) {
+    } else if (reg == TYPE::L0) {
         return L0_reg;
-    } else if (reg == ENSEMBLE_REGULARIZER::L1) {
+    } else if (reg == TYPE::L1) {
         return L1_reg;
-    } else if (reg == ENSEMBLE_REGULARIZER::hard_L1) {
+    } else if (reg == TYPE::hard_L1) {
         return hard_L1_reg;
     } else {
         throw std::runtime_error("Wrong regularizer enum provided. No implementation for this enum found");
     }
 }
 
-auto regularizer_from_string(std::string const & regularizer) {
+auto from_string(std::string const & regularizer) {
     if (regularizer == "none" || regularizer == "no") {
-        return ENSEMBLE_REGULARIZER::NO;
+        return TYPE::NO;
     } else if (regularizer  == "L0") {
-        return ENSEMBLE_REGULARIZER::L0;
+        return TYPE::L0;
     } else if (regularizer == "L1") {
-        return ENSEMBLE_REGULARIZER::L1;
+        return TYPE::L1;
     } else if (regularizer == "hard_L1" || regularizer == "hard-L1") {
-        return ENSEMBLE_REGULARIZER::hard_L1;
+        return TYPE::hard_L1;
     } else {
         throw std::runtime_error("Currently only the three regularizer {none, L0, L1, hard_L1} are supported, but you provided: " + regularizer);
     }
+}
 }
 
 #endif
