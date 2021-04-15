@@ -14,6 +14,18 @@
 
 enum class INIT_MODE {CONSTANT, AVERAGE, MAX};
 
+auto from_string(std::string const & init_mode) {
+    if (init_mode == "CONSTANT" || init_mode == "constant") {
+        return INIT_MODE::CONSTANT;
+    } else if (init_mode == "AVERAGE" || init_mode == "average") {
+        return INIT_MODE::AVERAGE;
+    } else if (init_mode == "MAX" || init_mode == "max") {
+        return INIT_MODE::MAX;
+    } else {
+        throw std::runtime_error("Currently only init_mode {CONSTANT, AVERAGE, MAX} are supported, but you provided: " + init_mode);
+    }
+}
+
 void scale(std::vector<std::vector<data_t>> &X, data_t s) {
     for (unsigned int j = 0; j < X.size(); ++j) {
         for (unsigned int k = 0; k < X[j].size(); ++k) {
@@ -60,7 +72,7 @@ std::vector<std::vector<data_t>> weighted_sum_first_dim(std::vector<std::vector<
  * @retval None
  */
 template <typename pred_t>
-class BiasedProxedEnsembleInterface {
+class PrimeInterface {
 public:
     virtual data_t next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
 
@@ -70,14 +82,14 @@ public:
 
     virtual unsigned int num_trees() const = 0;
 
-    virtual ~BiasedProxedEnsembleInterface() { }
+    virtual ~PrimeInterface() { }
 };
 
 //TODO python interface
 //TODO comments
 
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
-class BiasedProxEnsemble : public BiasedProxedEnsembleInterface<pred_t> {
+class Prime : public PrimeInterface<pred_t> {
 
 private:
     std::vector< Tree<tree_init, tree_next, pred_t> > _trees;
@@ -104,12 +116,12 @@ private:
 
 public:
 
-    BiasedProxEnsemble(
+    Prime(
         unsigned int n_classes, 
         unsigned int max_depth = 5,
         unsigned long seed = 12345,
         bool normalize_weights = true,
-        LOSS loss = LOSS::MSE,
+        LOSS::TYPE loss = LOSS::TYPE::MSE,
         data_t step_size = 1e-5,
         INIT_MODE init_mode = INIT_MODE::CONSTANT,
         data_t init_weight = 0.0,
@@ -124,8 +136,8 @@ public:
         seed(seed), 
         normalize_weights(normalize_weights), 
         step_size(step_size), 
-        loss(loss_from_enum(loss)), 
-        loss_deriv(loss_deriv_from_enum(loss)), 
+        loss(LOSS::from_enum(loss)), 
+        loss_deriv(LOSS::deriv_from_enum(loss)), 
         init_mode(init_mode), 
         init_weight(init_weight), 
         is_nominal(is_nominal), 
@@ -135,20 +147,20 @@ public:
         l_tree_reg(l_tree_reg) 
     {}
 
-    BiasedProxEnsemble(
+    Prime(
         unsigned int n_classes, 
         unsigned int max_depth = 5,
         unsigned long seed = 12345,
         bool normalize_weights = true,
-        std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss = mse,
-        std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss_deriv = mse_deriv,
+        std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss = LOSS::mse,
+        std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss_deriv = LOSS::mse_deriv,
         data_t step_size = 1e-5,
         INIT_MODE init_mode = INIT_MODE::CONSTANT,
         data_t init_weight = 0.0,
         std::vector<bool> const & is_nominal = {},
         std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) > ensemble_regularizer = ENSEMBLE_REGULARIZER::no_reg,
         data_t l_ensemble_reg = 0.0,
-        std::function< data_t(Tree<tree_init, tree_next, pred_t>) const &> tree_regularizer = TREE_REGULARIZER::tree_no_reg,
+        std::function< data_t(Tree<tree_init, tree_next, pred_t>) const &> tree_regularizer = TREE_REGULARIZER::no_reg,
         data_t l_tree_reg = 0.0
     ) : 
         n_classes(n_classes), 

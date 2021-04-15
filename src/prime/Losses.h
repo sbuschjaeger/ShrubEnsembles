@@ -8,7 +8,9 @@
 
 #include "Datatypes.h"
 
-enum class LOSS {CROSS_ENTROPY, MSE};
+namespace LOSS {
+
+enum class TYPE {CROSS_ENTROPY, MSE};
 
 std::vector<data_t> softmax(std::vector<data_t> const &x) {
     std::vector<data_t> tmp(x);
@@ -138,34 +140,36 @@ std::vector<std::vector<data_t>> mse_deriv(std::vector<std::vector<data_t>> cons
  * @param  &target: The per-sample target which is assumed to be from {0,\dots,n_classes - 1}. This tensor is assumed to have a shape of (batch_size)
  * @retval The first derivative of the mse loss for each class and each sample. The return tensor has a shape of (batch_size, n_classes). 
  */
-auto loss_from_enum(LOSS loss) {
-    if (loss == LOSS::CROSS_ENTROPY) {
+auto from_enum(TYPE loss) {
+    if (loss == TYPE::CROSS_ENTROPY) {
        return cross_entropy;
-    } else if (loss == LOSS::MSE) {
+    } else if (loss == TYPE::MSE) {
         return mse;
     } else {
         throw std::runtime_error("Wrong loss enum provided. No implementation for this enum found");
     }
 }
 
-auto loss_deriv_from_enum(LOSS loss) {
-    if (loss == LOSS::CROSS_ENTROPY) {
+auto deriv_from_enum(TYPE loss) {
+    if (loss == TYPE::CROSS_ENTROPY) {
         return cross_entropy_deriv;
-    } else if (loss == LOSS::MSE) {
+    } else if (loss == TYPE::MSE) {
         return mse_deriv;
     } else {
         throw std::runtime_error("Wrong loss enum provided. No implementation for this enum found");
     }
 }
 
-auto loss_from_string(std::string const & loss) {
+auto from_string(std::string const & loss) {
     if (loss == "cross-entropy") {
-        return LOSS::CROSS_ENTROPY;
+        return TYPE::CROSS_ENTROPY;
     } else if (loss  == "mse") {
-        return LOSS::MSE;
+        return TYPE::MSE;
     } else {
         throw std::runtime_error("Currently only the two losses {cross-entropy, mse} are supported, but you provided: " + loss);
     }
+}
+
 }
 
 #endif

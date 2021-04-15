@@ -10,7 +10,8 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import RandomForestClassifier
 
-from prime.PyBiasedProxEnsemble import PyBiasedProxEnsemble
+from prime.Prime import Prime
+from prime.CPrime import CPrime
 
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
 data = np.array([
@@ -312,8 +313,8 @@ n_splits = 5
 kf = KFold(n_splits=n_splits)
 
 models = {
-    "PyBiasedProxEnsemble d = 5, T = 32, leaves updated" : [
-        PyBiasedProxEnsemble(
+    "CPrime d = 5, T = 32, leaves updated" : [
+        CPrime(
             max_depth = 5,
             loss = "cross-entropy",
             step_size = 1e-2,
@@ -329,9 +330,9 @@ models = {
             verbose = False
         ) for _ in range(n_splits)
     ], 
-    "PyBiasedProxEnsemble d = 2, T = 32, leaves updated" : [
-        PyBiasedProxEnsemble(
-            max_depth = 2,
+    "Prime d = 5, T = 32, leaves updated" : [
+        Prime(
+            max_depth = 5,
             loss = "cross-entropy",
             step_size = 1e-2,
             ensemble_regularizer = "hard-L1",
@@ -345,47 +346,64 @@ models = {
             epochs = 50,
             verbose = False
         ) for _ in range(n_splits)
-    ],
-    "PyBiasedProxEnsemble d = 5, T = 32, leaves not updated" : [
-        PyBiasedProxEnsemble(
-            max_depth = 5,
-            loss = "cross-entropy",
-            step_size = 1e-2,
-            ensemble_regularizer = "hard-L1",
-            l_ensemble_reg = 32,
-            tree_regularizer = None,
-            l_tree_reg = 0, 
-            normalize_weights = True,
-            init_weight = "average",
-            update_leaves = False,
-            batch_size = 64,
-            epochs = 50,
-            verbose = False
-        ) for _ in range(n_splits)
-    ],
-    "PyBiasedProxEnsemble d = 2, T = 32, leaves not updated" : [
-        PyBiasedProxEnsemble(
-            max_depth = 2,
-            loss = "cross-entropy",
-            step_size = 1e-2,
-            ensemble_regularizer = "hard-L1",
-            l_ensemble_reg = 64,
-            tree_regularizer = None,
-            l_tree_reg = 0, 
-            normalize_weights = True,
-            init_weight = "average",
-            update_leaves = False,
-            batch_size = 32,
-            epochs = 50,
-            verbose = False
-        ) for _ in range(n_splits)
-    ],
-    "RandomForestClassifier d = 2, T = 32": [
-        RandomForestClassifier(n_estimators = 32, max_depth = 2) for _ in range(n_splits)
-    ],
-    "RandomForestClassifier d = 5, T = 32": [
-        RandomForestClassifier(n_estimators = 32, max_depth = 5) for _ in range(n_splits)
-    ]
+    ], 
+    # "Prime d = 2, T = 32, leaves updated" : [
+    #     Prime(
+    #         max_depth = 2,
+    #         loss = "cross-entropy",
+    #         step_size = 1e-2,
+    #         ensemble_regularizer = "hard-L1",
+    #         l_ensemble_reg = 32,
+    #         tree_regularizer = None,
+    #         l_tree_reg = 0, 
+    #         normalize_weights = True,
+    #         init_weight = "average",
+    #         update_leaves = True,
+    #         batch_size = 64,
+    #         epochs = 50,
+    #         verbose = False
+    #     ) for _ in range(n_splits)
+    # ],
+    # "Prime d = 5, T = 32, leaves not updated" : [
+    #     Prime(
+    #         max_depth = 5,
+    #         loss = "cross-entropy",
+    #         step_size = 1e-2,
+    #         ensemble_regularizer = "hard-L1",
+    #         l_ensemble_reg = 32,
+    #         tree_regularizer = None,
+    #         l_tree_reg = 0, 
+    #         normalize_weights = True,
+    #         init_weight = "average",
+    #         update_leaves = False,
+    #         batch_size = 64,
+    #         epochs = 50,
+    #         verbose = False
+    #     ) for _ in range(n_splits)
+    # ],
+    # "Prime d = 2, T = 32, leaves not updated" : [
+    #     Prime(
+    #         max_depth = 2,
+    #         loss = "cross-entropy",
+    #         step_size = 1e-2,
+    #         ensemble_regularizer = "hard-L1",
+    #         l_ensemble_reg = 64,
+    #         tree_regularizer = None,
+    #         l_tree_reg = 0, 
+    #         normalize_weights = True,
+    #         init_weight = "average",
+    #         update_leaves = False,
+    #         batch_size = 32,
+    #         epochs = 50,
+    #         verbose = False
+    #     ) for _ in range(n_splits)
+    # ],
+    # "RandomForestClassifier d = 2, T = 32": [
+    #     RandomForestClassifier(n_estimators = 32, max_depth = 2) for _ in range(n_splits)
+    # ],
+    # "RandomForestClassifier d = 5, T = 32": [
+    #     RandomForestClassifier(n_estimators = 32, max_depth = 5) for _ in range(n_splits)
+    # ]
 }
 
 accuracies = {}

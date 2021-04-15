@@ -1,4 +1,5 @@
 **/__pycache__/*
-**/PRIME.egg-info/*
+**/Prime.egg-info/*
 .vscode
 build
+*.so

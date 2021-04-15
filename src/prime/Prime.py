@@ -47,7 +47,7 @@ def create_mini_batches(inputs, targets, batch_size, shuffle=False, sliding_wind
         yield inputs[excerpt], targets[excerpt]
 
 # TODO Add Regressor
-class PyBiasedProxEnsemble(ClassifierMixin, BaseEstimator):
+class Prime(ClassifierMixin, BaseEstimator):
     """ 
 
     Attributes
@@ -112,7 +112,7 @@ class PyBiasedProxEnsemble(ClassifierMixin, BaseEstimator):
         assert not isinstance(init_weight, numbers.Number) or (isinstance(init_weight, numbers.Number) and init_weight > 0), "init_weight should be > 0, otherwise it will we removed immediately after its construction."
         assert l_tree_reg >= 0, "l_tree_reg must be greate or equal to 0"
         assert tree_regularizer is None or tree_regularizer in ["node"], "Currently only {{none, node}} regularizer is supported for tree the regularizer."
-        
+
         if batch_size is None or batch_size < 1:
             print("WARNING: batch_size should be 2 for PyBiasedProxEnsemble for optimal performance, but was {}. Fixing it for you.".format(batch_size))
             batch_size = 2
@@ -154,7 +154,6 @@ class PyBiasedProxEnsemble(ClassifierMixin, BaseEstimator):
         self.verbose = verbose
         self.out_path = out_path
         self.epochs = epochs
-        
 
     def _individual_proba(self, X):
         ''' Predict class probabilities for each individual learner in the ensemble without considering the weights.
@@ -338,6 +337,7 @@ class PyBiasedProxEnsemble(ClassifierMixin, BaseEstimator):
                 # for i in range(self.n_classes_):
                 #     class_weight[i] = 1.0
 
+                # TODO Add interface for splitter type
                 #tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="best", criterion="entropy")
                 tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="random", criterion="gini")
                 #, class_weight = class_weight) #, max_features=1)

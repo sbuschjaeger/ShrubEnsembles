@@ -8,8 +8,6 @@
 #include <queue>
 #include <string_view>
 
-#include "xtensor/xarray.hpp"
-
 #include "Datatypes.h"
 
 enum TREE_INIT {TRAIN, FULLY_RANDOM, RANDOM};

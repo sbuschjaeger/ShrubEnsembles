@@ -5,7 +5,7 @@
 #include <chrono>
 
 #include "Losses.h"
-#include "BiasedProxEnsemble.h"
+#include "Prime.h"
 
 /**
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
@@ -354,13 +354,13 @@ int main() {
 	data_t step_size = 1e-5;
 	data_t init_weight = 0.0;
 	std::vector<bool> const & is_nominal = {};
-	LOSS loss = LOSS::MSE;
+	LOSS::TYPE loss = LOSS::TYPE::MSE;
 	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::NO;
 	data_t l_ensemble_reg = 0.0;
 	TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO;
 	data_t l_tree_reg = 0.0;
 
-    BiasedProxEnsemble<TREE_INIT::FULLY_RANDOM, TREE_NEXT::GRADIENT, double> est(
+    Prime<TREE_INIT::FULLY_RANDOM, TREE_NEXT::GRADIENT, double> est(
 		n_classes,
 		max_depth,
 		seed,
