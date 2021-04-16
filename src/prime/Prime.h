@@ -226,6 +226,24 @@ public:
         }
 
         for (unsigned int i = 0; i < _weights.size(); ++i) {
+            std::cout << std::endl << "X:" << std::endl;
+            for (auto const & Xi: X) {
+                for (auto const & Xij : Xi) {
+                    std::cout << Xij << " ";
+                }
+                std::cout << std::endl;
+            }
+
+            std::cout << std::endl << "proba:" << std::endl;
+            for (auto const & xp: all_proba) {
+                std::cout << "tree: " << std::endl;
+                for (auto const & xpi : xp) {
+                    std::cout << xpi[0] << " " << xpi[1] << std::endl;
+                }
+                std::cout << std::endl;
+            }
+            std::cout << std::endl;
+
             data_t dir = 0;
             for (unsigned int j = 0; j < all_proba[i].size(); ++j) {
                 for (unsigned int k = 0; k < all_proba[i][j].size(); ++k) {

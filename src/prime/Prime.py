@@ -155,6 +155,8 @@ class Prime(ClassifierMixin, BaseEstimator):
         self.out_path = out_path
         self.epochs = epochs
 
+        self.debug_cnt = 0
+
     def _individual_proba(self, X):
         ''' Predict class probabilities for each individual learner in the ensemble without considering the weights.
 
@@ -248,6 +250,8 @@ class Prime(ClassifierMixin, BaseEstimator):
     #     return combined_proba
 
     def next(self, data, target):
+        self.debug_cnt += 1
+
         if (len(self.estimators_)) == 0:
             output = 1.0 / self.n_classes_ * np.ones((data.shape[0], self.n_classes_))
         else:
@@ -287,10 +291,12 @@ class Prime(ClassifierMixin, BaseEstimator):
             loss += self.l_tree_reg * np.sum( [ (w * est.tree_.node_count) for w, est in zip(self.estimator_weights_, self.estimators_)] )
 
         if len(self.estimators_) > 0:
+            print("data: ", data)
+            print("all_proba: ", all_proba)
             # Compute the gradient for the loss
             directions = np.mean(all_proba*loss_deriv,axis=(1,2))
-
-                # Compute the gradient for the tree regularizer
+            print("dir: ", directions)
+            # Compute the gradient for the tree regularizer
             if self.tree_regularizer:
                 node_deriv = self.l_tree_reg * np.array([ est.tree_.node_count for est in self.estimators_])
             else:
@@ -299,7 +305,7 @@ class Prime(ClassifierMixin, BaseEstimator):
             # Perform the gradient step. Note that L0 / L1 regularizer is performed via the prox operator 
             # and thus performed _after_ this update.
             tmp_w = self.estimator_weights_ - self.step_size*directions - self.step_size*node_deriv
-            
+            print("tmp_w: ", tmp_w)
             if self.update_leaves:
                 for i, h in enumerate(self.estimators_):
                     tree_grad = (self.estimator_weights_[i] * loss_deriv)[:,np.newaxis,:]
@@ -339,10 +345,19 @@ class Prime(ClassifierMixin, BaseEstimator):
 
             # TODO Add interface for splitter type
             #tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="best", criterion="entropy")
-            tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="random", criterion="gini")
+            tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="best", criterion="gini")
             #, class_weight = class_weight) #, max_features=1)
             self.dt_seed += 1
             tree.fit(data, target)
+
+            print("ROOT THRESHOLD ", tree.tree_.threshold[0])
+            print("ROOT FEATURE ", tree.tree_.feature[0])
+            print("ROOT GINI ", tree.tree_.impurity[0])
+            print("F16: ", data[:,16])
+            print("Y ", target)
+            #print("F16: ", data[:,16])
+            from sklearn.tree import export_text
+            print(export_text(tree, decimals = 5, show_weights = True))
 
             # SKlearn stores the raw counts instead of probabilities. For SGD its better to have the 
             # probabilities for numerical stability. 
@@ -389,7 +404,9 @@ class Prime(ClassifierMixin, BaseEstimator):
 
         self.estimators_ = new_est
         self.estimator_weights_ = new_w
-
+        if self.debug_cnt > 2:
+            asdf
+        print(self.estimator_weights_)
         accuracy = (output.argmax(axis=1) == target) * 100.0
         n_trees = [self.num_trees() for _ in range(data.shape[0])]
         n_param = [self.num_parameters() for _ in range(data.shape[0])]

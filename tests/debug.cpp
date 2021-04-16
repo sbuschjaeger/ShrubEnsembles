@@ -343,14 +343,14 @@ int main() {
     std::vector<unsigned int> batch_idx(X.size());
     std::iota(std::begin(batch_idx), std::end(batch_idx), 0); 
 
-    unsigned int epochs = 150;
+    unsigned int epochs = 50;
     unsigned int batch_size = 32;
 
 	unsigned int n_classes = 2;
 	unsigned int max_depth = 2;
 	unsigned long seed = 12345;
 	bool normalize_weights = true;
-	INIT_MODE init_mode = INIT_MODE::AVERAGE;
+	INIT_MODE init_mode = INIT_MODE::CONSTANT;
 	data_t step_size = 1e-2;
 	data_t init_weight = 1.0;
 	std::vector<bool> const & is_nominal = {};
@@ -402,7 +402,7 @@ int main() {
     auto start = std::chrono::steady_clock::now();
 
     for (unsigned int i = 0; i < epochs; ++i) {
-        std::shuffle(batch_idx.begin(), batch_idx.end(), std::default_random_engine(seed));
+        //std::shuffle(batch_idx.begin(), batch_idx.end(), std::default_random_engine(seed));
         
         unsigned int cnt = 0;
         data_t loss_epoch = 0;
