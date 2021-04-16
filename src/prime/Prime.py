@@ -217,11 +217,13 @@ class Prime(ClassifierMixin, BaseEstimator):
 
         # Input validation
         X = check_array(X)
-
-        all_proba = self._individual_proba(X)
-        scaled_prob = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)])
-        combined_proba = np.sum(scaled_prob, axis=0)
-        return combined_proba
+        if (len(self.estimators_)) == 0:
+            return 1.0 / self.n_classes_ * np.ones((X.shape[0], self.n_classes_))
+        else:
+            all_proba = self._individual_proba(X)
+            scaled_prob = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)])
+            combined_proba = np.sum(scaled_prob, axis=0)
+            return combined_proba
 
     def predict(self, X):
         ''' Predict classes using the pruned model.
@@ -245,150 +247,148 @@ class Prime(ClassifierMixin, BaseEstimator):
     #     combined_proba = np.sum(scaled_prob, axis=0)
     #     return combined_proba
 
-    def next(self, data, target, train = False):
+    def next(self, data, target):
         if (len(self.estimators_)) == 0:
-            output = np.zeros((data.shape[0], self.n_classes_))
+            output = 1.0 / self.n_classes_ * np.ones((data.shape[0], self.n_classes_))
         else:
             all_proba = self._individual_proba(data)
             output = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)]).sum(axis=0)
 
+        # Compute the appropriate loss. 
+        if self.loss == "mse":
+            target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
+            loss = (output - target_one_hot) * (output - target_one_hot)
+            loss_deriv = 2 * (output - target_one_hot)
+        elif self.loss == "cross-entropy":
+            target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
+            p = softmax(output, axis=1)
+            loss = -target_one_hot*np.log(p + 1e-7)
+            m = target.shape[0]
+            loss_deriv = softmax(output, axis=1)
+            loss_deriv[range(m),target_one_hot.argmax(axis=1)] -= 1
+        elif self.loss == "hinge2":
+            target_one_hot = np.array( [ [1.0 if y == i else -1.0 for i in range(self.n_classes_)] for y in target] )
+            zeros = np.zeros_like(target_one_hot)
+            loss = np.maximum(1.0 - target_one_hot * output, zeros)**2
+            loss_deriv = - 2 * target_one_hot * np.maximum(1.0 - target_one_hot * output, zeros) 
+        else:
+            raise "Currently only the losses {{cross-entropy, mse, hinge2}} are supported, but you provided: {}".format(self.loss)
+        
+        # Compute the appropriate ensemble_regularizer
+        if self.ensemble_regularizer == "L0":
+            loss = np.mean(loss) + self.l_ensemble_reg * np.linalg.norm(self.estimator_weights_,0)
+        elif self.ensemble_regularizer == "L1":
+            loss = np.mean(loss) + self.l_ensemble_reg * np.linalg.norm(self.estimator_weights_,1)
+        else:
+            loss = np.mean(loss) 
+        
+        # Compute the appropriate tree_regularizer
+        if self.tree_regularizer == "node":
+            loss += self.l_tree_reg * np.sum( [ (w * est.tree_.node_count) for w, est in zip(self.estimator_weights_, self.estimators_)] )
 
-        if train:
-            # Compute the appropriate loss. 
-            if self.loss == "mse":
-                target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
-                loss = (output - target_one_hot) * (output - target_one_hot)
-                loss_deriv = 2 * (output - target_one_hot)
-            elif self.loss == "cross-entropy":
-                target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
-                p = softmax(output, axis=1)
-                loss = -target_one_hot*np.log(p + 1e-7)
-                m = target.shape[0]
-                loss_deriv = softmax(output, axis=1)
-                loss_deriv[range(m),target_one_hot.argmax(axis=1)] -= 1
-            elif self.loss == "hinge2":
-                target_one_hot = np.array( [ [1.0 if y == i else -1.0 for i in range(self.n_classes_)] for y in target] )
-                zeros = np.zeros_like(target_one_hot)
-                loss = np.maximum(1.0 - target_one_hot * output, zeros)**2
-                loss_deriv = - 2 * target_one_hot * np.maximum(1.0 - target_one_hot * output, zeros) 
+        if len(self.estimators_) > 0:
+            # Compute the gradient for the loss
+            directions = np.mean(all_proba*loss_deriv,axis=(1,2))
+
+                # Compute the gradient for the tree regularizer
+            if self.tree_regularizer:
+                node_deriv = self.l_tree_reg * np.array([ est.tree_.node_count for est in self.estimators_])
             else:
-                raise "Currently only the losses {{cross-entropy, mse, hinge2}} are supported, but you provided: {}".format(self.loss)
+                node_deriv = 0
+
+            # Perform the gradient step. Note that L0 / L1 regularizer is performed via the prox operator 
+            # and thus performed _after_ this update.
+            tmp_w = self.estimator_weights_ - self.step_size*directions - self.step_size*node_deriv
             
-            # Compute the appropriate ensemble_regularizer
+            if self.update_leaves:
+                for i, h in enumerate(self.estimators_):
+                    tree_grad = (self.estimator_weights_[i] * loss_deriv)[:,np.newaxis,:]
+                    # find idx
+                    idx = h.apply(data)
+                    h.tree_.value[idx] = h.tree_.value[idx] - self.step_size * tree_grad[:,:,h.classes_.astype(int)]
+
+                # # compute direction per tree
+                # tree_deriv = all_proba*loss_deriv
+                # for i, h in enumerate(self.estimators_):
+                #     # find idx
+                #     idx = h.apply(data)
+                #     # update model
+                #     #h.tree_.value[idx] = h.tree_.value[idx] - self.step_size*h.tree_.value[idx]*tree_deriv[i,:,np.newaxis]
+                #     step = self.step_size*tree_deriv[i,:,np.newaxis]
+                #     h.tree_.value[idx] = h.tree_.value[idx] - step[:,:,h.classes_.astype(int)]
+
+            # Compute the prox step. 
             if self.ensemble_regularizer == "L0":
-                loss = np.mean(loss) + self.l_ensemble_reg * np.linalg.norm(self.estimator_weights_,0)
+                tmp = np.sqrt(2 * self.l_ensemble_reg * self.step_size)
+                tmp_w = np.array([0 if abs(w) < tmp else w for w in tmp_w])
             elif self.ensemble_regularizer == "L1":
-                loss = np.mean(loss) + self.l_ensemble_reg * np.linalg.norm(self.estimator_weights_,1)
+                sign = np.sign(tmp_w)
+                tmp_w = np.abs(tmp_w) - self.step_size*self.l_ensemble_reg
+                tmp_w = sign*np.maximum(tmp_w,0)
+            elif self.ensemble_regularizer == "hard-L1":
+                top_K = np.argsort(tmp_w)[-self.l_ensemble_reg:]
+                tmp_w = np.array([w if i in top_K else 0 for i,w in enumerate(tmp_w)])
+        else:
+            tmp_w = []
+
+        if (len(set(target)) > 1):
+            # Fit a new tree on the current batch. 
+            # class_weight = {}
+            # for i in range(self.n_classes_):
+            #     class_weight[i] = 1.0
+
+            # TODO Add interface for splitter type
+            #tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="best", criterion="entropy")
+            tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="random", criterion="gini")
+            #, class_weight = class_weight) #, max_features=1)
+            self.dt_seed += 1
+            tree.fit(data, target)
+
+            # SKlearn stores the raw counts instead of probabilities. For SGD its better to have the 
+            # probabilities for numerical stability. 
+            # tree.tree_.value is not writeable, but we can modify the values inplace. Thus we 
+            # use [:] to copy the array into the normalized array. Also tree.tree_.value has a strange shape
+            # (batch_size, 1, n_classes)
+            # tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
+
+            if len(self.estimator_weights_) == 0:
+                tmp_w = np.array([1.0])
             else:
-                loss = np.mean(loss) 
-            
-            # Compute the appropriate tree_regularizer
-            if self.tree_regularizer == "node":
-                loss += self.l_tree_reg * np.sum( [ (w * est.tree_.node_count) for w, est in zip(self.estimator_weights_, self.estimators_)] )
-
-            if len(self.estimators_) > 0:
-                # Compute the gradient for the loss
-                directions = np.mean(all_proba*loss_deriv,axis=(1,2))
-
-                 # Compute the gradient for the tree regularizer
-                if self.tree_regularizer:
-                    node_deriv = self.l_tree_reg * np.array([ est.tree_.node_count for est in self.estimators_])
+                if self.init_weight == "average":
+                    tmp_w = np.append(tmp_w, [sum(tmp_w)/len(tmp_w)])
+                elif self.init_weight == "max":
+                    tmp_w = np.append(tmp_w, [max(tmp_w)])
                 else:
-                    node_deriv = 0
+                    tmp_w = np.append(tmp_w, [self.init_weight])
 
-                # Perform the gradient step. Note that L0 / L1 regularizer is performed via the prox operator 
-                # and thus performed _after_ this update.
-                tmp_w = self.estimator_weights_ - self.step_size*directions - self.step_size*node_deriv
-                
-                if self.update_leaves:
-                    for i, h in enumerate(self.estimators_):
-                        tree_grad = (self.estimator_weights_[i] * loss_deriv)[:,np.newaxis,:]
-                        # find idx
-                        idx = h.apply(data)
-                        h.tree_.value[idx] = h.tree_.value[idx] - self.step_size * tree_grad[:,:,h.classes_.astype(int)]
+            self.estimators_.append(tree)
+        else:
+            # TODO WHAT TO DO IF ONLY ONE LABEL IS IN THE CURRENT BATCH?
+            pass
 
-                    # # compute direction per tree
-                    # tree_deriv = all_proba*loss_deriv
-                    # for i, h in enumerate(self.estimators_):
-                    #     # find idx
-                    #     idx = h.apply(data)
-                    #     # update model
-                    #     #h.tree_.value[idx] = h.tree_.value[idx] - self.step_size*h.tree_.value[idx]*tree_deriv[i,:,np.newaxis]
-                    #     step = self.step_size*tree_deriv[i,:,np.newaxis]
-                    #     h.tree_.value[idx] = h.tree_.value[idx] - step[:,:,h.classes_.astype(int)]
+        # If set, normalize the weights. Note that we use the support of tmp_w for the projection onto the probability simplex
+        # as described in http://proceedings.mlr.press/v28/kyrillidis13.pdf
+        # Thus, we first need to extract the nonzero weights, project these and then copy them back into corresponding array
+        if self.normalize_weights and len(tmp_w) > 0:
+            nonzero_idx = np.nonzero(tmp_w)[0]
+            nonzero_w = tmp_w[nonzero_idx]
+            nonzero_w = to_prob_simplex(nonzero_w)
+            self.estimator_weights_ = np.zeros((len(tmp_w)))
+            for i,w in zip(nonzero_idx, nonzero_w):
+                self.estimator_weights_[i] = w
+        else:
+            self.estimator_weights_ = tmp_w
+        
+        # Remove all trees with zero weight after prox and projection onto the prob. simplex. 
+        new_est = []
+        new_w = []
+        for h, w in zip(self.estimators_, self.estimator_weights_):
+            if w > 0:
+                new_est.append(h)
+                new_w.append(w)
 
-                # Compute the prox step. 
-                if self.ensemble_regularizer == "L0":
-                    tmp = np.sqrt(2 * self.l_ensemble_reg * self.step_size)
-                    tmp_w = np.array([0 if abs(w) < tmp else w for w in tmp_w])
-                elif self.ensemble_regularizer == "L1":
-                    sign = np.sign(tmp_w)
-                    tmp_w = np.abs(tmp_w) - self.step_size*self.l_ensemble_reg
-                    tmp_w = sign*np.maximum(tmp_w,0)
-                elif self.ensemble_regularizer == "hard-L1":
-                    top_K = np.argsort(tmp_w)[-self.l_ensemble_reg:]
-                    tmp_w = np.array([w if i in top_K else 0 for i,w in enumerate(tmp_w)])
-            else:
-                tmp_w = []
-
-            if (len(set(target)) > 1):
-                # Fit a new tree on the current batch. 
-                # class_weight = {}
-                # for i in range(self.n_classes_):
-                #     class_weight[i] = 1.0
-
-                # TODO Add interface for splitter type
-                #tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="best", criterion="entropy")
-                tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="random", criterion="gini")
-                #, class_weight = class_weight) #, max_features=1)
-                self.dt_seed += 1
-                tree.fit(data, target)
-
-                # SKlearn stores the raw counts instead of probabilities. For SGD its better to have the 
-                # probabilities for numerical stability. 
-                # tree.tree_.value is not writeable, but we can modify the values inplace. Thus we 
-                # use [:] to copy the array into the normalized array. Also tree.tree_.value has a strange shape
-                # (batch_size, 1, n_classes)
-                # tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
-
-                if len(self.estimator_weights_) == 0:
-                    tmp_w = np.array([1.0])
-                else:
-                    if self.init_weight == "average":
-                        tmp_w = np.append(tmp_w, [sum(tmp_w)/len(tmp_w)])
-                    elif self.init_weight == "max":
-                        tmp_w = np.append(tmp_w, [max(tmp_w)])
-                    else:
-                        tmp_w = np.append(tmp_w, [self.init_weight])
-
-                self.estimators_.append(tree)
-            else:
-                # TODO WHAT TO DO IF ONLY ONE LABEL IS IN THE CURRENT BATCH?
-                pass
-
-            # If set, normalize the weights. Note that we use the support of tmp_w for the projection onto the probability simplex
-            # as described in http://proceedings.mlr.press/v28/kyrillidis13.pdf
-            # Thus, we first need to extract the nonzero weights, project these and then copy them back into corresponding array
-            if self.normalize_weights and len(tmp_w) > 0:
-                nonzero_idx = np.nonzero(tmp_w)[0]
-                nonzero_w = tmp_w[nonzero_idx]
-                nonzero_w = to_prob_simplex(nonzero_w)
-                self.estimator_weights_ = np.zeros((len(tmp_w)))
-                for i,w in zip(nonzero_idx, nonzero_w):
-                    self.estimator_weights_[i] = w
-            else:
-                self.estimator_weights_ = tmp_w
-            
-            # Remove all trees with zero weight after prox and projection onto the prob. simplex. 
-            new_est = []
-            new_w = []
-            for h, w in zip(self.estimators_, self.estimator_weights_):
-                if w > 0:
-                    new_est.append(h)
-                    new_w.append(w)
-
-            self.estimators_ = new_est
-            self.estimator_weights_ = new_w
+        self.estimators_ = new_est
+        self.estimator_weights_ = new_w
 
         accuracy = (output.argmax(axis=1) == target) * 100.0
         n_trees = [self.num_trees() for _ in range(data.shape[0])]
@@ -429,7 +429,7 @@ class Prime(ClassifierMixin, BaseEstimator):
                     
                     # Update Model                    
                     start_time = time.time()
-                    batch_metrics, output = self.next(data, target, train = True)
+                    batch_metrics, output = self.next(data, target)
                     batch_time = time.time() - start_time
 
                     # Extract statistics

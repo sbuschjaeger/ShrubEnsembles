@@ -56,6 +56,15 @@ public:
 
     data_t next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
+            // std::cout << "X.shape = (" << X.size() << "," << X[0].size() << ")" << std::endl;
+            // std::cout << "Y.shpae = (" << Y.size() << ")" << std::endl;
+            // for (unsigned int i = 0; i < 5; ++i) {
+            //     std::cout << "X[i][j] = ";
+            //     for (unsigned int j = 0; j < X[i].size(); ++j) {
+            //         std::cout << X[i][j] << " ";
+            //     }
+            //     std::cout << std::endl;
+            // }
             return model->next(X,Y);
         } else {
             return 0.0;

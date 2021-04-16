@@ -199,6 +199,51 @@ public:
     // ) : max_depth(max_depth), n_classes(n_classes), seed(seed), normalize_weights(normalize_weights), init_mode(init_mode), step_size(step_size), l_ensemble_reg(l_ensemble_reg), l_tree_reg(l_tree_reg), init_weight(init_weight), is_nominal(is_nominal), loss(loss), loss_deriv(loss_deriv), ensemble_regularizer(ensemble_regularizer), tree_regularizer(tree_regularizer) /*, reg(reg), prox(prox) */ {}
 
     data_t next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+        std::vector<std::vector<std::vector<data_t>>> all_proba(_trees.size());
+        std::vector<std::vector<data_t>> output;
+
+        if (_trees.size() > 0) {
+            for (unsigned int i = 0; i < _trees.size(); ++i) {
+                all_proba[i] = _trees[i].predict_proba(X);
+            }
+            output = weighted_sum_first_dim(all_proba, _weights);
+        } else {
+            std::vector<std::vector<data_t>> tmp(X.size());
+            for (unsigned int i = 0; i < tmp.size(); ++i) {
+                tmp[i] = std::vector<data_t>(n_classes, 1.0 / n_classes);
+            }
+            output = tmp;
+            all_proba.push_back(tmp);
+        }
+
+        std::vector<std::vector<data_t>> losses = loss(output, Y);
+        std::vector<std::vector<data_t>> losses_deriv = loss_deriv(output, Y);
+
+        data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
+
+        for (unsigned int i = 0; i < _trees.size(); ++i) {
+            _trees[i].next(X, Y, losses_deriv, _weights[i] * step_size);
+        }
+
+        for (unsigned int i = 0; i < _weights.size(); ++i) {
+            data_t dir = 0;
+            for (unsigned int j = 0; j < all_proba[i].size(); ++j) {
+                for (unsigned int k = 0; k < all_proba[i][j].size(); ++k) {
+                    dir += all_proba[i][j][k] * losses_deriv[j][k];
+                }
+            }
+            dir /= (X.size() * n_classes);
+
+            if (l_tree_reg > 0) {
+                dir += l_tree_reg * tree_regularizer(_trees[i]);
+            }
+
+            _weights[i] = _weights[i] - step_size * dir;
+        }
+        _weights = ensemble_regularizer(_weights, l_ensemble_reg);
+        // for (auto w : _weights) {
+        //     std::cout << w << " ";
+        // }
         // Create new tree
         if (_weights.size() == 0 || init_mode == INIT_MODE::CONSTANT) {
             _weights.push_back(init_weight);
@@ -211,47 +256,11 @@ public:
                 _weights.push_back(max);
             }
         }
-        
         _trees.push_back(Tree<tree_init, tree_next, pred_t>(max_depth, n_classes, seed++, X, Y, is_nominal));
 
-        std::vector<std::vector<std::vector<data_t>>> all_proba(_trees.size());
-        for (unsigned int i = 0; i < _trees.size(); ++i) {
-            all_proba[i] = _trees[i].predict_proba(X);
-        }
-
-        std::vector<std::vector<data_t>> output = weighted_sum_first_dim(all_proba, _weights);
-        std::vector<std::vector<data_t>> losses = loss(output, Y);
-        std::vector<std::vector<data_t>> losses_deriv = loss_deriv(output, Y);
-
-        data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
-
-        for (unsigned int i = 0; i < _trees.size(); ++i) {
-            _trees[i].next(X, Y, losses_deriv, _weights[i] * step_size);
-        }
-
-        std::vector<data_t> directions(_weights.size(), 0);
-        for (unsigned int i = 0; i < all_proba.size(); ++i) {
-            for (unsigned int j = 0; j < all_proba[i].size(); ++j) {
-                for (unsigned int k = 0; k < all_proba[i][j].size(); ++k) {
-                    directions[i] += all_proba[i][j][k] * losses_deriv[j][k];
-                }
-            }
-            directions[i] /= (X.size() * n_classes);
-
-            if (l_tree_reg > 0) {
-                directions[i] += l_tree_reg * tree_regularizer(_trees[i]);
-            }
-        }
-
-        // tmp_w = self.estimator_weights_ - self.step_size*directions - self.step_size*node_deriv
-        for (unsigned int i = 0; i < _weights.size(); ++i) {
-            _weights[i] = _weights[i] - step_size * directions[i];
-        }
-        _weights = ensemble_regularizer(_weights, l_ensemble_reg);
-
         if (normalize_weights && _weights.size() > 0) {
-            std::vector<data_t> nonzero_w(_weights.size());
-            std::vector<unsigned int> nonzero_idx(_weights.size());
+            std::vector<data_t> nonzero_w;
+            std::vector<unsigned int> nonzero_idx;
             for (unsigned int i = 0; i < _weights.size(); ++i) {
                 if (_weights[i] != 0) {
                     nonzero_w.push_back(_weights[i]);
@@ -264,6 +273,10 @@ public:
                 _weights[idx] = nonzero_w[i];
             }
         }
+
+        // for (auto w : _weights) {
+        //     std::cout << w << " ";
+        // }
 
         auto wit = _weights.begin();
         auto tit = _trees.begin();
@@ -278,16 +291,16 @@ public:
             }
         }
 
+        // std::cout << "!!! " << _weights.size() << std::endl;
         return reg_loss;
     }
 
     std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
-        std::vector<std::vector<data_t>> output(X.size());
+        std::vector<std::vector<data_t>> output; 
         if (_trees.size() == 0) {
+            output.resize(X.size());
             for (unsigned int i = 0; i < X.size(); ++i) {
-                std::vector<data_t> tmp(n_classes);
-                std::fill(tmp.begin(), tmp.end(), 1.0/n_classes);
-                output[i] = tmp;
+                output[i] = std::vector<data_t>(n_classes, 1.0/n_classes);
             }
         } else {
             std::vector<std::vector<std::vector<data_t>>> all_proba(_trees.size());

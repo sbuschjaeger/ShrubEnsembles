@@ -325,10 +325,10 @@ std::string to_string(std::vector<std::vector<data_t>> const &data) {
     return s;
 }
 
-void print_progress(unsigned int cur_idx, unsigned int max_idx, std::string const & pre_str, unsigned int width = 100, unsigned int precision = 8) {
-    data_t progress = data_t(cur_idx) / data_t(max_idx);
+void print_progress(unsigned int cur_epoch, unsigned int max_epoch, data_t progress, std::string const & pre_str, unsigned int width = 100, unsigned int precision = 8) {
+    //data_t progress = data_t(cur_idx) / data_t(max_idx);
 
-    std::cout << "[" << cur_idx << "/" << max_idx << "] " << std::setprecision(precision) << pre_str <<  " " ;
+    std::cout << "[" << cur_epoch << "/" << max_epoch << "] " << std::setprecision(precision) << pre_str <<  " " ;
     unsigned int pos = width * progress;
     for (unsigned int i = 0; i < width; ++i) {
         if (i < pos) std::cout << "█";
@@ -343,24 +343,48 @@ int main() {
     std::vector<unsigned int> batch_idx(X.size());
     std::iota(std::begin(batch_idx), std::end(batch_idx), 0); 
 
-    unsigned int epochs = 10;
-    unsigned int batch_size = 8;
+    unsigned int epochs = 150;
+    unsigned int batch_size = 32;
 
 	unsigned int n_classes = 2;
-	unsigned int max_depth = 5;
+	unsigned int max_depth = 2;
 	unsigned long seed = 12345;
 	bool normalize_weights = true;
-	INIT_MODE init_mode = INIT_MODE::CONSTANT;
-	data_t step_size = 1e-5;
-	data_t init_weight = 0.0;
+	INIT_MODE init_mode = INIT_MODE::AVERAGE;
+	data_t step_size = 1e-2;
+	data_t init_weight = 1.0;
 	std::vector<bool> const & is_nominal = {};
 	LOSS::TYPE loss = LOSS::TYPE::MSE;
-	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::NO;
-	data_t l_ensemble_reg = 0.0;
+	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::hard_L1;
+	data_t l_ensemble_reg = 1;
 	TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO;
 	data_t l_tree_reg = 0.0;
 
-    Prime<TREE_INIT::FULLY_RANDOM, TREE_NEXT::GRADIENT, double> est(
+	// Tree<TREE_INIT::TRAIN, TREE_NEXT::NONE, double> tree(
+	// 	max_depth, 
+	// 	n_classes,
+	// 	seed, 
+	// 	X, 
+	// 	Y
+	// );
+
+	// data_t accuracy = 0.0;
+	// auto proba = tree.predict_proba(X);
+	// for (unsigned int i = 0; i < proba.size(); ++i) {
+	// 	std::cout << proba[i][0] << " " << proba[i][1] << std::endl; 
+	// }
+	// std::cout << std::endl;
+
+	// for (unsigned int i = 0; i < proba.size(); ++i) {
+	// 	auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
+	// 	if (max_idx == Y[i]) {
+	// 		accuracy++;
+	// 	}
+	// }
+	
+	// std::cout << "Tree acc: " << accuracy / proba.size() * 100.0 << std::endl;
+
+    Prime<TREE_INIT::TRAIN, TREE_NEXT::NONE, double> est(
 		n_classes,
 		max_depth,
 		seed,
@@ -383,6 +407,8 @@ int main() {
         unsigned int cnt = 0;
         data_t loss_epoch = 0;
         data_t nonzero_epoch = 0;
+		data_t accuracy_epoch = 0;
+
         unsigned int batch_cnt = 0;
         while(cnt < batch_idx.size()) {
             std::vector<unsigned int> indices;
@@ -402,13 +428,22 @@ int main() {
                 target[i] = Y[indices[i]];
             }
 
+			auto proba = est.predict_proba(data);
+			for (unsigned int i = 0; i < proba.size(); ++i) {
+				auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
+				if (max_idx == target[i]) {
+					accuracy_epoch++;
+				}
+			}
+
             auto loss = est.next(data, target);
             nonzero_epoch += est.num_trees();
             loss_epoch += loss;
             batch_cnt++;
             std::stringstream ss;
-            ss << std::setprecision(4) << "loss: " << loss_epoch / (cnt * n_classes) << " nonzero: " << int(nonzero_epoch / batch_cnt);
-            print_progress(cnt, batch_idx.size(), ss.str() );
+            ss << std::setprecision(4) << "loss: " << loss_epoch / (cnt * n_classes) << " nonzero: " << int(nonzero_epoch / batch_cnt) << " acc " << (accuracy_epoch / cnt);
+			data_t progress = data_t(cnt) / data_t(batch_idx.size());
+            print_progress(i, epochs, progress, ss.str() );
         }
         std::cout << std::endl;
     }

@@ -203,7 +203,7 @@ private:
             
             // By default sort sorts after the first feature
             std::sort(f_values.begin(), f_values.end());
-            data_t max_t = f_values[f_values.size() - 1].first;
+            //data_t max_t = f_values[n_data - 1].first;
 
             // Prepare class statistics
             std::vector<unsigned int> left_cnts(n_classes);
@@ -218,38 +218,53 @@ private:
             bool first = true;
             unsigned int begin = 0; 
             data_t best_threshold;
-            for (unsigned int j = 0; j < f_values.size(); ++j) {
+            for (unsigned int j = 0; j < n_data; ++j) {
                 if (f_values[j].first == f_values[0].first) {
                     left_cnts[f_values[j].second] += 1;
                 } else {
                     if (first) {
                         best_threshold = 0.5 * (f_values[0].first + f_values[j].first); 
                         first = false;
-                        begin++;
+                        begin = j + 1;
                     }
                     right_cnts[f_values[j].second] += 1;
                 }
             }
             
             if (first) {
+                // std::cout << "skipping feature " << i << " because there is not enough evidence for a goods split" << std::endl;
                 // We never choose a threshold which means that f_values[0] = f_values[1] = .. = f_values[end]. 
                 // This will not give us a good split, so ignore this feature
-                break;
+                continue;
             }
             // Compute the corresponding gini score 
             data_t best_gini = gini(left_cnts, right_cnts);
+            // if (i == 17) {
+            //     for (auto f : f_values) {
+            //         std::cout << f.first << " ";
+            //     }
+            //     std::cout << std::endl;
+            // }
+            // std::cout << "Checking feature " << i << " with threshold " << best_threshold << " with gini " << best_gini << std::endl;
+            //std::cout << "Checking feature " << i << " with threshold " << best_threshold << " with gini " << best_gini << " and " << left_cnts[0] << "," << left_cnts[1] << "," << right_cnts[0] << "," << right_cnts[1] << std::endl;
+            // std::cout << "Statistics count is " << left_cnts[0] << "," << left_cnts[1] << "," << right_cnts[0] << "," << right_cnts[1] << std::endl;
 
             // Repeat what we have done above with the initial scanning, but now update left_cnts / right_cnts appropriately.
             unsigned int j = begin;
-            while (f_values[j].first < max_t) {
+            //while (f_values[j].first < max_t) {
+            while(j < n_data) {
                 // Update the class statistics by virtually placing the current split threshold over the next example
+                // std::cout << "Statistics count BEFORE for " << j << " is " << left_cnts[0] << "," << left_cnts[1] << "," << right_cnts[0] << "," << right_cnts[1] << std::endl;
                 auto const & f = f_values[j];
                 left_cnts[f.second] += 1;
                 right_cnts[f.second] -= 1;
+                // std::cout << "Statistics count AFTER for " << j << " is " << left_cnts[0] << "," << left_cnts[1] << "," << right_cnts[0] << "," << right_cnts[1] << std::endl;
 
                 // If some examples have the same feature, just ignore this. Only evaluate new splits where the feature value changes.
                 if (f_values[j - 1].first != f_values[j].first) {
                     data_t cur_gini = gini(left_cnts, right_cnts);
+                    // std::cout << "Checking feature " << i << " with threshold " << 0.5 * (f_values[j].first + f_values[j + 1].first) << " with gini " << cur_gini << std::endl;
+                    // std::cout << "Checking feature " << i << " with threshold " << 0.5 * (f_values[j].first + f_values[j + 1].first) << " with gini " << cur_gini << " and " << left_cnts[0] << "," << left_cnts[1] << "," << right_cnts[0] << "," << right_cnts[1] << std::endl;
                     if (cur_gini < best_gini) {
                         best_gini = cur_gini;
                         best_threshold = 0.5 * (f_values[j].first + f_values[j + 1].first);
@@ -331,6 +346,8 @@ private:
             }
             auto t = split.first;
             auto f = split.second;
+            
+            // std::cout << "f = " << f << " and t = " << t << std::endl;
             
             // We assume complete trees in this implementation which means that we always have 2 children 
             // and that each path in the tree has max_depth length. Now it might happen that XLeft / XRight is empty. 

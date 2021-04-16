@@ -81,11 +81,11 @@ class CPrime(ClassifierMixin, BaseEstimator):
                 loss = "cross-entropy",
                 step_size = 1e-1,
                 ensemble_regularizer = None,
-                l_ensemble_reg = 0,  
+                l_ensemble_reg = 0.0,  
                 tree_regularizer = None,
-                l_tree_reg = 0,
+                l_tree_reg = 0.0,
                 normalize_weights = False,
-                init_weight = 0,
+                init_weight = 0.0,
                 update_leaves = False,
                 batch_size = 256,
                 verbose = False,
@@ -159,7 +159,7 @@ class CPrime(ClassifierMixin, BaseEstimator):
         '''
         assert self.model is not None, "Please call fit before calling predict or predict_proba"
 
-        return self.model.predict_proba(X)
+        return np.array(self.model.predict_proba(X))
 
     def predict(self, X):
         ''' Predict classes using the pruned model.
@@ -191,7 +191,7 @@ class CPrime(ClassifierMixin, BaseEstimator):
         
         if self.init_weight in ["average", "max"]:
             weight_init_mode = self.init_weight
-            init_weight = 0
+            init_weight = 0.0
         else:
             weight_init_mode = "constant"
             init_weight = self.init_weight
@@ -207,6 +207,9 @@ class CPrime(ClassifierMixin, BaseEstimator):
         # TODO Add interface for this 
         is_nominal = [False for _ in range(X.shape[1])]
 
+        ensemble_regularizer = "none" if self.ensemble_regularizer is None else str(self.ensemble_regularizer)
+        tree_regularizer = "none" if self.tree_regularizer is None else str(self.tree_regularizer)
+
         self.model = CPrimeBindings(
             self.n_classes_, 
             self.max_depth,
@@ -215,12 +218,12 @@ class CPrime(ClassifierMixin, BaseEstimator):
             self.loss,
             self.step_size,
             weight_init_mode,
-            init_weight,
+            float(init_weight),
             is_nominal,
-            self.ensemble_regularizer,
-            self.l_ensemble_reg,
-            self.tree_regularizer,
-            self.l_tree_reg,
+            ensemble_regularizer,
+            float(self.l_ensemble_reg),
+            tree_regularizer,
+            float(self.l_tree_reg),
             tree_init_mode, 
             tree_update_mode
         )
@@ -240,7 +243,7 @@ class CPrime(ClassifierMixin, BaseEstimator):
                     
                     # Update Model                    
                     start_time = time.time()
-                    batch_loss = self.next(data, target)
+                    batch_loss = self.model.next(data, target)
                     batch_time = time.time() - start_time
 
                     total_loss += batch_loss
