@@ -103,7 +103,10 @@ class Prime(ClassifierMixin, BaseEstimator):
                 verbose = False,
                 out_path = None,
                 seed = None,
-                epochs = None
+                epochs = None,
+                additional_tree_options = {
+                    "splitter" : "best", "criterion" : "gini"
+                }
         ):
 
         assert loss in ["mse","cross-entropy","hinge2"], "Currently only {{mse, cross-entropy, hinge2}} loss is supported"
@@ -127,6 +130,14 @@ class Prime(ClassifierMixin, BaseEstimator):
         if (l_ensemble_reg == 0 and (ensemble_regularizer != "none" and ensemble_regularizer is not None)):
             print("WARNING: You set l_ensemble_reg to 0, but choose regularizer {}.".format(ensemble_regularizer))
 
+        if "max_depth" in additional_tree_options:
+            print("WARNING: You passed `max_depth` to additional_tree_options. However, the tree depth is defined by the max_depth parameter of Prime. I am going to ignore the max_depth parameter passed to additional_tree_options")
+            del additional_tree_options["max_depth"]
+        
+        if "random_seed" in additional_tree_options:
+            print("WARNING: You passed `random_seed` to additional_tree_options. However, the random_seed is defined internally for individual trees. You can control the random seed by setting the `seed` parameter of Prime. I am going to ignore the random_seed parameter passed to additional_tree_options")
+            del additional_tree_options["random_seed"]
+
         if seed is None:
             self.seed = 1234
         else:
@@ -149,13 +160,12 @@ class Prime(ClassifierMixin, BaseEstimator):
         self.estimator_weights_ = []
         self.dt_seed = self.seed
         self.update_leaves = update_leaves
+        self.additional_tree_options = additional_tree_options
 
         self.batch_size = batch_size
         self.verbose = verbose
         self.out_path = out_path
         self.epochs = epochs
-
-        self.debug_cnt = 0
 
     def _individual_proba(self, X):
         ''' Predict class probabilities for each individual learner in the ensemble without considering the weights.
@@ -244,14 +254,7 @@ class Prime(ClassifierMixin, BaseEstimator):
         proba = self.predict_proba(X)
         return self.classes_.take(proba.argmax(axis=1), axis=0)
 
-    # def _combine_proba(self, all_proba):
-    #     scaled_prob = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)])
-    #     combined_proba = np.sum(scaled_prob, axis=0)
-    #     return combined_proba
-
     def next(self, data, target):
-        self.debug_cnt += 1
-
         if (len(self.estimators_)) == 0:
             output = 1.0 / self.n_classes_ * np.ones((data.shape[0], self.n_classes_))
         else:
@@ -291,11 +294,9 @@ class Prime(ClassifierMixin, BaseEstimator):
             loss += self.l_tree_reg * np.sum( [ (w * est.tree_.node_count) for w, est in zip(self.estimator_weights_, self.estimators_)] )
 
         if len(self.estimators_) > 0:
-            # print("data: ", data)
-            # print("all_proba: ", all_proba)
             # Compute the gradient for the loss
             directions = np.mean(all_proba*loss_deriv,axis=(1,2))
-            # print("dir: ", directions)
+            
             # Compute the gradient for the tree regularizer
             if self.tree_regularizer:
                 node_deriv = self.l_tree_reg * np.array([ est.tree_.node_count for est in self.estimators_])
@@ -305,23 +306,13 @@ class Prime(ClassifierMixin, BaseEstimator):
             # Perform the gradient step. Note that L0 / L1 regularizer is performed via the prox operator 
             # and thus performed _after_ this update.
             tmp_w = self.estimator_weights_ - self.step_size*directions - self.step_size*node_deriv
-            # print("tmp_w: ", tmp_w)
+            
             if self.update_leaves:
                 for i, h in enumerate(self.estimators_):
                     tree_grad = (self.estimator_weights_[i] * loss_deriv)[:,np.newaxis,:]
                     # find idx
                     idx = h.apply(data)
                     h.tree_.value[idx] = h.tree_.value[idx] - self.step_size * tree_grad[:,:,h.classes_.astype(int)]
-
-                # # compute direction per tree
-                # tree_deriv = all_proba*loss_deriv
-                # for i, h in enumerate(self.estimators_):
-                #     # find idx
-                #     idx = h.apply(data)
-                #     # update model
-                #     #h.tree_.value[idx] = h.tree_.value[idx] - self.step_size*h.tree_.value[idx]*tree_deriv[i,:,np.newaxis]
-                #     step = self.step_size*tree_deriv[i,:,np.newaxis]
-                #     h.tree_.value[idx] = h.tree_.value[idx] - step[:,:,h.classes_.astype(int)]
 
             # Compute the prox step. 
             if self.ensemble_regularizer == "L0":
@@ -339,23 +330,12 @@ class Prime(ClassifierMixin, BaseEstimator):
 
         if (len(set(target)) > 1):
             # Fit a new tree on the current batch. 
-            # class_weight = {}
-            # for i in range(self.n_classes_):
-            #     class_weight[i] = 1.0
 
-            # TODO Add interface for splitter type
-            #tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="best", criterion="entropy")
-            tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, splitter="best", criterion="gini")
-            #, class_weight = class_weight) #, max_features=1)
+            tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, **self.additional_tree_options)
+            
             self.dt_seed += 1
             tree.fit(data, target)
 
-            # print("ROOT THRESHOLD ", tree.tree_.threshold[0])
-            # print("ROOT FEATURE ", tree.tree_.feature[0])
-            # print("ROOT GINI ", tree.tree_.impurity[0])
-            # print("F16: ", data[:,16])
-            # print("Y ", target)
-            #print("F16: ", data[:,16])
             # from sklearn.tree import export_text
             # print(export_text(tree, decimals = 5, show_weights = True))
 
@@ -404,13 +384,9 @@ class Prime(ClassifierMixin, BaseEstimator):
 
         self.estimators_ = new_est
         self.estimator_weights_ = new_w
-        # if self.debug_cnt > 5:
-        #     asdf
-        # print(self.estimator_weights_)
         accuracy = (output.argmax(axis=1) == target) * 100.0
         n_trees = [self.num_trees() for _ in range(data.shape[0])]
         n_param = [self.num_parameters() for _ in range(data.shape[0])]
-        # print("proba:", output)
         return {"loss" : loss, "accuracy": accuracy, "num_trees": n_trees, "num_parameters" : n_param}, output
 
     def num_trees(self):
@@ -449,10 +425,6 @@ class Prime(ClassifierMixin, BaseEstimator):
                     start_time = time.time()
                     batch_metrics, output = self.next(data, target)
                     batch_time = time.time() - start_time
-
-                    print("DATA: ", data)
-                    print("PROBA: ", output)
-                    print("weights: ", self.estimator_weights_)
 
                     # Extract statistics
                     for key,val in batch_metrics.items():

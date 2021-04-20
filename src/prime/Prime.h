@@ -85,7 +85,6 @@ public:
     virtual ~PrimeInterface() { }
 };
 
-//TODO python interface
 //TODO comments
 
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
@@ -179,25 +178,6 @@ public:
         l_tree_reg(l_tree_reg) 
     {}
 
-    // BiasedProxEnsemble(
-    //     unsigned int max_depth,
-    //     unsigned int n_classes, 
-    //     unsigned long seed, 
-    //     bool normalize_weights,
-    //     INIT_MODE init_mode,
-    //     data_t step_size,
-    //     data_t l_ensemble_reg,
-    //     data_t l_tree_reg,
-    //     data_t init_weight,
-    //     std::vector<bool> const &is_nominal,
-    //     std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss,
-    //     std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss_deriv,
-    //     std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) > ensemble_regularizer,
-    //     std::function< data_t(Tree<tree_init, tree_next, pred_t>) const &> tree_regularizer
-    //     // std::function< xt::xarray<data_t>(xt::xarray<data_t> &)> reg,
-    //     // std::function< xt::xarray<data_t>(xt::xarray<data_t> &, data_t, data_t)> prox
-    // ) : max_depth(max_depth), n_classes(n_classes), seed(seed), normalize_weights(normalize_weights), init_mode(init_mode), step_size(step_size), l_ensemble_reg(l_ensemble_reg), l_tree_reg(l_tree_reg), init_weight(init_weight), is_nominal(is_nominal), loss(loss), loss_deriv(loss_deriv), ensemble_regularizer(ensemble_regularizer), tree_regularizer(tree_regularizer) /*, reg(reg), prox(prox) */ {}
-
     data_t next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         std::vector<std::vector<std::vector<data_t>>> all_proba(_trees.size());
         std::vector<std::vector<data_t>> output;
@@ -230,24 +210,6 @@ public:
         }
 
         for (unsigned int i = 0; i < _weights.size(); ++i) {
-            // std::cout << std::endl << "X:" << std::endl;
-            // for (auto const & Xi: X) {
-            //     for (auto const & Xij : Xi) {
-            //         std::cout << Xij << " ";
-            //     }
-            //     std::cout << std::endl;
-            // }
-
-            // std::cout << std::endl << "proba:" << std::endl;
-            // for (auto const & xp: all_proba) {
-            //     std::cout << "tree: " << std::endl;
-            //     for (auto const & xpi : xp) {
-            //         std::cout << xpi[0] << " " << xpi[1] << std::endl;
-            //     }
-            //     std::cout << std::endl;
-            // }
-            // std::cout << std::endl;
-
             data_t dir = 0;
             for (unsigned int j = 0; j < all_proba[i].size(); ++j) {
                 for (unsigned int k = 0; k < all_proba[i][j].size(); ++k) {
@@ -263,12 +225,7 @@ public:
             _weights[i] = _weights[i] - step_size * dir;
         }
         _weights = ensemble_regularizer(_weights, l_ensemble_reg);
-        // std::cout << std::endl;
-        // std::cout << "tmp_w: ";
-        // for (auto w : _weights) {
-        //     std::cout << w << " ";
-        // }
-        // std::cout << std::endl;
+        
         // Create new tree
         if (_weights.size() == 0 || init_mode == INIT_MODE::CONSTANT) {
             _weights.push_back(init_weight);
@@ -299,10 +256,6 @@ public:
             }
         }
 
-        // for (auto w : _weights) {
-        //     std::cout << w << " ";
-        // }
-
         auto wit = _weights.begin();
         auto tit = _trees.begin();
 
@@ -316,7 +269,6 @@ public:
             }
         }
 
-        // std::cout << "!!! " << _weights.size() << std::endl;
         return reg_loss;
     }
 
