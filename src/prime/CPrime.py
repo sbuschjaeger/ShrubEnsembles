@@ -74,6 +74,9 @@ class CPrime(ClassifierMixin, BaseEstimator):
         The list of estimators which are used to built the ensemble. Each estimator must offer a predict_proba method.
     estimator_weights_ : np.array of floats
         The list of weights corresponding to their respective estimator in self.estimators_. 
+    additional_tree_options = {
+                    "splitter" : "best", "criterion" : "gini"
+                }
     """
 
     def __init__(self,
@@ -91,10 +94,14 @@ class CPrime(ClassifierMixin, BaseEstimator):
                 verbose = False,
                 out_path = None,
                 seed = None,
-                epochs = None
+                epochs = None,
+                additional_tree_options = {
+                    "is_nominal" : None, 
+                    "tree_init_mode" : "train"
+                }
         ):
 
-        assert loss in ["mse","cross-entropy","hinge2"], "Currently only {{mse, cross-entropy, hinge2}} loss is supported"
+        assert loss in ["mse","cross-entropy"], "Currently only {{mse, cross-entropy}} loss is supported"
         assert ensemble_regularizer is None or ensemble_regularizer in ["none","L0", "L1", "hard-L1"], "Currently only {{none,L0, L1, hard-L1}} the ensemble regularizer is supported"
         assert init_weight in ["average","max"] or isinstance(init_weight, numbers.Number), "init_weight should be {{average, max}} or a number"
         assert not isinstance(init_weight, numbers.Number) or (isinstance(init_weight, numbers.Number) and init_weight > 0), "init_weight should be > 0, otherwise it will we removed immediately after its construction."
@@ -114,6 +121,18 @@ class CPrime(ClassifierMixin, BaseEstimator):
             
         if (l_ensemble_reg == 0 and (ensemble_regularizer != "none" and ensemble_regularizer is not None)):
             print("WARNING: You set l_ensemble_reg to 0, but choose regularizer {}.".format(ensemble_regularizer))
+
+        
+        if "tree_init_mode" in additional_tree_options:
+            assert additional_tree_options["tree_init_mode"] in ["train", "fully-random", "random"], "Currently only {{train, fully-random, random}} as tree_init_mode is supported"
+            self.tree_init_mode = additional_tree_options["tree_init_mode"]
+        else:
+            self.tree_init_mode = "train^"
+
+        if "is_nominal" in additional_tree_options:
+            self.is_nominal = additional_tree_options["is_nominal"]
+        else:
+            self.is_nominal = None
 
         if seed is None:
             self.seed = 1234
@@ -191,21 +210,20 @@ class CPrime(ClassifierMixin, BaseEstimator):
         
         if self.init_weight in ["average", "max"]:
             weight_init_mode = self.init_weight
-            init_weight = 0.0
+            init_weight = 1.0
         else:
             weight_init_mode = "constant"
             init_weight = self.init_weight
         
-        # TODO Add interface for this 
-        tree_init_mode = "train"
-
         if self.update_leaves:
             tree_update_mode = "gradient"
         else:
             tree_update_mode = "none"
         
-        # TODO Add interface for this 
-        is_nominal = [False for _ in range(X.shape[1])]
+        if self.is_nominal is None:
+            is_nominal = [False for _ in range(X.shape[1])]
+        else:
+            is_nominal = self.is_nominal
 
         ensemble_regularizer = "none" if self.ensemble_regularizer is None else str(self.ensemble_regularizer)
         tree_regularizer = "none" if self.tree_regularizer is None else str(self.tree_regularizer)
@@ -224,7 +242,7 @@ class CPrime(ClassifierMixin, BaseEstimator):
             float(self.l_ensemble_reg),
             tree_regularizer,
             float(self.l_tree_reg),
-            tree_init_mode, 
+            self.tree_init_mode, 
             tree_update_mode
         )
 

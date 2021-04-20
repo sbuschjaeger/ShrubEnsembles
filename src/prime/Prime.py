@@ -97,7 +97,7 @@ class Prime(ClassifierMixin, BaseEstimator):
                 tree_regularizer = None,
                 l_tree_reg = 0,
                 normalize_weights = False,
-                init_weight = 0,
+                init_weight = "average",
                 update_leaves = False,
                 batch_size = 256,
                 verbose = False,
@@ -332,7 +332,7 @@ class Prime(ClassifierMixin, BaseEstimator):
             # Fit a new tree on the current batch. 
 
             tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, **self.additional_tree_options)
-            
+
             self.dt_seed += 1
             tree.fit(data, target)
 

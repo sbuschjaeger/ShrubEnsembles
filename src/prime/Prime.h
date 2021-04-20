@@ -85,8 +85,6 @@ public:
     virtual ~PrimeInterface() { }
 };
 
-//TODO comments
-
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
 class Prime : public PrimeInterface<pred_t> {
 

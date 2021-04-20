@@ -315,45 +315,34 @@ X = np.array([
 	[0.7916666666666666, 1.0, 0.0, 0.0, 0.0, 1.0, 0.6226415094339622, 0.36529680365296807, 0.0, 0.0, 0.0, 1.0, 0.28244274809160297, 1.0, 0.24193548387096775, 0.5, 1.0, 0.0]
 ])
 
-Y = [
+Y = np.array([
     1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1
-]
+])
 
 is_nominal = [False, True, True, True, True, True, False, False, True, True, True, True, False, True, False, False, False, False]
 
-'''
-tree = DecisionTreeClassifier(max_depth = 4, splitter = "best")
-tree.fit(X,Y)
-proba = tree.predict_proba(X)
-print(proba)
-print("Accuracy tree {}".format( accuracy_score(Y, proba.argmax(axis=1)) ))
-print(export_text(tree, show_weights=True) )
-print(X[:,17])
-'''
+# model = Prime(
+#     max_depth = 2,
+#     loss = "cross-entropy",
+#     step_size = 1e-2,
+#     ensemble_regularizer = "hard-L1",
+#     l_ensemble_reg = 1,
+#     tree_regularizer = None,
+#     l_tree_reg = 0, 
+#     normalize_weights = True,
+#     init_weight = 1.0,
+#     update_leaves = False,
+#     batch_size = 32,
+#     epochs = 1,
+#     verbose = True
+# ) 
 
-model = Prime(
-    max_depth = 2,
-    loss = "cross-entropy",
-    step_size = 1e-2,
-    ensemble_regularizer = "hard-L1",
-    l_ensemble_reg = 1,
-    tree_regularizer = None,
-    l_tree_reg = 0, 
-    normalize_weights = True,
-    init_weight = 1.0,
-    update_leaves = False,
-    batch_size = 32,
-    epochs = 1,
-    verbose = True
-) 
+# model.fit(X, Y)
 
-model.fit(X, Y)
-
-'''
 n_splits = 5
 kf = KFold(n_splits=n_splits)
 models = {
-    "CPrime d = 5, T = 32, leaves updated" : [
+    "CPrime trained" : [
         CPrime(
             max_depth = 5,
             loss = "mse",
@@ -363,11 +352,48 @@ models = {
             tree_regularizer = None,
             l_tree_reg = 0, 
             normalize_weights = True,
-            init_weight = 1.0,
+            init_weight = "average",
             update_leaves = True,
             batch_size = 64,
-            epochs = 50,
-            verbose = False
+            epochs = 10,
+            verbose = False,
+			additional_tree_options={"tree_init_mode": "train"}
+        ) for _ in range(n_splits)
+    ], 
+	"CPrime random" : [
+        CPrime(
+            max_depth = 5,
+            loss = "mse",
+            step_size = 1e-2,
+            ensemble_regularizer = "hard-L1",
+            l_ensemble_reg = 32,
+            tree_regularizer = None,
+            l_tree_reg = 0, 
+            normalize_weights = True,
+            init_weight = "average",
+            update_leaves = True,
+            batch_size = 64,
+            epochs = 10,
+            verbose = False,
+			additional_tree_options={"tree_init_mode": "random"}
+        ) for _ in range(n_splits)
+    ], 
+	"CPrime fully random" : [
+        CPrime(
+            max_depth = 5,
+            loss = "mse",
+            step_size = 1e-2,
+            ensemble_regularizer = "hard-L1",
+            l_ensemble_reg = 32,
+            tree_regularizer = None,
+            l_tree_reg = 0, 
+            normalize_weights = True,
+            init_weight = "average",
+            update_leaves = True,
+            batch_size = 64,
+            epochs = 10,
+            verbose = False,
+			additional_tree_options={"tree_init_mode": "fully-random"}
         ) for _ in range(n_splits)
     ], 
     "Prime d = 5, T = 32, leaves updated" : [
@@ -383,7 +409,7 @@ models = {
             init_weight = "average",
             update_leaves = True,
             batch_size = 64,
-            epochs = 50,
+            epochs = 10,
             verbose = False
         ) for _ in range(n_splits)
     ], 
@@ -468,7 +494,8 @@ for i, (train_index, test_index) in enumerate(kf.split(X)):
         times[m].append(end - start)
 
 for key in accuracies.keys():
-    accs = accuracies[key]
-    ts = times[key]
-    print("Accuracy {}: {} +- {} with runtime {} +- {}".format(key, np.mean(accs), np.std(accs), np.mean(ts), np.std(ts)) )
-'''
+	accs = accuracies[key]
+	ts = times[key]
+	print("Accuracy {}: {} +- {} with runtime {} +- {}".format(key, np.mean(accs), np.std(accs), np.mean(ts), np.std(ts)) )
+	print("Accuracies: {}".format(accs))
+	print("")
