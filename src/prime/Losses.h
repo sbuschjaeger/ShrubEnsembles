@@ -36,8 +36,7 @@ std::vector<std::vector<data_t>> softmax(std::vector<std::vector<data_t>> const 
     std::vector<std::vector<data_t>> p(pred.size());
 
     for (unsigned int i = 0; i < pred.size(); ++i) {
-        std::vector<data_t> s = softmax(pred[i]);
-        p.push_back(s);
+        p[i] = softmax(pred[i]);
     }
 
     return p;
@@ -50,7 +49,7 @@ std::vector<std::vector<data_t>> softmax(std::vector<std::vector<data_t>> const 
  * @param  &target: The per-sample target which is assumed to be from {0,\dots,n_classes - 1}. This tensor is assumed to have a shape of (batch_size)
  * @retval The cross-entropy for each class and each sample. The return tensor has a shape of (batch_size, n_classes). 
  */
-std::vector<std::vector<data_t>> cross_entropy(std::vector<std::vector<data_t>> const &pred, std::vector<unsigned int> const &target) {
+std::vector<std::vector<data_t>> cross_entropy_deriv(std::vector<std::vector<data_t>> const &pred, std::vector<unsigned int> const &target) {
     std::vector<std::vector<data_t>> p = softmax(pred);
 
     for (unsigned int i = 0; i < p.size(); ++i) {
@@ -67,25 +66,25 @@ std::vector<std::vector<data_t>> cross_entropy(std::vector<std::vector<data_t>> 
  * @param  &target: The per-sample target which is assumed to be from {0,\dots,n_classes - 1}. This tensor is assumed to have a shape of (batch_size)
  * @retval The first derivation of the cross-entropy for each class and each sample. The return tensor has a shape of (batch_size, n_classes). 
  */
-std::vector<std::vector<data_t>> cross_entropy_deriv(std::vector<std::vector<data_t>> const &pred, std::vector<unsigned int> const &target) {
+std::vector<std::vector<data_t>> cross_entropy(std::vector<std::vector<data_t>> const &pred, std::vector<unsigned int> const &target) {
     std::vector<std::vector<data_t>> p = softmax(pred);
 
-    std::vector<std::vector<data_t>> loss(
-        pred.size(),
-        std::vector<data_t>(pred[0].size(), 0)
-    );
+    // std::vector<std::vector<data_t>> loss(
+    //     pred.size(),
+    //     std::vector<data_t>(pred[0].size(), 0)
+    // );
 
     for (unsigned int i = 0; i < pred.size(); ++i) {
         for (unsigned int j = 0; j < pred[i].size(); ++j) {
             if (j == target[i]) {
-                loss[i][j] = -1.0 * std::log(p[i][j]);
+                p[i][j] = -1.0 * std::log(p[i][j]);
             } else {
-                loss[i][j] = 0;
+                p[i][j] = 0;
             }
         }
     }
 
-    return loss;
+    return p;
 }
 
 /**

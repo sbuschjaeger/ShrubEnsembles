@@ -291,11 +291,11 @@ class Prime(ClassifierMixin, BaseEstimator):
             loss += self.l_tree_reg * np.sum( [ (w * est.tree_.node_count) for w, est in zip(self.estimator_weights_, self.estimators_)] )
 
         if len(self.estimators_) > 0:
-            print("data: ", data)
-            print("all_proba: ", all_proba)
+            # print("data: ", data)
+            # print("all_proba: ", all_proba)
             # Compute the gradient for the loss
             directions = np.mean(all_proba*loss_deriv,axis=(1,2))
-            print("dir: ", directions)
+            # print("dir: ", directions)
             # Compute the gradient for the tree regularizer
             if self.tree_regularizer:
                 node_deriv = self.l_tree_reg * np.array([ est.tree_.node_count for est in self.estimators_])
@@ -305,7 +305,7 @@ class Prime(ClassifierMixin, BaseEstimator):
             # Perform the gradient step. Note that L0 / L1 regularizer is performed via the prox operator 
             # and thus performed _after_ this update.
             tmp_w = self.estimator_weights_ - self.step_size*directions - self.step_size*node_deriv
-            print("tmp_w: ", tmp_w)
+            # print("tmp_w: ", tmp_w)
             if self.update_leaves:
                 for i, h in enumerate(self.estimators_):
                     tree_grad = (self.estimator_weights_[i] * loss_deriv)[:,np.newaxis,:]
@@ -350,14 +350,14 @@ class Prime(ClassifierMixin, BaseEstimator):
             self.dt_seed += 1
             tree.fit(data, target)
 
-            print("ROOT THRESHOLD ", tree.tree_.threshold[0])
-            print("ROOT FEATURE ", tree.tree_.feature[0])
-            print("ROOT GINI ", tree.tree_.impurity[0])
-            print("F16: ", data[:,16])
-            print("Y ", target)
+            # print("ROOT THRESHOLD ", tree.tree_.threshold[0])
+            # print("ROOT FEATURE ", tree.tree_.feature[0])
+            # print("ROOT GINI ", tree.tree_.impurity[0])
+            # print("F16: ", data[:,16])
+            # print("Y ", target)
             #print("F16: ", data[:,16])
-            from sklearn.tree import export_text
-            print(export_text(tree, decimals = 5, show_weights = True))
+            # from sklearn.tree import export_text
+            # print(export_text(tree, decimals = 5, show_weights = True))
 
             # SKlearn stores the raw counts instead of probabilities. For SGD its better to have the 
             # probabilities for numerical stability. 
@@ -404,12 +404,13 @@ class Prime(ClassifierMixin, BaseEstimator):
 
         self.estimators_ = new_est
         self.estimator_weights_ = new_w
-        if self.debug_cnt > 2:
-            asdf
-        print(self.estimator_weights_)
+        # if self.debug_cnt > 5:
+        #     asdf
+        # print(self.estimator_weights_)
         accuracy = (output.argmax(axis=1) == target) * 100.0
         n_trees = [self.num_trees() for _ in range(data.shape[0])]
         n_param = [self.num_parameters() for _ in range(data.shape[0])]
+        # print("proba:", output)
         return {"loss" : loss, "accuracy": accuracy, "num_trees": n_trees, "num_parameters" : n_param}, output
 
     def num_trees(self):
@@ -448,6 +449,10 @@ class Prime(ClassifierMixin, BaseEstimator):
                     start_time = time.time()
                     batch_metrics, output = self.next(data, target)
                     batch_time = time.time() - start_time
+
+                    print("DATA: ", data)
+                    print("PROBA: ", output)
+                    print("weights: ", self.estimator_weights_)
 
                     # Extract statistics
                     for key,val in batch_metrics.items():

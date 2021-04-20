@@ -333,7 +333,7 @@ print(X[:,17])
 
 model = Prime(
     max_depth = 2,
-    loss = "mse",
+    loss = "cross-entropy",
     step_size = 1e-2,
     ensemble_regularizer = "hard-L1",
     l_ensemble_reg = 1,
@@ -343,7 +343,7 @@ model = Prime(
     init_weight = 1.0,
     update_leaves = False,
     batch_size = 32,
-    epochs = 50,
+    epochs = 1,
     verbose = True
 ) 
 

@@ -339,11 +339,27 @@ void print_progress(unsigned int cur_epoch, unsigned int max_epoch, data_t progr
     std::cout << std::flush;
 }
 
+void print_matrix(std::vector<std::vector<data_t>> const &X) {
+	for (auto const & Xi: X) {
+	    for (auto const & Xij : Xi) {
+	        std::cout << Xij << " ";
+	    }
+	    std::cout << std::endl;
+	}
+}
+
+void print_vector(std::vector<data_t> const &X) {
+	for (auto const & Xi: X) {
+		std::cout << Xi << " ";
+	}
+	std::cout << std::endl;
+}
+
 int main() {
     std::vector<unsigned int> batch_idx(X.size());
     std::iota(std::begin(batch_idx), std::end(batch_idx), 0); 
 
-    unsigned int epochs = 50;
+    unsigned int epochs = 1;
     unsigned int batch_size = 32;
 
 	unsigned int n_classes = 2;
@@ -354,8 +370,8 @@ int main() {
 	data_t step_size = 1e-2;
 	data_t init_weight = 1.0;
 	std::vector<bool> const & is_nominal = {};
-	LOSS::TYPE loss = LOSS::TYPE::MSE;
-	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::hard_L1;
+	LOSS::TYPE loss = LOSS::TYPE::CROSS_ENTROPY;
+	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::L1;
 	data_t l_ensemble_reg = 1;
 	TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO;
 	data_t l_tree_reg = 0.0;
@@ -384,7 +400,7 @@ int main() {
 	
 	// std::cout << "Tree acc: " << accuracy / proba.size() * 100.0 << std::endl;
 
-    Prime<TREE_INIT::TRAIN, TREE_NEXT::NONE, double> est(
+    Prime<TREE_INIT::TRAIN, TREE_NEXT::GRADIENT, double> est(
 		n_classes,
 		max_depth,
 		seed,
@@ -435,15 +451,26 @@ int main() {
 					accuracy_epoch++;
 				}
 			}
-
+			
             auto loss = est.next(data, target);
+			
+			std::cout << "DATA: " << std::endl;
+			print_matrix(data);
+			
+			std::cout << "PROBA: " << std::endl;
+			print_matrix(proba);
+
+			std::cout << "WEIGHTS: " << std::endl;
+			print_vector(est.weights());
+			std::cout << std::endl;
+
             nonzero_epoch += est.num_trees();
             loss_epoch += loss;
             batch_cnt++;
             std::stringstream ss;
-            ss << std::setprecision(4) << "loss: " << loss_epoch / (cnt * n_classes) << " nonzero: " << int(nonzero_epoch / batch_cnt) << " acc " << (accuracy_epoch / cnt);
+            ss << std::setprecision(4) << "loss: " << loss_epoch / cnt << " nonzero: " << int(nonzero_epoch / batch_cnt) << " acc " << (accuracy_epoch / cnt);
 			data_t progress = data_t(cnt) / data_t(batch_idx.size());
-            print_progress(i, epochs, progress, ss.str() );
+            print_progress(i, epochs - 1, progress, ss.str() );
         }
         std::cout << std::endl;
     }

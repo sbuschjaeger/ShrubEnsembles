@@ -222,27 +222,31 @@ public:
         data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
 
         for (unsigned int i = 0; i < _trees.size(); ++i) {
+            // The update for a single tree is cur_leaf = cur_leaf - step_size * tree_grad 
+            // where tree_grad = _weights[i] * loss_deriv
+            // Thus, _weights[i] should be be part of losses_deriv. But for simplictiy, we will 
+            // simply use _weights[i] * step_size as "step size" here
             _trees[i].next(X, Y, losses_deriv, _weights[i] * step_size);
         }
 
         for (unsigned int i = 0; i < _weights.size(); ++i) {
-            std::cout << std::endl << "X:" << std::endl;
-            for (auto const & Xi: X) {
-                for (auto const & Xij : Xi) {
-                    std::cout << Xij << " ";
-                }
-                std::cout << std::endl;
-            }
+            // std::cout << std::endl << "X:" << std::endl;
+            // for (auto const & Xi: X) {
+            //     for (auto const & Xij : Xi) {
+            //         std::cout << Xij << " ";
+            //     }
+            //     std::cout << std::endl;
+            // }
 
-            std::cout << std::endl << "proba:" << std::endl;
-            for (auto const & xp: all_proba) {
-                std::cout << "tree: " << std::endl;
-                for (auto const & xpi : xp) {
-                    std::cout << xpi[0] << " " << xpi[1] << std::endl;
-                }
-                std::cout << std::endl;
-            }
-            std::cout << std::endl;
+            // std::cout << std::endl << "proba:" << std::endl;
+            // for (auto const & xp: all_proba) {
+            //     std::cout << "tree: " << std::endl;
+            //     for (auto const & xpi : xp) {
+            //         std::cout << xpi[0] << " " << xpi[1] << std::endl;
+            //     }
+            //     std::cout << std::endl;
+            // }
+            // std::cout << std::endl;
 
             data_t dir = 0;
             for (unsigned int j = 0; j < all_proba[i].size(); ++j) {
@@ -259,9 +263,12 @@ public:
             _weights[i] = _weights[i] - step_size * dir;
         }
         _weights = ensemble_regularizer(_weights, l_ensemble_reg);
+        // std::cout << std::endl;
+        // std::cout << "tmp_w: ";
         // for (auto w : _weights) {
         //     std::cout << w << " ";
         // }
+        // std::cout << std::endl;
         // Create new tree
         if (_weights.size() == 0 || init_mode == INIT_MODE::CONSTANT) {
             _weights.push_back(init_weight);
