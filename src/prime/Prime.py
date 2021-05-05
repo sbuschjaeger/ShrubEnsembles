@@ -61,7 +61,7 @@ class Prime(ClassifierMixin, BaseEstimator):
     normalize_weights : boolean
         True if nonzero weights should be projected onto the probability simplex, that is they should sum to 1. 
     ensemble_regularizer : str
-        The ensemble_regularizer. Should be one of `{None, "L0", "L1", "hard-L1"}`
+        The ensemble_regularizer. Should be one of `{None, "L0", "L1", "hard-L0"}`
     l_ensemble_reg : float
         The ensemble_regularizer regularization strength. 
     tree_regularizer : str
@@ -110,7 +110,7 @@ class Prime(ClassifierMixin, BaseEstimator):
         ):
 
         assert loss in ["mse","cross-entropy","hinge2"], "Currently only {{mse, cross-entropy, hinge2}} loss is supported"
-        assert ensemble_regularizer is None or ensemble_regularizer in ["none","L0", "L1", "hard-L1"], "Currently only {{none,L0, L1, hard-L1}} the ensemble regularizer is supported"
+        assert ensemble_regularizer is None or ensemble_regularizer in ["none","L0", "L1", "hard-L0"], "Currently only {{none,L0, L1, hard-L0}} the ensemble regularizer is supported"
         assert init_weight in ["average","max"] or isinstance(init_weight, numbers.Number), "init_weight should be {{average, max}} or a number"
         assert not isinstance(init_weight, numbers.Number) or (isinstance(init_weight, numbers.Number) and init_weight > 0), "init_weight should be > 0, otherwise it will we removed immediately after its construction."
         assert l_tree_reg >= 0, "l_tree_reg must be greate or equal to 0"
@@ -120,8 +120,8 @@ class Prime(ClassifierMixin, BaseEstimator):
             print("WARNING: batch_size should be 2 for PyBiasedProxEnsemble for optimal performance, but was {}. Fixing it for you.".format(batch_size))
             batch_size = 2
 
-        if ensemble_regularizer == "hard-L1" and l_ensemble_reg < 1:
-            print("WARNING: You set l_ensemble_reg to {}, but regularizer is hard-L1. In this mode, l_ensemble_reg should be an integer 1 <= l_ensemble_reg <= max_trees where max_trees is the number of estimators trained by base_estimator!".format(l_ensemble_reg))
+        if ensemble_regularizer == "hard-L0" and l_ensemble_reg < 1:
+            print("WARNING: You set l_ensemble_reg to {}, but regularizer is hard-L0. In this mode, l_ensemble_reg should be an integer 1 <= l_ensemble_reg <= max_trees where max_trees is the number of estimators trained by base_estimator!".format(l_ensemble_reg))
 
         if (l_ensemble_reg > 0 and (ensemble_regularizer == "none" or ensemble_regularizer is None)):
             print("WARNING: You set l_ensemble_reg to {}, but regularizer is None. Ignoring l_ensemble_reg!".format(l_ensemble_reg))
@@ -185,7 +185,7 @@ class Prime(ClassifierMixin, BaseEstimator):
 
         for e in self.estimators_:
             tmp = np.zeros(shape=(X.shape[0], self.n_classes_), dtype=np.float32)
-            tmp[:, self.classes_.astype(int)] += e.predict_proba(X)
+            tmp[:, e.classes_.astype(int)] += e.predict_proba(X)
             all_proba.append(tmp)
 
         if len(all_proba) == 0:
@@ -256,6 +256,7 @@ class Prime(ClassifierMixin, BaseEstimator):
 
     def next(self, data, target):
         if (len(self.estimators_)) == 0:
+            # TODO add default class if batches with only one class have been added so far
             output = 1.0 / self.n_classes_ * np.ones((data.shape[0], self.n_classes_))
         else:
             all_proba = self._individual_proba(data)
@@ -322,12 +323,14 @@ class Prime(ClassifierMixin, BaseEstimator):
                 sign = np.sign(tmp_w)
                 tmp_w = np.abs(tmp_w) - self.step_size*self.l_ensemble_reg
                 tmp_w = sign*np.maximum(tmp_w,0)
-            elif self.ensemble_regularizer == "hard-L1":
+            elif self.ensemble_regularizer == "hard-L0":
                 top_K = np.argsort(tmp_w)[-self.l_ensemble_reg:]
                 tmp_w = np.array([w if i in top_K else 0 for i,w in enumerate(tmp_w)])
         else:
             tmp_w = []
 
+        # TODO THIS SHOULD BE THE LAST STEP IN THIS FUNCTION WITH INIT WEIGHT = 0?
+        # TODO Init weight = step_size?
         if (len(set(target)) > 1):
             # Fit a new tree on the current batch. 
 
@@ -336,15 +339,12 @@ class Prime(ClassifierMixin, BaseEstimator):
             self.dt_seed += 1
             tree.fit(data, target)
 
-            # from sklearn.tree import export_text
-            # print(export_text(tree, decimals = 5, show_weights = True))
-
             # SKlearn stores the raw counts instead of probabilities. For SGD its better to have the 
             # probabilities for numerical stability. 
             # tree.tree_.value is not writeable, but we can modify the values inplace. Thus we 
             # use [:] to copy the array into the normalized array. Also tree.tree_.value has a strange shape
             # (batch_size, 1, n_classes)
-            # tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
+            tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
 
             if len(self.estimator_weights_) == 0:
                 tmp_w = np.array([1.0])
@@ -384,6 +384,7 @@ class Prime(ClassifierMixin, BaseEstimator):
 
         self.estimators_ = new_est
         self.estimator_weights_ = new_w
+
         accuracy = (output.argmax(axis=1) == target) * 100.0
         n_trees = [self.num_trees() for _ in range(data.shape[0])]
         n_param = [self.num_parameters() for _ in range(data.shape[0])]

@@ -197,6 +197,9 @@ class CPrime(ClassifierMixin, BaseEstimator):
         proba = self.predict_proba(X)
         return self.classes_.take(proba.argmax(axis=1), axis=0) 
 
+    def next(self, data, target):
+        return self.model.next(data, target)
+
     def fit(self, X, y, sample_weight = None):
         # TODO respect sample weights in loss
         X, y = check_X_y(X, y)

@@ -169,6 +169,7 @@ private:
      * If two splits are equally good, then the first split is chosen. Note that this introduces a slight bias towards the first features. 
      * TODO: This code assumes that all features are [0,1] for the X.size() <= 1. Change that 
      * TODO: Change code for tie-breaking
+     * TODO: What happens if we only have 1 class in Y?
      * @note   
      * @param  &X: The example-set which is used to compute the splitting
      * @param  &Y: The label-set which is used to compute the splitting
