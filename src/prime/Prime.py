@@ -138,6 +138,9 @@ class Prime(ClassifierMixin, BaseEstimator):
             print("WARNING: You passed `random_seed` to additional_tree_options. However, the random_seed is defined internally for individual trees. You can control the random seed by setting the `seed` parameter of Prime. I am going to ignore the random_seed parameter passed to additional_tree_options")
             del additional_tree_options["random_seed"]
 
+        if isinstance(step_size, str) and step_size != "adaptive":
+            step_size = float(step_size)
+
         if seed is None:
             self.seed = 1234
         else:
@@ -255,46 +258,34 @@ class Prime(ClassifierMixin, BaseEstimator):
         return self.classes_.take(proba.argmax(axis=1), axis=0)
 
     def next(self, data, target):
-        if (len(self.estimators_)) == 0:
-            # TODO add default class if batches with only one class have been added so far
-            output = 1.0 / self.n_classes_ * np.ones((data.shape[0], self.n_classes_))
-        else:
+        # if (len(self.estimators_)) == 0:
+        #     output = 1.0 / self.n_classes_ * np.ones((data.shape[0], self.n_classes_))
+        # else:
+        if len(self.estimators_) > 0:
             all_proba = self._individual_proba(data)
             output = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)]).sum(axis=0)
 
-        # Compute the appropriate loss. 
-        if self.loss == "mse":
-            target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
-            loss = (output - target_one_hot) * (output - target_one_hot)
-            loss_deriv = 2 * (output - target_one_hot)
-        elif self.loss == "cross-entropy":
-            target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
-            p = softmax(output, axis=1)
-            loss = -target_one_hot*np.log(p + 1e-7)
-            m = target.shape[0]
-            loss_deriv = softmax(output, axis=1)
-            loss_deriv[range(m),target_one_hot.argmax(axis=1)] -= 1
-        elif self.loss == "hinge2":
-            target_one_hot = np.array( [ [1.0 if y == i else -1.0 for i in range(self.n_classes_)] for y in target] )
-            zeros = np.zeros_like(target_one_hot)
-            loss = np.maximum(1.0 - target_one_hot * output, zeros)**2
-            loss_deriv = - 2 * target_one_hot * np.maximum(1.0 - target_one_hot * output, zeros) 
-        else:
-            raise "Currently only the losses {{cross-entropy, mse, hinge2}} are supported, but you provided: {}".format(self.loss)
-        
-        # Compute the appropriate ensemble_regularizer
-        if self.ensemble_regularizer == "L0":
-            loss = np.mean(loss) + self.l_ensemble_reg * np.linalg.norm(self.estimator_weights_,0)
-        elif self.ensemble_regularizer == "L1":
-            loss = np.mean(loss) + self.l_ensemble_reg * np.linalg.norm(self.estimator_weights_,1)
-        else:
-            loss = np.mean(loss) 
-        
-        # Compute the appropriate tree_regularizer
-        if self.tree_regularizer == "node":
-            loss += self.l_tree_reg * np.sum( [ (w * est.tree_.node_count) for w, est in zip(self.estimator_weights_, self.estimators_)] )
+            # Compute the appropriate loss. 
+            if self.loss == "mse":
+                target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
+                # loss = (output - target_one_hot) * (output - target_one_hot)
+                loss_deriv = 2 * (output - target_one_hot)
+            elif self.loss == "cross-entropy":
+                target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
+                p = softmax(output, axis=1)
+                # loss = -target_one_hot*np.log(p + 1e-7)
+                m = target.shape[0]
+                loss_deriv = softmax(output, axis=1)
+                loss_deriv[range(m),target_one_hot.argmax(axis=1)] -= 1
+            elif self.loss == "hinge2":
+                target_one_hot = np.array( [ [1.0 if y == i else -1.0 for i in range(self.n_classes_)] for y in target] )
+                zeros = np.zeros_like(target_one_hot)
+                # loss = np.maximum(1.0 - target_one_hot * output, zeros)**2
+                loss_deriv = - 2 * target_one_hot * np.maximum(1.0 - target_one_hot * output, zeros) 
+            else:
+                raise "Currently only the losses {{cross-entropy, mse, hinge2}} are supported, but you provided: {}".format(self.loss)
 
-        if len(self.estimators_) > 0:
+        
             # Compute the gradient for the loss
             directions = np.mean(all_proba*loss_deriv,axis=(1,2))
             
@@ -306,31 +297,62 @@ class Prime(ClassifierMixin, BaseEstimator):
 
             # Perform the gradient step. Note that L0 / L1 regularizer is performed via the prox operator 
             # and thus performed _after_ this update.
-            tmp_w = self.estimator_weights_ - self.step_size*directions - self.step_size*node_deriv
+            if self.step_size == "adaptive":
+                #if max_w > 0:
+                #else:
+                #    step_size = 0.5 # because reasons, thats why
+                # min_w = max(self.estimator_weights_)
+
+                step_size = 1.0 / (len(self.estimators_) + 1.0)
+                #step_size = len(self.estimators_) / 1e2
+            else:
+                step_size = self.step_size
+
+            tmp_w = self.estimator_weights_ - step_size*directions - step_size*node_deriv
             
             if self.update_leaves:
                 for i, h in enumerate(self.estimators_):
                     tree_grad = (self.estimator_weights_[i] * loss_deriv)[:,np.newaxis,:]
                     # find idx
                     idx = h.apply(data)
-                    h.tree_.value[idx] = h.tree_.value[idx] - self.step_size * tree_grad[:,:,h.classes_.astype(int)]
+                    h.tree_.value[idx] = h.tree_.value[idx] - step_size * tree_grad[:,:,h.classes_.astype(int)]
 
             # Compute the prox step. 
             if self.ensemble_regularizer == "L0":
-                tmp = np.sqrt(2 * self.l_ensemble_reg * self.step_size)
+                tmp = np.sqrt(2 * self.l_ensemble_reg * step_size)
                 tmp_w = np.array([0 if abs(w) < tmp else w for w in tmp_w])
             elif self.ensemble_regularizer == "L1":
                 sign = np.sign(tmp_w)
-                tmp_w = np.abs(tmp_w) - self.step_size*self.l_ensemble_reg
+                tmp_w = np.abs(tmp_w) - step_size*self.l_ensemble_reg
                 tmp_w = sign*np.maximum(tmp_w,0)
             elif self.ensemble_regularizer == "hard-L0":
                 top_K = np.argsort(tmp_w)[-self.l_ensemble_reg:]
                 tmp_w = np.array([w if i in top_K else 0 for i,w in enumerate(tmp_w)])
-        else:
-            tmp_w = []
 
-        # TODO THIS SHOULD BE THE LAST STEP IN THIS FUNCTION WITH INIT WEIGHT = 0?
-        # TODO Init weight = step_size?
+            # If set, normalize the weights. Note that we use the support of tmp_w for the projection onto the probability simplex
+            # as described in http://proceedings.mlr.press/v28/kyrillidis13.pdf
+            # Thus, we first need to extract the nonzero weights, project these and then copy them back into corresponding array
+            if self.normalize_weights and len(tmp_w) > 0:
+                nonzero_idx = np.nonzero(tmp_w)[0]
+                nonzero_w = tmp_w[nonzero_idx]
+                nonzero_w = to_prob_simplex(nonzero_w)
+                self.estimator_weights_ = np.zeros((len(tmp_w)))
+                for i,w in zip(nonzero_idx, nonzero_w):
+                    self.estimator_weights_[i] = w
+            else:
+                self.estimator_weights_ = tmp_w
+            
+            # Remove all trees with zero weight after prox and projection onto the prob. simplex. 
+            new_est = []
+            new_w = []
+            for h, w in zip(self.estimators_, self.estimator_weights_):
+                if w > 0:
+                    new_est.append(h)
+                    new_w.append(w)
+
+            self.estimators_ = new_est
+            self.estimator_weights_ = new_w
+
         if (len(set(target)) > 1):
             # Fit a new tree on the current batch. 
 
@@ -346,49 +368,26 @@ class Prime(ClassifierMixin, BaseEstimator):
             # (batch_size, 1, n_classes)
             tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
 
-            if len(self.estimator_weights_) == 0:
-                tmp_w = np.array([1.0])
-            else:
-                if self.init_weight == "average":
-                    tmp_w = np.append(tmp_w, [sum(tmp_w)/len(tmp_w)])
-                elif self.init_weight == "max":
-                    tmp_w = np.append(tmp_w, [max(tmp_w)])
-                else:
-                    tmp_w = np.append(tmp_w, [self.init_weight])
+            # if len(self.estimator_weights_) == 0:
+            #     tmp_w = np.array([1.0])
+            # else:
+            #     if self.init_weight == "average":
+            #         tmp_w = np.append(tmp_w, [sum(tmp_w)/len(tmp_w)])
+            #     elif self.init_weight == "max":
+            #         tmp_w = np.append(tmp_w, [max(tmp_w)])
+            #     else:
+            #         tmp_w = np.append(tmp_w, [self.init_weight])
 
+            self.estimator_weights_.append(0.0)
             self.estimators_.append(tree)
         else:
             # TODO WHAT TO DO IF ONLY ONE LABEL IS IN THE CURRENT BATCH?
             pass
 
-        # If set, normalize the weights. Note that we use the support of tmp_w for the projection onto the probability simplex
-        # as described in http://proceedings.mlr.press/v28/kyrillidis13.pdf
-        # Thus, we first need to extract the nonzero weights, project these and then copy them back into corresponding array
-        if self.normalize_weights and len(tmp_w) > 0:
-            nonzero_idx = np.nonzero(tmp_w)[0]
-            nonzero_w = tmp_w[nonzero_idx]
-            nonzero_w = to_prob_simplex(nonzero_w)
-            self.estimator_weights_ = np.zeros((len(tmp_w)))
-            for i,w in zip(nonzero_idx, nonzero_w):
-                self.estimator_weights_[i] = w
-        else:
-            self.estimator_weights_ = tmp_w
-        
-        # Remove all trees with zero weight after prox and projection onto the prob. simplex. 
-        new_est = []
-        new_w = []
-        for h, w in zip(self.estimators_, self.estimator_weights_):
-            if w > 0:
-                new_est.append(h)
-                new_w.append(w)
-
-        self.estimators_ = new_est
-        self.estimator_weights_ = new_w
-
-        accuracy = (output.argmax(axis=1) == target) * 100.0
-        n_trees = [self.num_trees() for _ in range(data.shape[0])]
-        n_param = [self.num_parameters() for _ in range(data.shape[0])]
-        return {"loss" : loss, "accuracy": accuracy, "num_trees": n_trees, "num_parameters" : n_param}, output
+        # accuracy = (output.argmax(axis=1) == target) * 100.0
+        # n_trees = [self.num_trees() for _ in range(data.shape[0])]
+        # n_param = [self.num_parameters() for _ in range(data.shape[0])]
+        # return {"loss" : loss, "accuracy": accuracy, "num_trees": n_trees, "num_parameters" : n_param}, output
 
     def num_trees(self):
         return np.count_nonzero(self.estimator_weights_)
@@ -410,13 +409,9 @@ class Prime(ClassifierMixin, BaseEstimator):
         for epoch in range(self.epochs):
             mini_batches = create_mini_batches(X, y, self.batch_size, False, False) 
 
-            # times = []
-            # total_time = 0
-            
-            metrics = {}
-
-            # first_batch = True
-            example_cnt = 0
+            loss_sum = 0
+            time_sum = 0
+            batch_cnt = 0
 
             with tqdm(total=X.shape[0], ncols=150, disable = not self.verbose) as pbar:
                 for batch in mini_batches: 
@@ -424,53 +419,53 @@ class Prime(ClassifierMixin, BaseEstimator):
                     
                     # Update Model                    
                     start_time = time.time()
-                    batch_metrics, output = self.next(data, target)
+                    # TODO This is a little inefficient, since we technically call next before ?
+                    self.next(data, target)
                     batch_time = time.time() - start_time
 
-                    # Extract statistics
-                    for key,val in batch_metrics.items():
-                        metrics[key] = np.concatenate( (metrics.get(key,[]), val), axis=None )
-                        metrics[key + "_sum"] = metrics.get( key + "_sum",0) + np.sum(val)
+                    output = self.predict_proba(data)
 
-                        # if self.sliding_window and not first_batch:
-                        #     metrics[key] = np.concatenate( (metrics.get(key,[]), [val[-1]]), axis=None )
-                        #     metrics[key + "_sum"] = metrics.get( key + "_sum",0) + val[-1]
-                        # else:
-                        #     metrics[key] = np.concatenate( (metrics.get(key,[]), val), axis=None )
-                        #     metrics[key + "_sum"] = metrics.get( key + "_sum",0) + np.sum(val)
-                    metrics["time"] = np.concatenate( (metrics.get("time",[]), batch_time / data.shape[0]), axis=None )
-                    metrics["time_sum"] = metrics.get( "time_sum",0) + np.sum(batch_time / data.shape[0])
-                    # if self.sliding_window and not first_batch:
-                    #     loss = self.loss_(output[np.newaxis,-1,:], [target[-1]]).mean(axis=1).sum()
-                    #     example_cnt += 1
-                    #     pbar.update(1)
-                    # else:
-                    #     loss = self.loss_(output, target).mean(axis=1).sum()
-                    #     example_cnt += data.shape[0]
-                    #     pbar.update(data.shape[0])
+                    # Compute the appropriate loss. 
+                    if self.loss == "mse":
+                        target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
+                        loss = (output - target_one_hot) * (output - target_one_hot)
+                    elif self.loss == "cross-entropy":
+                        target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
+                        p = softmax(output, axis=1)
+                        loss = -target_one_hot*np.log(p + 1e-7)
+                    elif self.loss == "hinge2":
+                        target_one_hot = np.array( [ [1.0 if y == i else -1.0 for i in range(self.n_classes_)] for y in target] )
+                        zeros = np.zeros_like(target_one_hot)
+                        loss = np.maximum(1.0 - target_one_hot * output, zeros)**2
+                    else:
+                        raise "Currently only the losses {{cross-entropy, mse, hinge2}} are supported, but you provided: {}".format(self.loss)
+
+                    # Compute the appropriate ensemble_regularizer
+                    if self.ensemble_regularizer == "L0":
+                        loss = np.mean(loss) + self.l_ensemble_reg * np.linalg.norm(self.estimator_weights_,0)
+                    elif self.ensemble_regularizer == "L1":
+                        loss = np.mean(loss) + self.l_ensemble_reg * np.linalg.norm(self.estimator_weights_,1)
+                    else:
+                        loss = np.mean(loss) 
                     
-                    # TODO ADD times and losses to metrics and write it to disk
-                    # times.append(batch_time)
-                    # total_time += batch_time
+                    # Compute the appropriate tree_regularizer
+                    if self.tree_regularizer == "node":
+                        loss += self.l_tree_reg * np.sum( [ (w * est.tree_.node_count) for w, est in zip(self.estimator_weights_, self.estimators_)] )
 
-                    # losses.append(loss)
-                    # total_loss += loss
+                    loss_sum += loss
+                    time_sum += batch_time
 
-                    example_cnt += data.shape[0]
+                    batch_cnt += 1
                     pbar.update(data.shape[0])
-                    m_str = ""
-                    for key,val in metrics.items():
-                        if "_sum" in key:
-                            m_str += "{} {:2.4f} ".format(key.split("_sum")[0], val / example_cnt)
                     
-                    desc = '[{}/{}] {}'.format(
+                    desc = '[{}/{}] loss {} itime{}'.format(
                         epoch, 
                         self.epochs-1, 
-                        #total_loss / example_cnt, 
-                        # total_time / example_cnt,
-                        m_str
+                        loss_sum / batch_cnt,
+                        time_sum / batch_cnt,
                     )
                     pbar.set_description(desc)
                 
                 if self.out_path is not None:
+                    metrics = {"loss":loss_sum / batch_cnt}
                     np.save(os.path.join(self.out_path, "epoch_{}.npy".format(epoch)), metrics, allow_pickle=True)
