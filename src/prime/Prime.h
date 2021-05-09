@@ -12,17 +12,15 @@
 #include "EnsembleRegularizer.h"
 #include "TreeRegularizer.h"
 
-enum class INIT_MODE {CONSTANT, AVERAGE, MAX};
+enum class STEP_SIZE_MODE {CONSTANT, ADAPTIVE};
 
-auto from_string(std::string const & init_mode) {
-    if (init_mode == "CONSTANT" || init_mode == "constant") {
-        return INIT_MODE::CONSTANT;
-    } else if (init_mode == "AVERAGE" || init_mode == "average") {
-        return INIT_MODE::AVERAGE;
-    } else if (init_mode == "MAX" || init_mode == "max") {
-        return INIT_MODE::MAX;
+auto from_string(std::string const & step_size_mode) {
+    if (step_size_mode == "CONSTANT" || step_size_mode == "constant") {
+        return STEP_SIZE_MODE::CONSTANT;
+    } else if (step_size_mode == "ADAPTIVE" || step_size_mode == "adaptive") {
+        return STEP_SIZE_MODE::ADAPTIVE;
     } else {
-        throw std::runtime_error("Currently only init_mode {CONSTANT, AVERAGE, MAX} are supported, but you provided: " + init_mode);
+        throw std::runtime_error("Currently only step_size_mode {CONSTANT, ADAPTIVE} are supported, but you provided: " + step_size_mode);
     }
 }
 
@@ -74,7 +72,7 @@ std::vector<std::vector<data_t>> weighted_sum_first_dim(std::vector<std::vector<
 template <typename pred_t>
 class PrimeInterface {
 public:
-    virtual data_t next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
+    virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
 
     virtual std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
     
@@ -97,12 +95,11 @@ private:
     unsigned long seed;
     bool const normalize_weights;
 
+    STEP_SIZE_MODE const step_size_mode;
     data_t step_size;
     std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss;
     std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss_deriv;
 
-    INIT_MODE const init_mode;
-    data_t const init_weight;
     std::vector<bool> const is_nominal;
     
     std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) > ensemble_regularizer;
@@ -119,9 +116,8 @@ public:
         unsigned long seed = 12345,
         bool normalize_weights = true,
         LOSS::TYPE loss = LOSS::TYPE::MSE,
-        data_t step_size = 1e-5,
-        INIT_MODE init_mode = INIT_MODE::CONSTANT,
-        data_t init_weight = 0.0,
+        data_t step_size = 1e-2,
+        STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT,
         std::vector<bool> const & is_nominal = {},
         ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::NO,
         data_t l_ensemble_reg = 0.0,
@@ -133,10 +129,9 @@ public:
         seed(seed), 
         normalize_weights(normalize_weights), 
         step_size(step_size), 
+        step_size_mode(step_size_mode),
         loss(LOSS::from_enum(loss)), 
         loss_deriv(LOSS::deriv_from_enum(loss)), 
-        init_mode(init_mode), 
-        init_weight(init_weight), 
         is_nominal(is_nominal), 
         ensemble_regularizer(ENSEMBLE_REGULARIZER::from_enum(ensemble_regularizer)), 
         l_ensemble_reg(l_ensemble_reg),
@@ -151,9 +146,8 @@ public:
         bool normalize_weights = true,
         std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss = LOSS::mse,
         std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss_deriv = LOSS::mse_deriv,
-        data_t step_size = 1e-5,
-        INIT_MODE init_mode = INIT_MODE::CONSTANT,
-        data_t init_weight = 0.0,
+        data_t step_size = 1e-2,
+        STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT,
         std::vector<bool> const & is_nominal = {},
         std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) > ensemble_regularizer = ENSEMBLE_REGULARIZER::no_reg,
         data_t l_ensemble_reg = 0.0,
@@ -165,10 +159,9 @@ public:
         seed(seed), 
         normalize_weights(normalize_weights), 
         step_size(step_size), 
+        step_size_mode(step_size_mode),
         loss(loss), 
         loss_deriv(loss_deriv), 
-        init_mode(init_mode), 
-        init_weight(init_weight), 
         is_nominal(is_nominal), 
         ensemble_regularizer(ensemble_regularizer), 
         l_ensemble_reg(l_ensemble_reg),
@@ -176,7 +169,14 @@ public:
         l_tree_reg(l_tree_reg) 
     {}
 
-    data_t next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+        data_t step_size;
+        if (step_size_mode == STEP_SIZE_MODE::ADAPTIVE) {
+            step_size = 1.0 / (_trees.size() + 1);
+        } else {
+            step_size = this->step_size;
+        }
+
         std::vector<std::vector<std::vector<data_t>>> all_proba(_trees.size());
         std::vector<std::vector<data_t>> output;
 
@@ -194,10 +194,10 @@ public:
             all_proba.push_back(tmp);
         }
 
-        std::vector<std::vector<data_t>> losses = loss(output, Y);
+        //std::vector<std::vector<data_t>> losses = loss(output, Y);
         std::vector<std::vector<data_t>> losses_deriv = loss_deriv(output, Y);
 
-        data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
+        //data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
 
         for (unsigned int i = 0; i < _trees.size(); ++i) {
             // The update for a single tree is cur_leaf = cur_leaf - step_size * tree_grad 
@@ -224,20 +224,6 @@ public:
         }
         _weights = ensemble_regularizer(_weights, l_ensemble_reg);
         
-        // Create new tree
-        if (_weights.size() == 0 || init_mode == INIT_MODE::CONSTANT) {
-            _weights.push_back(init_weight);
-        } else {
-            if (init_mode == INIT_MODE::AVERAGE) {
-                data_t average = accumulate( _weights.begin(), _weights.end(), 0.0) / _weights.size(); 
-                _weights.push_back(average);
-            } else {
-                data_t max = *std::max_element(_weights.begin(), _weights.end());
-                _weights.push_back(max);
-            }
-        }
-        _trees.push_back(Tree<tree_init, tree_next, pred_t>(max_depth, n_classes, seed++, X, Y, is_nominal));
-
         if (normalize_weights && _weights.size() > 0) {
             std::vector<data_t> nonzero_w;
             std::vector<unsigned int> nonzero_idx;
@@ -267,7 +253,9 @@ public:
             }
         }
 
-        return reg_loss;
+        // Create new tree
+        _weights.push_back(0.0);
+        _trees.push_back(Tree<tree_init, tree_next, pred_t>(max_depth, n_classes, seed++, X, Y, is_nominal));
     }
 
     std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {

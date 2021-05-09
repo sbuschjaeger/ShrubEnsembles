@@ -342,75 +342,73 @@ is_nominal = [False, True, True, True, True, True, False, False, True, True, Tru
 n_splits = 5
 kf = KFold(n_splits=n_splits)
 models = {
-    "CPrime trained" : [
-        CPrime(
-            max_depth = 5,
-            loss = "mse",
-            step_size = 1e-2,
-            ensemble_regularizer = "hard-L1",
-            l_ensemble_reg = 32,
-            tree_regularizer = None,
-            l_tree_reg = 0, 
-            normalize_weights = True,
-            init_weight = "average",
-            update_leaves = True,
-            batch_size = 64,
-            epochs = 10,
-            verbose = False,
-			additional_tree_options={"tree_init_mode": "train"}
-        ) for _ in range(n_splits)
-    ], 
-	"CPrime random" : [
-        CPrime(
-            max_depth = 5,
-            loss = "mse",
-            step_size = 1e-2,
-            ensemble_regularizer = "hard-L1",
-            l_ensemble_reg = 32,
-            tree_regularizer = None,
-            l_tree_reg = 0, 
-            normalize_weights = True,
-            init_weight = "average",
-            update_leaves = True,
-            batch_size = 64,
-            epochs = 10,
-            verbose = False,
-			additional_tree_options={"tree_init_mode": "random"}
-        ) for _ in range(n_splits)
-    ], 
-	"CPrime fully random" : [
-        CPrime(
-            max_depth = 5,
-            loss = "mse",
-            step_size = 1e-2,
-            ensemble_regularizer = "hard-L1",
-            l_ensemble_reg = 32,
-            tree_regularizer = None,
-            l_tree_reg = 0, 
-            normalize_weights = True,
-            init_weight = "average",
-            update_leaves = True,
-            batch_size = 64,
-            epochs = 10,
-            verbose = False,
-			additional_tree_options={"tree_init_mode": "fully-random"}
-        ) for _ in range(n_splits)
-    ], 
+    # "CPrime trained" : [
+    #     CPrime(
+    #         max_depth = 5,
+    #         loss = "mse",
+    #         step_size = 1e-2,
+    #         ensemble_regularizer = "hard-L0",
+    #         l_ensemble_reg = 32,
+    #         tree_regularizer = None,
+    #         l_tree_reg = 0, 
+    #         normalize_weights = True,
+    #         update_leaves = True,
+    #         batch_size = 64,
+    #         epochs = 10,
+    #         verbose = False,
+	# 		additional_tree_options={"tree_init_mode": "train"}
+    #     ) for _ in range(n_splits)
+    # ], 
+	# "CPrime random" : [
+    #     CPrime(
+    #         max_depth = 5,
+    #         loss = "mse",
+    #         step_size = 1e-2,
+    #         ensemble_regularizer = "hard-L0",
+    #         l_ensemble_reg = 32,
+    #         tree_regularizer = None,
+    #         l_tree_reg = 0, 
+    #         normalize_weights = True,
+    #         update_leaves = True,
+    #         batch_size = 64,
+    #         epochs = 10,
+    #         verbose = False,
+	# 		additional_tree_options={"tree_init_mode": "random"}
+    #     ) for _ in range(n_splits)
+    # ], 
+	# "CPrime fully random" : [
+    #     CPrime(
+    #         max_depth = 5,
+    #         loss = "mse",
+    #         step_size = 1e-2,
+    #         ensemble_regularizer = "hard-L0",
+    #         l_ensemble_reg = 32,
+    #         tree_regularizer = None,
+    #         l_tree_reg = 0, 
+    #         normalize_weights = True,
+    #         update_leaves = True,
+    #         batch_size = 64,
+    #         epochs = 10,
+    #         verbose = False,
+	# 		additional_tree_options={"tree_init_mode": "fully-random"}
+    #     ) for _ in range(n_splits)
+    # ], 
     "Prime d = 5, T = 32, leaves updated" : [
         Prime(
             max_depth = 5,
             loss = "mse",
             step_size = 1e-2,
-            ensemble_regularizer = "hard-L1",
+            ensemble_regularizer = "hard-L0",
             l_ensemble_reg = 32,
             tree_regularizer = None,
             l_tree_reg = 0, 
             normalize_weights = True,
-            init_weight = "average",
             update_leaves = True,
             batch_size = 64,
             epochs = 10,
-            verbose = False
+            verbose = False,
+			backend = "c++",
+			additional_tree_options={"tree_init_mode": "train"}
         ) for _ in range(n_splits)
     ], 
     # "Prime d = 2, T = 32, leaves updated" : [

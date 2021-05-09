@@ -56,8 +56,6 @@ class CPrime(ClassifierMixin, BaseEstimator):
         The tree_regularizer. Should be one of `{None,"node"}`
     l_tree_reg : float
         The tree_regularizer regularization strength. 
-    init_weight : str, number
-        The weight initialization for each new tree. If this is `"max`" then the largest weight across the entire ensemble is used. If this is `"average"` then the average weight  across the entire ensemble is used. If this is a number, then the supplied value is used. 
     batch_size: int
         The batch sized used for SGD
     update_leaves : boolean
@@ -88,7 +86,6 @@ class CPrime(ClassifierMixin, BaseEstimator):
                 tree_regularizer = None,
                 l_tree_reg = 0.0,
                 normalize_weights = False,
-                init_weight = 0.0,
                 update_leaves = False,
                 batch_size = 256,
                 verbose = False,
@@ -102,9 +99,7 @@ class CPrime(ClassifierMixin, BaseEstimator):
         ):
 
         assert loss in ["mse","cross-entropy"], "Currently only {{mse, cross-entropy}} loss is supported"
-        assert ensemble_regularizer is None or ensemble_regularizer in ["none","L0", "L1", "hard-L1"], "Currently only {{none,L0, L1, hard-L1}} the ensemble regularizer is supported"
-        assert init_weight in ["average","max"] or isinstance(init_weight, numbers.Number), "init_weight should be {{average, max}} or a number"
-        assert not isinstance(init_weight, numbers.Number) or (isinstance(init_weight, numbers.Number) and init_weight > 0), "init_weight should be > 0, otherwise it will we removed immediately after its construction."
+        assert ensemble_regularizer is None or ensemble_regularizer in ["none","L0", "L1", "hard-L0"], "Currently only {{none,L0, L1, hard-L0}} the ensemble regularizer is supported"
         assert l_tree_reg >= 0, "l_tree_reg must be greate or equal to 0"
         assert tree_regularizer is None or tree_regularizer in ["node"], "Currently only {{none, node}} regularizer is supported for tree the regularizer."
         
@@ -112,8 +107,8 @@ class CPrime(ClassifierMixin, BaseEstimator):
             print("WARNING: batch_size should be 2 for PyBiasedProxEnsemble for optimal performance, but was {}. Fixing it for you.".format(batch_size))
             batch_size = 2
 
-        if ensemble_regularizer == "hard-L1" and l_ensemble_reg < 1:
-            print("WARNING: You set l_ensemble_reg to {}, but regularizer is hard-L1. In this mode, l_ensemble_reg should be an integer 1 <= l_ensemble_reg <= max_trees where max_trees is the number of estimators trained by base_estimator!".format(l_ensemble_reg))
+        if ensemble_regularizer == "hard-L0" and l_ensemble_reg < 1:
+            print("WARNING: You set l_ensemble_reg to {}, but regularizer is hard-L0. In this mode, l_ensemble_reg should be an integer 1 <= l_ensemble_reg <= max_trees where max_trees is the number of estimators trained by base_estimator!".format(l_ensemble_reg))
 
         if (l_ensemble_reg > 0 and (ensemble_regularizer == "none" or ensemble_regularizer is None)):
             print("WARNING: You set l_ensemble_reg to {}, but regularizer is None. Ignoring l_ensemble_reg!".format(l_ensemble_reg))
@@ -121,7 +116,6 @@ class CPrime(ClassifierMixin, BaseEstimator):
             
         if (l_ensemble_reg == 0 and (ensemble_regularizer != "none" and ensemble_regularizer is not None)):
             print("WARNING: You set l_ensemble_reg to 0, but choose regularizer {}.".format(ensemble_regularizer))
-
         
         if "tree_init_mode" in additional_tree_options:
             assert additional_tree_options["tree_init_mode"] in ["train", "fully-random", "random"], "Currently only {{train, fully-random, random}} as tree_init_mode is supported"
@@ -145,7 +139,6 @@ class CPrime(ClassifierMixin, BaseEstimator):
         self.step_size = step_size
         self.loss = loss
         self.normalize_weights = normalize_weights
-        self.init_weight = init_weight
         self.ensemble_regularizer = ensemble_regularizer
         self.l_ensemble_reg = l_ensemble_reg
         self.tree_regularizer = tree_regularizer
@@ -197,9 +190,6 @@ class CPrime(ClassifierMixin, BaseEstimator):
         proba = self.predict_proba(X)
         return self.classes_.take(proba.argmax(axis=1), axis=0) 
 
-    def next(self, data, target):
-        return self.model.next(data, target)
-
     def fit(self, X, y, sample_weight = None):
         # TODO respect sample weights in loss
         X, y = check_X_y(X, y)
@@ -210,13 +200,12 @@ class CPrime(ClassifierMixin, BaseEstimator):
         
         self.X_ = X
         self.y_ = y
-        
-        if self.init_weight in ["average", "max"]:
-            weight_init_mode = self.init_weight
-            init_weight = 1.0
+        if self.step_size == "adaptive":
+            step_size_mode = "adaptive"
+            step_size = 0
         else:
-            weight_init_mode = "constant"
-            init_weight = self.init_weight
+            step_size_mode = "constant"
+            step_size = self.step_size
         
         if self.update_leaves:
             tree_update_mode = "gradient"
@@ -237,9 +226,8 @@ class CPrime(ClassifierMixin, BaseEstimator):
             self.seed,
             self.normalize_weights,
             self.loss,
-            self.step_size,
-            weight_init_mode,
-            float(init_weight),
+            step_size,
+            step_size_mode,
             is_nominal,
             ensemble_regularizer,
             float(self.l_ensemble_reg),
@@ -252,11 +240,9 @@ class CPrime(ClassifierMixin, BaseEstimator):
         for epoch in range(self.epochs):
             mini_batches = create_mini_batches(X, y, self.batch_size, False, False) 
 
-            total_time = 0
-            total_loss = 0
-
-            # first_batch = True
-            example_cnt = 0
+            loss_sum = 0
+            time_sum = 0
+            batch_cnt = 0
 
             with tqdm(total=X.shape[0], ncols=150, disable = not self.verbose) as pbar:
                 for batch in mini_batches: 
@@ -264,19 +250,48 @@ class CPrime(ClassifierMixin, BaseEstimator):
                     
                     # Update Model                    
                     start_time = time.time()
-                    batch_loss = self.model.next(data, target)
+                    # TODO This is a little inefficient, since we technically call next before ?
+                    self.model.next(data, target)
                     batch_time = time.time() - start_time
 
-                    total_loss += batch_loss
-                    total_time += batch_time
-                    example_cnt += data.shape[0]
+                    output = self.predict_proba(data)
 
+                    # Compute the appropriate loss. 
+                    if self.loss == "mse":
+                        target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
+                        loss = (output - target_one_hot) * (output - target_one_hot)
+                    elif self.loss == "cross-entropy":
+                        target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
+                        p = softmax(output, axis=1)
+                        loss = -target_one_hot*np.log(p + 1e-7)
+
+                    # Compute the appropriate ensemble_regularizer
+                    if self.ensemble_regularizer == "L0":
+                        loss = np.mean(loss) + self.l_ensemble_reg * np.linalg.norm(self.estimator_weights_,0)
+                    elif self.ensemble_regularizer == "L1":
+                        loss = np.mean(loss) + self.l_ensemble_reg * np.linalg.norm(self.estimator_weights_,1)
+                    else:
+                        loss = np.mean(loss) 
+                    
+                    # Compute the appropriate tree_regularizer
+                    if self.tree_regularizer == "node":
+                        loss += self.l_tree_reg * np.sum( [ (w * est.tree_.node_count) for w, est in zip(self.estimator_weights_, self.estimators_)] )
+
+                    loss_sum += loss
+                    time_sum += batch_time
+
+                    batch_cnt += 1
                     pbar.update(data.shape[0])
-                    desc = '[{}/{}] loss {} time {}'.format(
+                    
+                    desc = '[{}/{}] loss {} itime{}'.format(
                         epoch, 
                         self.epochs-1, 
-                        total_loss / example_cnt, 
-                        total_time / example_cnt,
+                        loss_sum / batch_cnt,
+                        time_sum / batch_cnt,
                     )
                     pbar.set_description(desc)
                 
+                if self.out_path is not None:
+                    # TODO CLEAN UP
+                    metrics = {"loss":loss_sum / batch_cnt}
+                    pickle.dump(metrics, gzip.open(os.path.join(self.out_path, "epoch_{}.pk.gz".format(epoch)), "wb"))

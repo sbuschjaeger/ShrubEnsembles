@@ -366,9 +366,8 @@ int main() {
 	unsigned int max_depth = 2;
 	unsigned long seed = 12345;
 	bool normalize_weights = true;
-	INIT_MODE init_mode = INIT_MODE::CONSTANT;
+	STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT;
 	data_t step_size = 1e-2;
-	data_t init_weight = 1.0;
 	std::vector<bool> const & is_nominal = {};
 	LOSS::TYPE loss = LOSS::TYPE::CROSS_ENTROPY;
 	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::L1;
@@ -407,8 +406,7 @@ int main() {
 		normalize_weights,
 		loss,
 		step_size,
-		init_mode,
-		init_weight,
+		step_size_mode,
 		is_nominal,
 		ensemble_regularizer,
 		l_ensemble_reg,
@@ -452,8 +450,15 @@ int main() {
 				}
 			}
 			
-            auto loss = est.next(data, target);
-			
+            est.next(data, target);
+			std::vector<std::vector<data_t>> losses;
+			if (loss == LOSS::TYPE::CROSS_ENTROPY) {
+				losses = LOSS::cross_entropy(proba, target);
+			} else {
+				losses = LOSS::mse(proba, target);
+			}
+			data_t loss = mean_all_dim(losses);
+
 			std::cout << "DATA: " << std::endl;
 			print_matrix(data);
 			

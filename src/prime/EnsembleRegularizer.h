@@ -11,7 +11,7 @@
 
 namespace ENSEMBLE_REGULARIZER {
 
-enum class TYPE {NO,L0,L1,hard_L1};
+enum class TYPE {NO,L0,L1,hard_L0};
 
 std::vector<data_t> no_reg(std::vector<data_t> const &w, data_t scale) {
     return w;
@@ -63,7 +63,7 @@ std::vector<unsigned int> top_k(std::vector<data_t> const &a, unsigned int K) {
     return top_idx;
 }
 
-std::vector<data_t> hard_L1_reg(std::vector<data_t> const &w, data_t K) {
+std::vector<data_t> hard_L0_reg(std::vector<data_t> const &w, data_t K) {
     std::vector<unsigned int> top_idx = top_k(w, K);
     std::vector<data_t> tmp_w(w.size(), 0);
 
@@ -105,8 +105,8 @@ auto from_enum(TYPE reg) {
         return L0_reg;
     } else if (reg == TYPE::L1) {
         return L1_reg;
-    } else if (reg == TYPE::hard_L1) {
-        return hard_L1_reg;
+    } else if (reg == TYPE::hard_L0) {
+        return hard_L0_reg;
     } else {
         throw std::runtime_error("Wrong regularizer enum provided. No implementation for this enum found");
     }
@@ -119,10 +119,10 @@ auto from_string(std::string const & regularizer) {
         return TYPE::L0;
     } else if (regularizer == "L1") {
         return TYPE::L1;
-    } else if (regularizer == "hard_L1" || regularizer == "hard-L1") {
-        return TYPE::hard_L1;
+    } else if (regularizer == "hard_L0" || regularizer == "hard-L0") {
+        return TYPE::hard_L0;
     } else {
-        throw std::runtime_error("Currently only the three regularizer {none, L0, L1, hard_L1} are supported, but you provided: " + regularizer);
+        throw std::runtime_error("Currently only the three regularizer {none, L0, L1, hard_L0} are supported, but you provided: " + regularizer);
     }
 }
 }
