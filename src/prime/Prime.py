@@ -431,7 +431,7 @@ class Prime(ClassifierMixin, BaseEstimator):
                 step_size = 0
             else:
                 step_size_mode = "constant"
-                step_size = self.step_size
+                step_size = float(self.step_size)
 
             if self.update_leaves:
                 tree_update_mode = "gradient"
