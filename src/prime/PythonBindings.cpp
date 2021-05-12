@@ -53,6 +53,12 @@ public:
         }
     }
 
+    void add_tree(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, data_t weight) {
+        if (model != nullptr) {
+            model->add_tree(X,Y,weight);
+        }
+    }
+
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
             model->next(X,Y);
@@ -92,6 +98,7 @@ PYBIND11_MODULE(CPrimeBindings, m) {
 py::class_<PrimeAdaptor>(m, "CPrimeBindings")
     .def(py::init<unsigned int, unsigned int,unsigned long, bool, std::string, data_t, std::string, std::vector<bool>, std::string, data_t, std::string, data_t, std::string, std::string>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("normalize_weights"), py::arg("loss"), py::arg("step_size"), py::arg("step_size_mode"), py::arg("is_nominal"), py::arg("ensemble_regularizer"), py::arg("l_ensemble_reg"), py::arg("tree_regularizer"), py::arg("l_tree_reg"), py::arg("tree_init_mode"), py::arg("tree_update_mode"))
     .def ("next", &PrimeAdaptor::next, py::arg("X"), py::arg("Y"))
+    .def ("add_tree", &PrimeAdaptor::add_tree, py::arg("X"), py::arg("Y"), py::arg("weight"))
     .def ("num_trees", &PrimeAdaptor::num_trees)
     .def ("weights", &PrimeAdaptor::weights)
     .def ("predict_proba", &PrimeAdaptor::predict_proba, py::arg("X")

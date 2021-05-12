@@ -74,6 +74,8 @@ class PrimeInterface {
 public:
     virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
 
+    virtual void add_tree(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, data_t weight) = 0;
+
     virtual std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
     
     virtual std::vector<data_t> weights() const = 0;
@@ -169,6 +171,11 @@ public:
         l_tree_reg(l_tree_reg) 
     {}
 
+    void add_tree(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, data_t weight) {
+        _weights.push_back(weight);
+        _trees.push_back(Tree<tree_init, tree_next, pred_t>(max_depth, n_classes, seed++, X, Y, is_nominal));
+    }
+
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         data_t step_size;
         if (step_size_mode == STEP_SIZE_MODE::ADAPTIVE) {
@@ -253,9 +260,7 @@ public:
             }
         }
 
-        // Create new tree
-        _weights.push_back(0.0);
-        _trees.push_back(Tree<tree_init, tree_next, pred_t>(max_depth, n_classes, seed++, X, Y, is_nominal));
+        add_tree(X,Y,0.0);
     }
 
     std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {

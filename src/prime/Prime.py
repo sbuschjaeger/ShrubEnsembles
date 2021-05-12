@@ -12,22 +12,40 @@ import pickle
 
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 
 from .CPrimeBindings import CPrimeBindings
 
 def to_prob_simplex(x):
+    #x = np.array([1.32364744, -3.84928724])
     if x is None or len(x) == 0:
         return x
-    sorted_x = np.sort(x)
-    x_sum = sorted_x[0]
-    l = 1.0 - sorted_x[0]
-    for i in range(1,len(sorted_x)):
-        x_sum += sorted_x[i]
-        tmp = 1.0 / (i + 1.0) * (1.0 - x_sum)
-        if (sorted_x[i] + tmp) > 0:
-            l = tmp 
+    u = np.sort(x)[::-1]
+    # x_sum = sorted_x[0]
+    # l = 1.0 - sorted_x[0]
+    # for i in range(1,len(sorted_x)):
+    #     x_sum += sorted_x[i]
+    #     tmp = 1.0 / (i + 1.0) * (1.0 - x_sum)
+    #     if (sorted_x[i] + tmp) > 0:
+    #         l = tmp 
+    # lambdas = [
+    #     sorted_x[i] + 1.0 / (i + 1.0) * (1.0 - np.sum(sorted_x[:i+1])) for i in range(0, len(sorted_x))
+    # ]
+    # lambdas = [l if l > 0 else 0 for l in lambdas]
+
+    l = None
+    u_sum = 0
+    for i in range(0,len(u)):
+        u_sum += u[i]
+        tmp = 1.0 / (i + 1.0) * (1.0 - u_sum)
+        #x_sum += sorted_x[i]
+        # print("TMP:", tmp)
+        if u[i] + tmp > 0:
+            l = tmp
+            # lambdas.append(tmp)
     
-    return [max(xi + l, 0.0) for xi in x]
+    projected_x = [max(xi + l, 0.0) for xi in x]
+    return projected_x
 
 # Modified from https://stackoverflow.com/questions/38157972/how-to-implement-mini-batch-gradient-descent-in-python
 def create_mini_batches(inputs, targets, batch_size, shuffle=False, sliding_window=False):
@@ -93,7 +111,6 @@ class Prime(ClassifierMixin, BaseEstimator):
     """
 
     def __init__(self,
-                max_depth,
                 loss = "cross-entropy",
                 step_size = 1e-1,
                 ensemble_regularizer = None,
@@ -106,17 +123,23 @@ class Prime(ClassifierMixin, BaseEstimator):
                 verbose = False,
                 out_path = None,
                 seed = None,
-                epochs = None,
+                epochs = 1,
                 backend = "python",
                 additional_tree_options = {
-                    "splitter" : "best", "criterion" : "gini"
-                }
+                    "splitter" : "best", 
+                    "criterion" : "gini",
+                    "max_depth": None
+                },
+                warmstart = True
         ):
 
         assert loss in ["mse","cross-entropy","hinge2"], "Currently only {{mse, cross-entropy, hinge2}} loss is supported"
         assert ensemble_regularizer is None or ensemble_regularizer in ["none","L0", "L1", "hard-L0"], "Currently only {{none,L0, L1, hard-L0}} the ensemble regularizer is supported"
         assert l_tree_reg >= 0, "l_tree_reg must be greate or equal to 0"
         assert tree_regularizer is None or tree_regularizer in ["node"], "Currently only {{none, node}} regularizer is supported for tree the regularizer."
+
+        if backend == "c++":
+            assert "max_depth" in additional_tree_options and additional_tree_options["max_depth"] > 0, "The C++ backend required a maximum tree depth to be set, but none was given"
 
         if batch_size is None or batch_size < 1:
             print("WARNING: batch_size should be 2 for PyBiasedProxEnsemble for optimal performance, but was {}. Fixing it for you.".format(batch_size))
@@ -132,10 +155,6 @@ class Prime(ClassifierMixin, BaseEstimator):
         if (l_ensemble_reg == 0 and (ensemble_regularizer != "none" and ensemble_regularizer is not None)):
             print("WARNING: You set l_ensemble_reg to 0, but choose regularizer {}.".format(ensemble_regularizer))
 
-        if "max_depth" in additional_tree_options:
-            print("WARNING: You passed `max_depth` to additional_tree_options. However, the tree depth is defined by the max_depth parameter of Prime. I am going to ignore the max_depth parameter passed to additional_tree_options")
-            del additional_tree_options["max_depth"]
-        
         if "random_seed" in additional_tree_options:
             print("WARNING: You passed `random_seed` to additional_tree_options. However, the random_seed is defined internally for individual trees. You can control the random seed by setting the `seed` parameter of Prime. I am going to ignore the random_seed parameter passed to additional_tree_options")
             del additional_tree_options["random_seed"]
@@ -170,7 +189,6 @@ class Prime(ClassifierMixin, BaseEstimator):
         self.tree_regularizer = tree_regularizer
         self.l_tree_reg = l_tree_reg
         self.normalize_weights = normalize_weights
-        self.max_depth = max_depth
         self.estimators_ = [] # Only used if backend is python
         self.estimator_weights_ = [] # Only used if backend is python
         self.dt_seed = self.seed
@@ -182,6 +200,7 @@ class Prime(ClassifierMixin, BaseEstimator):
         self.verbose = verbose
         self.out_path = out_path
         self.epochs = epochs
+        self.warmstart = warmstart
 
     def _individual_proba(self, X):
         ''' Predict class probabilities for each individual learner in the ensemble without considering the weights.
@@ -355,20 +374,33 @@ class Prime(ClassifierMixin, BaseEstimator):
                 # If set, normalize the weights. Note that we use the support of tmp_w for the projection onto the probability simplex
                 # as described in http://proceedings.mlr.press/v28/kyrillidis13.pdf
                 # Thus, we first need to extract the nonzero weights, project these and then copy them back into corresponding array
+                # print("PRE PROX: ", tmp_w)
                 if self.normalize_weights and len(tmp_w) > 0:
                     nonzero_idx = np.nonzero(tmp_w)[0]
                     nonzero_w = tmp_w[nonzero_idx]
+                    # print("RIGHT BEFORE PROX ", nonzero_w)
                     nonzero_w = to_prob_simplex(nonzero_w)
+                    # print("RIGHT AFTER PROX ", nonzero_w)
                     self.estimator_weights_ = np.zeros((len(tmp_w)))
                     for i,w in zip(nonzero_idx, nonzero_w):
                         self.estimator_weights_[i] = w
                 else:
                     self.estimator_weights_ = tmp_w
                 
+                # print("POST PROX:", self.estimator_weights_)
+                # print("SUM:", sum(self.estimator_weights_))
+
                 # Remove all trees with zero weight after prox and projection onto the prob. simplex. 
+                # TODO Only remove the latest model and keep other zero weights?
                 new_est = []
                 new_w = []
+                # skipped = False
                 for h, w in zip(self.estimators_, self.estimator_weights_):
+                    # if len(self.estimators_) == self.ensemble_regularizer and w == 0 and not skipped:
+                    #     skipped = True
+                    # else:
+                    #     new_est.append(h)
+                    #     new_w.append(w)
                     if w > 0:
                         new_est.append(h)
                         new_w.append(w)
@@ -379,7 +411,7 @@ class Prime(ClassifierMixin, BaseEstimator):
             if (len(set(target)) > 1):
                 # Fit a new tree on the current batch. 
 
-                tree = DecisionTreeClassifier(max_depth = self.max_depth, random_state=self.dt_seed, **self.additional_tree_options)
+                tree = DecisionTreeClassifier(random_state=self.dt_seed, **self.additional_tree_options)
 
                 self.dt_seed += 1
                 tree.fit(data, target)
@@ -389,6 +421,7 @@ class Prime(ClassifierMixin, BaseEstimator):
                 # tree.tree_.value is not writeable, but we can modify the values inplace. Thus we 
                 # use [:] to copy the array into the normalized array. Also tree.tree_.value has a strange shape
                 # (batch_size, 1, n_classes)
+                
                 tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
 
                 # if len(self.estimator_weights_) == 0:
@@ -420,7 +453,8 @@ class Prime(ClassifierMixin, BaseEstimator):
 
     def num_parameters(self):
         if self.backend == "c++":
-            return (2**(self.max_depth + 1) - 1)*self.num_trees()
+            max_depth = self.additional_tree_options["max_depth"]
+            return (2**(max_depth + 1) - 1)*self.num_trees()
         else:
             return sum( [ est.tree_.node_count if w != 0 else 0 for w, est in zip(self.estimator_weights_, self.estimators_)] )
 
@@ -448,7 +482,7 @@ class Prime(ClassifierMixin, BaseEstimator):
 
             self.model = CPrimeBindings(
                 len(unique_labels(y)), 
-                self.max_depth,
+                self.additional_tree_options["max_depth"],
                 self.seed,
                 self.normalize_weights,
                 self.loss,
@@ -463,9 +497,35 @@ class Prime(ClassifierMixin, BaseEstimator):
                 tree_update_mode
             )
 
+        if self.warmstart:
+            if self.ensemble_regularizer == "hard-L0":
+                n_estimators = self.l_ensemble_reg
+            else:
+                # TODO Add a parameter for this?
+                n_estimators = 32
+
+            # TODO This can be done in parallel
+            for _ in range(n_estimators):
+                idx = np.random.choice(range(0,len(X)), replace = True, size = self.batch_size)
+                data, target = X[idx],y[idx]
+                w = 1.0 / n_estimators
+
+                if self.backend == "c++":
+                    self.model.add_tree(data, target, w)
+                else:
+                    tree = DecisionTreeClassifier(random_state=self.dt_seed, **self.additional_tree_options)
+
+                    self.dt_seed += 1
+                    tree.fit(data, target)
+                
+                    tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
+
+                    self.estimators_.append(tree)
+                    self.estimator_weights_.append(w)
+        
         # TODO respect sample weights in loss
         X, y = check_X_y(X, y)
-        
+
         self.classes_ = unique_labels(y)
         self.n_classes_ = len(self.classes_)
         self.n_outputs_ = self.n_classes_
@@ -476,22 +536,23 @@ class Prime(ClassifierMixin, BaseEstimator):
         for epoch in range(self.epochs):
             mini_batches = create_mini_batches(X, y, self.batch_size, False, False) 
 
+            acc_sum = 0
             loss_sum = 0
             time_sum = 0
+            trees_sum = 0
+            nodes_sum = 0
             batch_cnt = 0
 
             with tqdm(total=X.shape[0], ncols=150, disable = not self.verbose) as pbar:
                 for batch in mini_batches: 
                     data, target = batch 
                     
+                    output = self.predict_proba(data)
+
                     # Update Model                    
                     start_time = time.time()
-                    # TODO This is a little inefficient, since we technically call next before ?
                     self.next(data,target)
-
                     batch_time = time.time() - start_time
-
-                    output = self.predict_proba(data)
                     
                     # Compute the appropriate loss. 
                     if self.loss == "mse":
@@ -520,20 +581,27 @@ class Prime(ClassifierMixin, BaseEstimator):
                     if self.tree_regularizer == "node":
                         loss += self.l_tree_reg * np.sum( [ (w * est.tree_.node_count) for w, est in zip(self.estimator_weights_, self.estimators_)] )
 
+                    acc_sum += (target == output.argmax(axis=1)).sum() / data.shape[0]
+
                     loss_sum += loss
                     time_sum += batch_time
+                    trees_sum += self.num_trees()
+                    nodes_sum += self.num_parameters()
 
                     batch_cnt += 1
                     pbar.update(data.shape[0])
                     
-                    desc = '[{}/{}] loss {} itime {}'.format(
+                    desc = '[{}/{}] loss {:2.4f} acc {:2.4f} itime {:2.4f} ntrees {:2.4f} nnodes {:2.4f}'.format(
                         epoch, 
                         self.epochs-1, 
                         loss_sum / batch_cnt,
+                        acc_sum / batch_cnt,
                         time_sum / batch_cnt,
+                        trees_sum / batch_cnt,
+                        nodes_sum / batch_cnt
                     )
                     pbar.set_description(desc)
                 
                 if self.out_path is not None:
-                    metrics = {"loss":loss_sum / batch_cnt, "time":time_sum / batch_cnt}
+                    metrics = {"accuracy":acc_sum / batch_cnt,"loss":loss_sum / batch_cnt, "itime":time_sum / batch_cnt, "ntrees":trees_sum / batch_cnt, "nnodes":nodes_sum / batch_cnt}
                     pickle.dump(metrics, gzip.open(os.path.join(self.out_path, "epoch_{}.pk.gz".format(epoch)), "wb"))

@@ -79,23 +79,24 @@ std::vector<data_t> to_prob_simplex(std::vector<data_t> const &w) {
         return w;
     }
 
-    std::vector<data_t> sorted_w(w);
-    std::sort(sorted_w.begin(), sorted_w.end());
-    data_t w_sum = sorted_w[0];
-    data_t l = 1.0 - sorted_w[0];
-    for (unsigned int i = 1; i < w.size(); ++i) {
-        w_sum += sorted_w[i];
-        data_t tmp = 1.0 / (i + 1.0) * (1.0 - w_sum);
-        if ((sorted_w[i] + tmp) > 0) {
+    std::vector<data_t> u(w);
+    std::sort(u.begin(), u.end(), std::greater<int>());
+
+    data_t u_sum = 0; 
+    data_t l = 0;
+    for (unsigned int i = 0; i < w.size(); ++i) {
+        u_sum += u[i];
+        data_t tmp = 1.0 / (i + 1.0) * (1.0 - u_sum);
+        if ((u[i] + tmp) > 0) {
             l = tmp;
         }
     }
 
     for (unsigned int i = 0; i < w.size(); ++i) {
-        sorted_w[i] = std::max(w[i] + l, 0.0);
+        u[i] = std::max(w[i] + l, 0.0);
     }
 
-    return sorted_w;
+    return u;
 }
 
 auto from_enum(TYPE reg) {
