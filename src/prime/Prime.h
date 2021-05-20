@@ -82,6 +82,8 @@ public:
 
     virtual unsigned int num_trees() const = 0;
 
+    virtual unsigned int num_bytes() const = 0;
+
     virtual ~PrimeInterface() { }
 };
 
@@ -170,6 +172,22 @@ public:
         tree_regularizer(tree_regularizer),
         l_tree_reg(l_tree_reg) 
     {}
+
+    unsigned int num_bytes() const {
+        unsigned int tree_size = 0;
+        if (_trees.size() > 0) {
+            tree_size = _trees[0].num_bytes();
+        }
+
+        return tree_size * _trees.size() + sizeof(std::vector< Tree<tree_init, tree_next, pred_t> >)
+                + sizeof(data_t) * _weights.size() + sizeof(std::vector<data_t>)
+                + sizeof(unsigned int) * 2  + sizeof(long)  + sizeof(bool) + sizeof(STEP_SIZE_MODE) + sizeof(data_t) 
+                + 2 * sizeof(std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) >)
+                + (is_nominal.size() + 8 - 1)/ 8 + sizeof(std::vector<bool>) // std::vector<bool> is a specialized version which packs bool in singular bits and thus devide by 8. Also make sure to round up
+                + sizeof(std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) >)
+                + sizeof(std::function< data_t(Tree<tree_init, tree_next, pred_t> const &) >)
+                + 2 * sizeof(data_t);
+    }
 
     void add_tree(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, data_t weight) {
         _weights.push_back(weight);

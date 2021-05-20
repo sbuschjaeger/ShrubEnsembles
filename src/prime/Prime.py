@@ -9,6 +9,7 @@ import os
 from tqdm import tqdm
 import gzip
 import pickle
+import sys
 
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -436,6 +437,21 @@ class Prime(ClassifierMixin, BaseEstimator):
             # n_trees = [self.num_trees() for _ in range(data.shape[0])]
             # n_param = [self.num_parameters() for _ in range(data.shape[0])]
             # return {"loss" : loss, "accuracy": accuracy, "num_trees": n_trees, "num_parameters" : n_param}, output
+
+    def num_bytes(self):
+        # This is a little hacky. Pickle gives us an easy and accurate way to compute the size of this object, including 
+        # sklearn estimators etc.
+        # However, since I am lazy I did not want to implement pickling support in C++ and thus I set self.model
+        if self.backend == "c++":
+            model = self.model
+            self.model = None
+            p = pickle.dumps(self)
+            size = sys.getsizeof(p)
+            self.model = model
+            return size + self.model.num_bytes()
+        else:
+            p = pickle.dumps(self)
+            return sys.getsizeof(p)
 
     def num_trees(self):
         if self.backend == "c++":

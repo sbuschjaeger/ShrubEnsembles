@@ -90,6 +90,14 @@ public:
             return 0;
         }
     }
+
+    unsigned int num_bytes() const {
+        if (model != nullptr) {
+            return model->num_bytes();
+        } else {
+            return 0;
+        }
+    }
 };
 
 namespace py = pybind11;
@@ -100,6 +108,7 @@ py::class_<PrimeAdaptor>(m, "CPrimeBindings")
     .def ("next", &PrimeAdaptor::next, py::arg("X"), py::arg("Y"))
     .def ("add_tree", &PrimeAdaptor::add_tree, py::arg("X"), py::arg("Y"), py::arg("weight"))
     .def ("num_trees", &PrimeAdaptor::num_trees)
+    .def ("num_bytes", &PrimeAdaptor::num_bytes)
     .def ("weights", &PrimeAdaptor::weights)
     .def ("predict_proba", &PrimeAdaptor::predict_proba, py::arg("X")
 );

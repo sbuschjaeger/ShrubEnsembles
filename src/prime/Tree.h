@@ -20,6 +20,10 @@ public:
     unsigned int feature;
     std::vector<pred_t> preds;
 
+    unsigned int num_bytes() const {
+        return sizeof(data_t) + sizeof(unsigned int) + sizeof(pred_t) * preds.size() + sizeof(std::vector<pred_t>);
+    }
+
     Node(data_t threshold, unsigned int feature) : threshold(threshold), feature(feature) {}
     Node() = default;
 };
@@ -415,6 +419,16 @@ public:
         } else {
             trained_nodes(X, Y, _is_nominal);
         }
+    }
+
+    unsigned int num_bytes() const {
+        unsigned int node_size = 0;
+        
+        if (nodes.size() > 0) {
+            node_size = nodes[0].num_bytes();
+        } 
+
+        return 3 * sizeof(unsigned int) + node_size * nodes.size() + sizeof(std::vector<Node<pred_t>>) + sizeof(std::mt19937);
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad, data_t step_size) {
