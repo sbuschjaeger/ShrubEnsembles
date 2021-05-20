@@ -300,6 +300,38 @@ class Prime(ClassifierMixin, BaseEstimator):
         if self.backend == "c++":
             self.model.next(data, target)
         else:
+            if (len(set(target)) > 1):
+                # Fit a new tree on the current batch. 
+
+                tree = DecisionTreeClassifier(random_state=self.dt_seed, **self.additional_tree_options)
+
+                self.dt_seed += 1
+                tree.fit(data, target)
+
+                # SKlearn stores the raw counts instead of probabilities. For SGD its better to have the 
+                # probabilities for numerical stability. 
+                # tree.tree_.value is not writeable, but we can modify the values inplace. Thus we 
+                # use [:] to copy the array into the normalized array. Also tree.tree_.value has a strange shape
+                # (batch_size, 1, n_classes)
+                
+                tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
+
+                # if len(self.estimator_weights_) == 0:
+                #     tmp_w = np.array([1.0])
+                # else:
+                #     if self.init_weight == "average":
+                #         tmp_w = np.append(tmp_w, [sum(tmp_w)/len(tmp_w)])
+                #     elif self.init_weight == "max":
+                #         tmp_w = np.append(tmp_w, [max(tmp_w)])
+                #     else:
+                #         tmp_w = np.append(tmp_w, [self.init_weight])
+
+                self.estimator_weights_.append(0.0)
+                self.estimators_.append(tree)
+            # else:
+            #     # TODO WHAT TO DO IF ONLY ONE LABEL IS IN THE CURRENT BATCH?
+            #     pass
+
             # if (len(self.estimators_)) == 0:
             #     output = 1.0 / self.n_classes_ * np.ones((data.shape[0], self.n_classes_))
             # else:
@@ -390,55 +422,15 @@ class Prime(ClassifierMixin, BaseEstimator):
                 # print("POST PROX:", self.estimator_weights_)
                 # print("SUM:", sum(self.estimator_weights_))
 
-                # Remove all trees with zero weight after prox and projection onto the prob. simplex. 
-                # TODO Only remove the latest model and keep other zero weights?
                 new_est = []
                 new_w = []
-                # skipped = False
                 for h, w in zip(self.estimators_, self.estimator_weights_):
-                    # if len(self.estimators_) == self.ensemble_regularizer and w == 0 and not skipped:
-                    #     skipped = True
-                    # else:
-                    #     new_est.append(h)
-                    #     new_w.append(w)
                     if w > 0:
                         new_est.append(h)
                         new_w.append(w)
 
                 self.estimators_ = new_est
                 self.estimator_weights_ = new_w
-
-            if (len(set(target)) > 1):
-                # Fit a new tree on the current batch. 
-
-                tree = DecisionTreeClassifier(random_state=self.dt_seed, **self.additional_tree_options)
-
-                self.dt_seed += 1
-                tree.fit(data, target)
-
-                # SKlearn stores the raw counts instead of probabilities. For SGD its better to have the 
-                # probabilities for numerical stability. 
-                # tree.tree_.value is not writeable, but we can modify the values inplace. Thus we 
-                # use [:] to copy the array into the normalized array. Also tree.tree_.value has a strange shape
-                # (batch_size, 1, n_classes)
-                
-                tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
-
-                # if len(self.estimator_weights_) == 0:
-                #     tmp_w = np.array([1.0])
-                # else:
-                #     if self.init_weight == "average":
-                #         tmp_w = np.append(tmp_w, [sum(tmp_w)/len(tmp_w)])
-                #     elif self.init_weight == "max":
-                #         tmp_w = np.append(tmp_w, [max(tmp_w)])
-                #     else:
-                #         tmp_w = np.append(tmp_w, [self.init_weight])
-
-                self.estimator_weights_.append(0.0)
-                self.estimators_.append(tree)
-            else:
-                # TODO WHAT TO DO IF ONLY ONE LABEL IS IN THE CURRENT BATCH?
-                pass
 
             # accuracy = (output.argmax(axis=1) == target) * 100.0
             # n_trees = [self.num_trees() for _ in range(data.shape[0])]
@@ -451,7 +443,7 @@ class Prime(ClassifierMixin, BaseEstimator):
         else:
             return np.count_nonzero(self.estimator_weights_)
 
-    def num_parameters(self):
+    def num_nodes(self):
         if self.backend == "c++":
             max_depth = self.additional_tree_options["max_depth"]
             return (2**(max_depth + 1) - 1)*self.num_trees()

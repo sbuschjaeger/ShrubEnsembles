@@ -177,6 +177,8 @@ public:
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+        add_tree(X,Y,0.0);
+        
         data_t step_size;
         if (step_size_mode == STEP_SIZE_MODE::ADAPTIVE) {
             step_size = 1.0 / (_trees.size() + 1);
@@ -259,8 +261,6 @@ public:
                 ++tit;
             }
         }
-
-        add_tree(X,Y,0.0);
     }
 
     std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
