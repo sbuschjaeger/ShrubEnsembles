@@ -51,20 +51,20 @@ private:
         return idx;
     }
 
-    static auto random_node(std::vector<bool> const &is_nominal, std::mt19937 &gen) {
-        std::uniform_int_distribution<> idis(0, is_nominal.size() - 1);
-        std::uniform_real_distribution<> fdis(0,1);
+    // static auto random_node(std::vector<bool> const &is_nominal, std::mt19937 &gen) {
+    //     std::uniform_int_distribution<> idis(0, is_nominal.size() - 1);
+    //     std::uniform_real_distribution<> fdis(0,1);
         
-        unsigned int feature = idis(gen);
-        data_t threshold;
-        if (is_nominal[feature]) {
-            threshold = 0.5; 
-        } else {
-            threshold = fdis(gen);
-        }
+    //     unsigned int feature = idis(gen);
+    //     data_t threshold;
+    //     if (is_nominal[feature]) {
+    //         threshold = 0.5; 
+    //     } else {
+    //         threshold = fdis(gen);
+    //     }
 
-        return std::pair<data_t, unsigned int>(threshold, feature);
-    }
+    //     return std::pair<data_t, unsigned int>(threshold, feature);
+    // }
 
      /**
      * @brief  Compute a random split for the given data. This algorithm has O(d * log d + d * N) runtime in the worst case, but should usually run in O(d * log d + N), where N is the number of examples and d is the number of features.
@@ -75,7 +75,7 @@ private:
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> random_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal, std::mt19937 &gen) {
+    static std::optional<std::pair<data_t, unsigned int>> random_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::mt19937 &gen) {
         // if (X.size() <= 1) {
         //     return random_node(is_nominal, gen);
         // }
@@ -177,7 +177,7 @@ private:
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal, long n_classes, std::mt19937 &gen) {
+    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, long n_classes, std::mt19937 &gen) {
         // if (X.size() <= 1) {
         //     return std::make_pair(1.0, static_cast<unsigned int>(0));
         //     //return random_node(is_nominal, gen);
@@ -301,7 +301,7 @@ private:
         return cur_node;
     }
 
-    void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const & is_nominal, unsigned int max_depth) {
+    void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int max_depth) {
         struct TreeExpansion {
             std::vector<std::vector<data_t>> const x;
             std::vector<unsigned int> const y;
@@ -347,9 +347,9 @@ private:
             } else {
                 std::optional<std::pair<data_t, unsigned int>> split;
                 if constexpr (tree_init == TRAIN) {
-                    split = best_split(exp.x, exp.y, is_nominal, n_classes, gen);
+                    split = best_split(exp.x, exp.y, n_classes, gen);
                 } else {
-                    split = random_split(exp.x, exp.y, is_nominal, gen);
+                    split = random_split(exp.x, exp.y, gen);
                 }
 
                 if (split.has_value()) {
@@ -399,17 +399,7 @@ private:
 public:
 
     Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), gen(seed) {
-        std::vector<bool> is_nominal(X[0].size(), false);
-        train(X, Y, is_nominal, max_depth);
-    }
-
-    Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal) : n_classes(n_classes), gen(seed) {
-        std::vector<bool> _is_nominal(X[0].size(), false);
-        if (is_nominal.size() == X[0].size()) {
-            _is_nominal = is_nominal;
-        }
-
-        train(X, Y, _is_nominal, max_depth);
+        train(X, Y, max_depth);
     }
 
     unsigned int num_bytes() const {

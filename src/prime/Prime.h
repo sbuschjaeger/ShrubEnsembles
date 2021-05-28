@@ -104,8 +104,6 @@ private:
     std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss;
     std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss_deriv;
 
-    std::vector<bool> const is_nominal;
-    
     std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) > ensemble_regularizer;
     data_t const l_ensemble_reg;
     
@@ -122,7 +120,6 @@ public:
         LOSS::TYPE loss = LOSS::TYPE::MSE,
         data_t step_size = 1e-2,
         STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT,
-        std::vector<bool> const & is_nominal = {},
         ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::NO,
         data_t l_ensemble_reg = 0.0,
         TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO,
@@ -136,7 +133,6 @@ public:
         step_size_mode(step_size_mode),
         loss(LOSS::from_enum(loss)), 
         loss_deriv(LOSS::deriv_from_enum(loss)), 
-        is_nominal(is_nominal), 
         ensemble_regularizer(ENSEMBLE_REGULARIZER::from_enum(ensemble_regularizer)), 
         l_ensemble_reg(l_ensemble_reg),
         tree_regularizer(TREE_REGULARIZER::from_enum<tree_init, tree_next, pred_t>(tree_regularizer)),
@@ -152,7 +148,6 @@ public:
         std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss_deriv = LOSS::mse_deriv,
         data_t step_size = 1e-2,
         STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT,
-        std::vector<bool> const & is_nominal = {},
         std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) > ensemble_regularizer = ENSEMBLE_REGULARIZER::no_reg,
         data_t l_ensemble_reg = 0.0,
         std::function< data_t(Tree<tree_init, tree_next, pred_t>) const &> tree_regularizer = TREE_REGULARIZER::no_reg,
@@ -166,7 +161,6 @@ public:
         step_size_mode(step_size_mode),
         loss(loss), 
         loss_deriv(loss_deriv), 
-        is_nominal(is_nominal), 
         ensemble_regularizer(ensemble_regularizer), 
         l_ensemble_reg(l_ensemble_reg),
         tree_regularizer(tree_regularizer),
@@ -183,7 +177,6 @@ public:
                 + sizeof(data_t) * _weights.size() + sizeof(std::vector<data_t>)
                 + sizeof(unsigned int) * 2  + sizeof(long)  + sizeof(bool) + sizeof(STEP_SIZE_MODE) + sizeof(data_t) 
                 + 2 * sizeof(std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) >)
-                + (is_nominal.size() + 8 - 1)/ 8 + sizeof(std::vector<bool>) // std::vector<bool> is a specialized version which packs bool in singular bits and thus devide by 8. Also make sure to round up
                 + sizeof(std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) >)
                 + sizeof(std::function< data_t(Tree<tree_init, tree_next, pred_t> const &) >)
                 + 2 * sizeof(data_t);
@@ -191,7 +184,7 @@ public:
 
     void add_tree(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, data_t weight) {
         _weights.push_back(weight);
-        _trees.push_back(Tree<tree_init, tree_next, pred_t>(max_depth, n_classes, seed++, X, Y, is_nominal));
+        _trees.push_back(Tree<tree_init, tree_next, pred_t>(max_depth, n_classes, seed++, X, Y));
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {

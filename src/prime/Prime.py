@@ -152,11 +152,6 @@ class Prime(ClassifierMixin, BaseEstimator):
         else:
             self.tree_init_mode = "train"
 
-        if "is_nominal" in additional_tree_options:
-            self.is_nominal = additional_tree_options["is_nominal"]
-        else:
-            self.is_nominal = None
-
         if seed is None:
             self.seed = 1234
         else:
@@ -388,7 +383,7 @@ class Prime(ClassifierMixin, BaseEstimator):
 
 
     def num_bytes(self):
-        self_size = sys.getsizeof(self.step_size) + sys.getsizeof(self.loss) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.ensemble_regularizer) + sys.getsizeof(self.l_ensemble_reg) + sys.getsizeof(self.tree_regularizer) + sys.getsizeof(self.l_tree_reg) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.dt_seed) + sys.getsizeof(self.update_leaves) + sys.getsizeof(self.additional_tree_options) + sys.getsizeof(self.backend) + sys.getsizeof(self.batch_size) + sys.getsizeof(self.verbose) + sys.getsizeof(self.out_path) + sys.getsizeof(self.epochs) + sys.getsizeof(self.warmstart) + sys.getsizeof(self.is_nominal) + sys.getsizeof(self.tree_init_mode)
+        self_size = sys.getsizeof(self.step_size) + sys.getsizeof(self.loss) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.ensemble_regularizer) + sys.getsizeof(self.l_ensemble_reg) + sys.getsizeof(self.tree_regularizer) + sys.getsizeof(self.l_tree_reg) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.dt_seed) + sys.getsizeof(self.update_leaves) + sys.getsizeof(self.additional_tree_options) + sys.getsizeof(self.backend) + sys.getsizeof(self.batch_size) + sys.getsizeof(self.verbose) + sys.getsizeof(self.out_path) + sys.getsizeof(self.epochs) + sys.getsizeof(self.warmstart) + sys.getsizeof(self.tree_init_mode)
 
         if self.backend == "c++":
             # model = self.model
@@ -431,11 +426,6 @@ class Prime(ClassifierMixin, BaseEstimator):
             else:
                 tree_update_mode = "none"
             
-            if self.is_nominal is None:
-                is_nominal = [False for _ in range(X.shape[1])]
-            else:
-                is_nominal = self.is_nominal
-
             ensemble_regularizer = "none" if self.ensemble_regularizer is None else str(self.ensemble_regularizer)
             tree_regularizer = "none" if self.tree_regularizer is None else str(self.tree_regularizer)
 
@@ -447,7 +437,6 @@ class Prime(ClassifierMixin, BaseEstimator):
                 self.loss,
                 step_size,
                 step_size_mode,
-                is_nominal,
                 ensemble_regularizer,
                 float(self.l_ensemble_reg),
                 tree_regularizer,

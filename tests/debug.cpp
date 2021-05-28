@@ -368,7 +368,6 @@ int main() {
 	bool normalize_weights = true;
 	STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT;
 	data_t step_size = 1e-2;
-	std::vector<bool> const & is_nominal = {};
 	LOSS::TYPE loss = LOSS::TYPE::CROSS_ENTROPY;
 	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::L1;
 	data_t l_ensemble_reg = 1;
@@ -407,7 +406,6 @@ int main() {
 		loss,
 		step_size,
 		step_size_mode,
-		is_nominal,
 		ensemble_regularizer,
 		l_ensemble_reg,
 		tree_regularizer,
