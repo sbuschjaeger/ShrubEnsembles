@@ -99,8 +99,8 @@ private:
     unsigned long seed;
     bool const normalize_weights;
 
-    STEP_SIZE_MODE const step_size_mode;
     data_t step_size;
+    STEP_SIZE_MODE const step_size_mode;
     std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss;
     std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss_deriv;
 

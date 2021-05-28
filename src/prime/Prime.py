@@ -18,32 +18,17 @@ from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from .CPrimeBindings import CPrimeBindings
 
 def to_prob_simplex(x):
-    #x = np.array([1.32364744, -3.84928724])
     if x is None or len(x) == 0:
         return x
     u = np.sort(x)[::-1]
-    # x_sum = sorted_x[0]
-    # l = 1.0 - sorted_x[0]
-    # for i in range(1,len(sorted_x)):
-    #     x_sum += sorted_x[i]
-    #     tmp = 1.0 / (i + 1.0) * (1.0 - x_sum)
-    #     if (sorted_x[i] + tmp) > 0:
-    #         l = tmp 
-    # lambdas = [
-    #     sorted_x[i] + 1.0 / (i + 1.0) * (1.0 - np.sum(sorted_x[:i+1])) for i in range(0, len(sorted_x))
-    # ]
-    # lambdas = [l if l > 0 else 0 for l in lambdas]
 
     l = None
     u_sum = 0
     for i in range(0,len(u)):
         u_sum += u[i]
         tmp = 1.0 / (i + 1.0) * (1.0 - u_sum)
-        #x_sum += sorted_x[i]
-        # print("TMP:", tmp)
         if u[i] + tmp > 0:
             l = tmp
-            # lambdas.append(tmp)
     
     projected_x = [max(xi + l, 0.0) for xi in x]
     return projected_x
@@ -182,6 +167,7 @@ class Prime(ClassifierMixin, BaseEstimator):
         np.random.seed(self.seed)
         random.seed(self.seed)
         
+        self.dt_seed = seed
         self.step_size = step_size
         self.loss = loss
         self.normalize_weights = normalize_weights
@@ -192,7 +178,6 @@ class Prime(ClassifierMixin, BaseEstimator):
         self.normalize_weights = normalize_weights
         self.estimators_ = [] # Only used if backend is python
         self.estimator_weights_ = [] # Only used if backend is python
-        self.dt_seed = self.seed
         self.update_leaves = update_leaves
         self.additional_tree_options = additional_tree_options
         self.backend = backend
@@ -220,31 +205,22 @@ class Prime(ClassifierMixin, BaseEstimator):
         all_proba = []
 
         for e in self.estimators_:
-            tmp = np.zeros(shape=(X.shape[0], self.n_classes_), dtype=np.float32)
-            tmp[:, e.classes_.astype(int)] += e.predict_proba(X)
-            all_proba.append(tmp)
+            if len(X.shape) < 2:
+                proba = np.zeros(shape=(1, self.n_classes_), dtype=np.float32)
+                X = X[np.newaxis,:]
+            else:
+                proba = np.zeros(shape=(X.shape[0], self.n_classes_), dtype=np.float32)
+
+            proba[:, e.classes_.astype(int)] += e.predict_proba(X)
+            all_proba.append(proba)
 
         if len(all_proba) == 0:
-            return np.zeros(shape=(1, X.shape[0], self.n_classes_), dtype=np.float32)
+            if len(X.shape) < 0:
+                return np.zeros(shape=(1, 1, self.n_classes_), dtype=np.float32)
+            else:
+                return np.zeros(shape=(1, X.shape[0], self.n_classes_), dtype=np.float32)
         else:
             return np.array(all_proba)
-
-        # # def single_predict_proba(h,X):
-        # #     return h.predict_proba(X)
-        
-        # # TODO MAKE SURE THAT THE ORDER OF H FITS TO ORDER OF WEIGHTS
-        # # all_proba = Parallel(n_jobs=self.n_jobs, backend="threading")(
-        # #     delayed(single_predict_proba) (h,X) for h in self.estimators_
-        # # )
-        # all_proba = []
-
-        # for e in self.estimators_:
-        #     tmp = np.zeros(shape=(X.shape[0], self.n_classes_), dtype=np.float32)
-        #     tmp[:, e.classes_.astype(int)] += e.predict_proba(X)
-        #     all_proba.append(tmp)
-
-        # #all_proba = np.array([h.predict_proba(X) for h in self.estimators_])
-        # return np.array(all_proba)
 
     def predict_proba(self, X):
         ''' Predict class probabilities using the pruned model.
@@ -268,12 +244,15 @@ class Prime(ClassifierMixin, BaseEstimator):
                 return np.array(self.model.predict_proba(X))
         else:
             # Check is fit had been called
-            check_is_fitted(self, ['X_', 'y_'])
+            # check_is_fitted(self, ['X_', 'y_'])
 
             # Input validation
-            X = check_array(X)
+            # X = check_array(X)
             if (len(self.estimators_)) == 0:
-                return 1.0 / self.n_classes_ * np.ones((X.shape[0], self.n_classes_))
+                if len(X.shape) < 0:
+                    return 1.0 / self.n_classes_ * np.ones((1, self.n_classes_))
+                else:
+                    return 1.0 / self.n_classes_ * np.ones((X.shape[0], self.n_classes_))
             else:
                 all_proba = self._individual_proba(X)
                 scaled_prob = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)])
@@ -317,25 +296,12 @@ class Prime(ClassifierMixin, BaseEstimator):
                 
                 tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
 
-                # if len(self.estimator_weights_) == 0:
-                #     tmp_w = np.array([1.0])
-                # else:
-                #     if self.init_weight == "average":
-                #         tmp_w = np.append(tmp_w, [sum(tmp_w)/len(tmp_w)])
-                #     elif self.init_weight == "max":
-                #         tmp_w = np.append(tmp_w, [max(tmp_w)])
-                #     else:
-                #         tmp_w = np.append(tmp_w, [self.init_weight])
-
                 self.estimator_weights_.append(0.0)
                 self.estimators_.append(tree)
             # else:
             #     # TODO WHAT TO DO IF ONLY ONE LABEL IS IN THE CURRENT BATCH?
             #     pass
 
-            # if (len(self.estimators_)) == 0:
-            #     output = 1.0 / self.n_classes_ * np.ones((data.shape[0], self.n_classes_))
-            # else:
             if len(self.estimators_) > 0:
                 all_proba = self._individual_proba(data)
                 output = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)]).sum(axis=0)
@@ -373,13 +339,7 @@ class Prime(ClassifierMixin, BaseEstimator):
                 # Perform the gradient step. Note that L0 / L1 regularizer is performed via the prox operator 
                 # and thus performed _after_ this update.
                 if self.step_size == "adaptive":
-                    #if max_w > 0:
-                    #else:
-                    #    step_size = 0.5 # because reasons, thats why
-                    # min_w = max(self.estimator_weights_)
-
                     step_size = 1.0 / (len(self.estimators_) + 1.0)
-                    #step_size = len(self.estimators_) / 1e2
                 else:
                     step_size = self.step_size
 
@@ -411,18 +371,13 @@ class Prime(ClassifierMixin, BaseEstimator):
                 if self.normalize_weights and len(tmp_w) > 0:
                     nonzero_idx = np.nonzero(tmp_w)[0]
                     nonzero_w = tmp_w[nonzero_idx]
-                    # print("RIGHT BEFORE PROX ", nonzero_w)
                     nonzero_w = to_prob_simplex(nonzero_w)
-                    # print("RIGHT AFTER PROX ", nonzero_w)
                     self.estimator_weights_ = np.zeros((len(tmp_w)))
                     for i,w in zip(nonzero_idx, nonzero_w):
                         self.estimator_weights_[i] = w
                 else:
                     self.estimator_weights_ = tmp_w
                 
-                # print("POST PROX:", self.estimator_weights_)
-                # print("SUM:", sum(self.estimator_weights_))
-
                 new_est = []
                 new_w = []
                 for h, w in zip(self.estimators_, self.estimator_weights_):
@@ -433,25 +388,23 @@ class Prime(ClassifierMixin, BaseEstimator):
                 self.estimators_ = new_est
                 self.estimator_weights_ = new_w
 
-            # accuracy = (output.argmax(axis=1) == target) * 100.0
-            # n_trees = [self.num_trees() for _ in range(data.shape[0])]
-            # n_param = [self.num_parameters() for _ in range(data.shape[0])]
-            # return {"loss" : loss, "accuracy": accuracy, "num_trees": n_trees, "num_parameters" : n_param}, output
 
     def num_bytes(self):
-        # This is a little hacky. Pickle gives us an easy and accurate way to compute the size of this object, including 
-        # sklearn estimators etc.
-        # However, since I am lazy I did not want to implement pickling support in C++ and thus I set self.model
+        self_size = sys.getsizeof(self.step_size) + sys.getsizeof(self.loss) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.ensemble_regularizer) + sys.getsizeof(self.l_ensemble_reg) + sys.getsizeof(self.tree_regularizer) + sys.getsizeof(self.l_tree_reg) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.dt_seed) + sys.getsizeof(self.update_leaves) + sys.getsizeof(self.additional_tree_options) + sys.getsizeof(self.backend) + sys.getsizeof(self.batch_size) + sys.getsizeof(self.verbose) + sys.getsizeof(self.out_path) + sys.getsizeof(self.epochs) + sys.getsizeof(self.warmstart) + sys.getsizeof(self.is_nominal) + sys.getsizeof(self.tree_init_mode)
+
         if self.backend == "c++":
-            model = self.model
-            self.model = None
-            p = pickle.dumps(self)
-            size = sys.getsizeof(p)
-            self.model = model
-            return size + self.model.num_bytes()
+            # model = self.model
+            # self.model = None
+            # p = pickle.dumps(self)
+            # size = sys.getsizeof(p)
+            # self.model = model
+            return self_size + self.model.num_bytes()
         else:
-            p = pickle.dumps(self)
-            return sys.getsizeof(p)
+            sk_size = 0
+            for e in self.estimators_:
+                p = pickle.dumps(e)
+                sk_size += sys.getsizeof(p)
+            return self_size + sys.getsizeof(self.estimator_weights_) + sk_size
 
     def num_trees(self):
         if self.backend == "c++":

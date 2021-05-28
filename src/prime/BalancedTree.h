@@ -1,17 +1,16 @@
-#ifndef TREE_H
-#define TREE_H
+#ifndef BALANCED_TREE_H
+#define BALANCED_TREE_H
 
 #include <vector>
 #include <math.h>
 #include <random>
 #include <algorithm>
 #include <queue>
-#include <optional>
 #include <string_view>
 
 #include "Datatypes.h"
 
-enum TREE_INIT {TRAIN, RANDOM};
+enum TREE_INIT {TRAIN, FULLY_RANDOM, RANDOM};
 enum TREE_NEXT {GRADIENT, NONE, INCREMENTAL};
 
 template <typename pred_t>
@@ -19,11 +18,10 @@ class Node {
 public:
     data_t threshold;
     unsigned int feature;
-    unsigned int left, right;
     std::vector<pred_t> preds;
 
     unsigned int num_bytes() const {
-        return sizeof(data_t) + 3*sizeof(unsigned int) + sizeof(pred_t) * preds.size() + sizeof(std::vector<pred_t>);
+        return sizeof(data_t) + sizeof(unsigned int) + sizeof(pred_t) * preds.size() + sizeof(std::vector<pred_t>);
     }
 
     Node(data_t threshold, unsigned int feature) : threshold(threshold), feature(feature) {}
@@ -31,21 +29,23 @@ public:
 };
 
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
-class Tree {
+class BalancedTree {
 private:
     std::vector<Node<pred_t>> nodes;
+    unsigned int start_leaf;
+    unsigned int n_nodes;
     unsigned int n_classes;
     std::mt19937 gen; 
 
     inline unsigned int node_index(std::vector<data_t> const &x) const {
         unsigned int idx = 0;
 
-        while(nodes[idx].left != 0) { /* or nodes[idx].right != 0 */
+        while(idx < start_leaf) {
             auto const f = nodes[idx].feature;
             if (x[f] <= nodes[idx].threshold) {
-                idx = nodes[idx].left;
+                idx = 2*idx + 1;
             } else {
-                idx = nodes[idx].right;
+                idx = 2*idx + 2;
             }
         }
         return idx;
@@ -69,16 +69,18 @@ private:
      /**
      * @brief  Compute a random split for the given data. This algorithm has O(d * log d + d * N) runtime in the worst case, but should usually run in O(d * log d + N), where N is the number of examples and d is the number of features.
      * This implementation ensures that the returned split splits the data so that each child is non-empty if applied to the given data (at-least one example form X is routed towards left and towards right). The only exception occurs if X is empty or contains one example. In this case we return feature 0 with threshold 1. Threshold-values are placed in the middle between two samples. 
+     * TODO: This code assumes that all features are [0,1] for the X.size() <= 1 or in case of invalid splits. Change that 
+     * TODO: Add nominal flag for one hot encoded nominal features
      * @note   
      * @param  &X: The example-set which is used to compute the splitting
      * @param  &Y: The label-set which is used to compute the splitting
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> random_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal, std::mt19937 &gen) {
-        // if (X.size() <= 1) {
-        //     return random_node(is_nominal, gen);
-        // }
+    static auto random_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal, std::mt19937 &gen) {
+        if (X.size() <= 1) {
+            return random_node(is_nominal, gen);
+        }
 
         // We want to split at a random feature. However, we also want to ensure that the left / right child receive at-least one example with this random
         // split. Sometimes there are features which cannot ensure this (e.g. a binary features are '1'). Thus, we iterate over a random permutation of features 
@@ -131,12 +133,11 @@ private:
             // So usually I would expect the following line to work, but for some reason it does not. Is this a gcc bug?
             //return std::make_pair<data_t, unsigned int>(static_cast<data_t>(fdis(gen)), f);
             int ftmp = f;
-            return std::optional<std::pair<data_t, unsigned int>>{std::make_pair<data_t, unsigned int>(static_cast<data_t>(fdis(gen)), ftmp)};
-            //return std::make_pair<data_t, unsigned int>(static_cast<data_t>(fdis(gen)), ftmp);
+            return std::make_pair<data_t, unsigned int>(static_cast<data_t>(fdis(gen)), ftmp);
         }
 
-        return std::nullopt;
-        //return random_node(is_nominal, gen);
+        // If this is reached, then no valid split has been found and we default to the default split
+        return random_node(is_nominal, gen);
         //return std::make_pair<data_t, unsigned int>(1.0, 0);
     }
 
@@ -170,18 +171,20 @@ private:
      * @brief  Compute the best split for the given data. This algorithm has O(d * N log N) runtime, where N is the number of examples and d is the number of features.
      * This implementation ensures that the returned split splits the data so that each child is non-empty if applied to the given data (at-least one example form X is routed towards left and towards right). The only exception occurs if X is empty or contains one example. In this case we return feature 0 with threshold 1. Threshold-values are placed in the middle between two samples. 
      * If two splits are equally good, then the first split is chosen. Note that this introduces a slight bias towards the first features. 
+     * TODO: This code assumes that all features are [0,1] for the X.size() <= 1. Change that 
      * TODO: Change code for tie-breaking
+     * TODO: What happens if we only have 1 class in Y?
      * @note   
      * @param  &X: The example-set which is used to compute the splitting
      * @param  &Y: The label-set which is used to compute the splitting
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal, long n_classes, std::mt19937 &gen) {
-        // if (X.size() <= 1) {
-        //     return std::make_pair(1.0, static_cast<unsigned int>(0));
-        //     //return random_node(is_nominal, gen);
-        // }
+    static auto best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal, long n_classes, std::mt19937 &gen) {
+        if (X.size() <= 1) {
+            return std::make_pair(1.0, static_cast<unsigned int>(0));
+            //return random_node(is_nominal, gen);
+        }
 
         unsigned int n_data = X.size();
         unsigned int n_features = X[0].size();
@@ -235,7 +238,7 @@ private:
             }
             
             if (first) {
-                // We never choose a threshold which means that f_values[0] = f_values[1] = ... = f_values[end]. 
+                // We never choose a threshold which means that f_values[0] = f_values[1] = .. = f_values[end]. 
                 // This will not give us a good split, so ignore this feature
                 continue;
             }
@@ -276,132 +279,130 @@ private:
             } 
         }
 
-        if (!split_set) {
-            return std::nullopt;
-        } else {
-            return std::optional<std::pair<data_t, unsigned int>>{std::make_pair(overall_best_threshold, overall_best_feature)};
-        }
+        return std::make_pair(overall_best_threshold, overall_best_feature);
     }
 
-    static auto insert_leaf(std::vector<pred_t> &class_cnt, unsigned int n_classes) {
-        Node<pred_t> cur_node;
-        cur_node.left = 0;
-        cur_node.right = 0;
-        cur_node.preds = class_cnt;
+    /**
+     * @brief  
+     * @note   
+     * @param  &X: 
+     * @param  &Y: 
+     * @retval None
+     */
+    void random_nodes(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal) {
+        std::uniform_int_distribution<> idis(0, X[0].size() - 1);
+        std::uniform_real_distribution<> fdis(0,1);
 
+        nodes.resize(n_nodes);
+        for (unsigned int i = 0; i < n_nodes; ++i) {
+            auto tmp = random_node(is_nominal, gen);
+            nodes[i].threshold = std::get<0>(tmp);
+            nodes[i].feature = std::get<1>(tmp);
+
+            if (i >= start_leaf) {
+                nodes[i].preds.resize(n_classes);
+                std::fill(nodes[i].preds.begin(), nodes[i].preds.end(), 0);
+            } 
+        }
+
+        for (unsigned int i = 0; i < X.size(); ++i) {
+            auto idx = node_index(X[i]);
+            nodes[idx].preds[Y[i]] += 1;
+        }
 
         if constexpr (tree_next != INCREMENTAL) {
-            data_t sum = std::accumulate(class_cnt.begin(), class_cnt.end(), pred_t(0.0));
-            if (sum > 0) {
-                std::transform(cur_node.preds.begin(), cur_node.preds.end(), cur_node.preds.begin(), [sum](auto& c){return 1.0/sum*c;});
-            } else {
-                std::fill(cur_node.preds.begin(), cur_node.preds.end(), 1.0/n_classes);
+            for (unsigned int i = start_leaf; i < n_nodes; ++i) {
+                data_t sum = std::accumulate(nodes[i].preds.begin(), nodes[i].preds.end(), 0.0);
+                if (sum > 0) {
+                    std::transform(nodes[i].preds.begin(), nodes[i].preds.end(), nodes[i].preds.begin(), [sum](auto& c){return 1.0/sum*c;});
+                } else {
+                    std::fill(nodes[i].preds.begin(), nodes[i].preds.end(), 1.0/n_classes);
+                }
             }
         }
-        return cur_node;
     }
 
-    void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const & is_nominal, unsigned int max_depth) {
-        struct TreeExpansion {
-            std::vector<std::vector<data_t>> const x;
-            std::vector<unsigned int> const y;
-            int parent;
-            bool left;
-            unsigned int depth;
-            TreeExpansion(std::vector<std::vector<data_t>> const &x, std::vector<unsigned int> const &y, int parent, bool left, unsigned int depth) 
-                : x(x),y(y),parent(parent),left(left),depth(depth) {}
-        };
+    void trained_nodes(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const & is_nominal) {
+        // <std::pair<std::vector<std::vector<data_t>>, std::vector<unsigned int>>
+        std::queue<std::pair<std::vector<std::vector<data_t>>, std::vector<unsigned int>>> to_expand; 
+        to_expand.push(std::make_pair(X, Y));
 
-        std::queue<TreeExpansion> to_expand; 
-        to_expand.push(TreeExpansion(X, Y, -1, false, 0));
+        // auto split = best_split(n_classes, XVec, YVec);
+        // nodes.push_back(Node(split.first, split.second));
+        nodes.reserve(n_nodes);
+        while(nodes.size() < start_leaf) {
+            auto data = to_expand.front();
+            to_expand.pop();
+
+            std::pair<data_t, unsigned int> split;
+            if constexpr (tree_init == TRAIN) {
+                split = best_split(data.first, data.second, is_nominal, n_classes, gen);
+            } else {
+                split = random_split(data.first, data.second, is_nominal, gen);
+            }
+            auto t = split.first;
+            auto f = split.second;
+            
+            // We assume complete trees in this implementation which means that we always have 2 children 
+            // and that each path in the tree has max_depth length. Now it might happen that XLeft / XRight is empty. 
+            // In this case, best_split returns with t = 1, which means that _all_ data points are routed towards XLeft
+            // and we keep on adding nodes as long as required to built the complete tree
+            nodes.push_back(Node<pred_t>(t, f));
+            
+            std::vector<std::vector<data_t>> XLeft, XRight;
+            std::vector<unsigned int> YLeft, YRight;
+            for (unsigned int i = 0; i < data.first.size(); ++i) {
+                if (data.first[i][f] <= t) {
+                    XLeft.push_back(data.first[i]);
+                    YLeft.push_back(data.second[i]);
+                } else {
+                    XRight.push_back(data.first[i]);
+                    YRight.push_back(data.second[i]);
+                }
+            }
+
+            to_expand.push(std::make_pair(XLeft, YLeft));
+            to_expand.push(std::make_pair(XRight, YRight));
+        }
 
         while(to_expand.size() > 0) {
-            unsigned int cur_idx = nodes.size();
-            auto exp = to_expand.front();
+            auto data = to_expand.front();
             to_expand.pop();
-            
-            std::vector<pred_t> class_cnt(n_classes, 0.0);
-            for (unsigned int i = 0; i < exp.x.size(); ++i) {
-                class_cnt[exp.y[i]]++;
+            Node<pred_t> n;
+            n.preds.resize(n_classes);
+            std::fill(n.preds.begin(), n.preds.end(), 0);
+
+            for (auto const l : data.second) {
+                n.preds[l] += 1;
             }
 
-            bool is_leaf = false;
-            for (unsigned int i = 0; i < n_classes; ++i) {
-                if (class_cnt[i] == exp.y.size()) {
-                    is_leaf = true;
-                    break;
-                }
-            }
-
-            if (is_leaf || exp.depth >= max_depth) {
-                auto cur_node = insert_leaf(class_cnt, n_classes);
-
-                nodes.push_back(cur_node);
-                if (exp.parent >= 0) {
-                    if (exp.left) {
-                        nodes[exp.parent].left = cur_idx;
-                    } else {
-                        nodes[exp.parent].right = cur_idx;
-                    }
-                }
-            } else {
-                std::optional<std::pair<data_t, unsigned int>> split;
-                if constexpr (tree_init == TRAIN) {
-                    split = best_split(exp.x, exp.y, is_nominal, n_classes, gen);
+            if constexpr (tree_next != INCREMENTAL) {
+                data_t sum = data.second.size();
+                if (sum > 0) {
+                    std::transform(n.preds.begin(), n.preds.end(), n.preds.begin(), [sum](auto& c){return 1.0/sum*c;});
                 } else {
-                    split = random_split(exp.x, exp.y, is_nominal, gen);
+                    std::fill(n.preds.begin(), n.preds.end(), 1.0/n_classes);
                 }
-
-                if (split.has_value()) {
-                    auto t = split.value().first;
-                    auto f = split.value().second;
-                    nodes.push_back(Node<pred_t>(t,f));
-                    
-                    if (exp.parent >= 0) {
-                        if (exp.left) {
-                            nodes[exp.parent].left = cur_idx;
-                        } else {
-                            nodes[exp.parent].right = cur_idx;
-                        }
-                    }
-
-                    std::vector<std::vector<data_t>> XLeft, XRight;
-                    std::vector<unsigned int> YLeft, YRight;
-                    for (unsigned int i = 0; i < exp.x.size(); ++i) {
-                        if (exp.x[i][f] <= t) {
-                            XLeft.push_back(exp.x[i]);
-                            YLeft.push_back(exp.y[i]);
-                        } else {
-                            XRight.push_back(exp.x[i]);
-                            YRight.push_back(exp.y[i]);
-                        }
-                    }
-
-                    to_expand.push(TreeExpansion(XLeft, YLeft, true, cur_idx, exp.depth+1));
-                    to_expand.push(TreeExpansion(XRight, YRight, false, cur_idx, exp.depth+1));
-                } else {
-                    auto cur_node = insert_leaf(class_cnt, n_classes);
-
-                    nodes.push_back(cur_node);
-                    if (exp.parent >= 0) {
-                        if (exp.left) {
-                            nodes[exp.parent].left = cur_idx;
-                        } else {
-                            nodes[exp.parent].right = cur_idx;
-                        }
-                    }
-                }
-
             }
+
+            nodes.push_back(n);
         }
     }
 
 public:
 
     Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), gen(seed) {
+        // TODO Do we want to refactor / remove this? I dont think is_nominal has that much overhead, does it?
+        std::vector<bool> is_nominal(X[0].size());
+        std::fill(is_nominal.begin(), is_nominal.end(), false);
+        start_leaf = std::pow(2,max_depth) - 1;
+        n_nodes = std::pow(2,max_depth + 1) - 1;
 
-        std::vector<bool> is_nominal(X[0].size(), false);
-        train(X, Y, is_nominal, max_depth);
+        if constexpr (tree_init == FULLY_RANDOM) {
+            random_nodes(X, Y, is_nominal);
+        } else {
+            trained_nodes(X, Y, is_nominal);
+        }
     }
 
     Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<bool> const &is_nominal) : n_classes(n_classes), gen(seed) {
@@ -410,7 +411,14 @@ public:
             _is_nominal = is_nominal;
         }
 
-        train(X, Y, _is_nominal, max_depth);
+        start_leaf = std::pow(2,max_depth) - 1;
+        n_nodes = std::pow(2,max_depth + 1) - 1;
+
+        if constexpr (tree_init == FULLY_RANDOM) {
+            random_nodes(X, Y, _is_nominal);
+        } else {
+            trained_nodes(X, Y, _is_nominal);
+        }
     }
 
     unsigned int num_bytes() const {
@@ -450,7 +458,7 @@ public:
     }
 
     unsigned int get_num_nodes() const {
-        return nodes.size();
+        return n_nodes;
     }
 };
 
