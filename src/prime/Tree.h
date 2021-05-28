@@ -21,6 +21,7 @@ public:
     unsigned int feature;
     unsigned int left, right;
     std::vector<pred_t> preds;
+    // pred_t * preds;
 
     unsigned int num_bytes() const {
         return sizeof(data_t) + 3*sizeof(unsigned int) + sizeof(pred_t) * preds.size() + sizeof(std::vector<pred_t>);
@@ -28,6 +29,10 @@ public:
 
     Node(data_t threshold, unsigned int feature) : threshold(threshold), feature(feature) {}
     Node() = default;
+    
+    // ~Node() {
+    //     delete[] preds;
+    // }
 };
 
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
@@ -289,7 +294,6 @@ private:
         cur_node.right = 0;
         cur_node.preds = class_cnt;
 
-
         if constexpr (tree_next != INCREMENTAL) {
             data_t sum = std::accumulate(class_cnt.begin(), class_cnt.end(), pred_t(0.0));
             if (sum > 0) {
@@ -303,23 +307,30 @@ private:
 
     void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int max_depth) {
         struct TreeExpansion {
-            std::vector<std::vector<data_t>> const x;
-            std::vector<unsigned int> const y;
+            std::vector<std::vector<data_t>> x;
+            std::vector<unsigned int> y;
             int parent;
             bool left;
             unsigned int depth;
-            TreeExpansion(std::vector<std::vector<data_t>> const &x, std::vector<unsigned int> const &y, int parent, bool left, unsigned int depth) 
-                : x(x),y(y),parent(parent),left(left),depth(depth) {}
+            // TreeExpansion(std::vector<std::vector<data_t>> const &x, std::vector<unsigned int> const &y, int parent, bool left, unsigned int depth) 
+            //     : x(x),y(y),parent(parent),left(left),depth(depth) {}
         };
 
         std::queue<TreeExpansion> to_expand; 
-        to_expand.push(TreeExpansion(X, Y, -1, false, 0));
+        //to_expand.push(TreeExpansion(X, Y, -1, false, 0));
+        TreeExpansion root;
+        root.x = X;
+        root.y = Y;
+        root.parent = -1;
+        root.left = false;
+        root.depth = 0;
+        to_expand.push(root);
 
         while(to_expand.size() > 0) {
             unsigned int cur_idx = nodes.size();
             auto exp = to_expand.front();
             to_expand.pop();
-            
+
             std::vector<pred_t> class_cnt(n_classes, 0.0);
             for (unsigned int i = 0; i < exp.x.size(); ++i) {
                 class_cnt[exp.y[i]]++;
@@ -365,20 +376,48 @@ private:
                         }
                     }
 
-                    std::vector<std::vector<data_t>> XLeft, XRight;
-                    std::vector<unsigned int> YLeft, YRight;
+                    TreeExpansion exp_left;
+                    exp_left.parent = cur_idx;
+                    exp_left.left = true;
+                    exp_left.depth = exp.depth + 1;
+
+                    TreeExpansion exp_right;
+                    exp_right.parent = cur_idx;
+                    exp_right.left = false;
+                    exp_right.depth = exp.depth + 1;
+
                     for (unsigned int i = 0; i < exp.x.size(); ++i) {
                         if (exp.x[i][f] <= t) {
-                            XLeft.push_back(exp.x[i]);
-                            YLeft.push_back(exp.y[i]);
+                            exp_left.x.push_back(exp.x[i]);
+                            exp_left.y.push_back(exp.y[i]);
                         } else {
-                            XRight.push_back(exp.x[i]);
-                            YRight.push_back(exp.y[i]);
+                            exp_right.x.push_back(exp.x[i]);
+                            exp_right.y.push_back(exp.y[i]);
                         }
                     }
 
-                    to_expand.push(TreeExpansion(XLeft, YLeft, cur_idx, true, exp.depth+1));
-                    to_expand.push(TreeExpansion(XRight, YRight, cur_idx, false, exp.depth+1));
+                    to_expand.push(exp_left);
+                    to_expand.push(exp_right);
+
+                    // std::vector<std::vector<data_t>> XLeft, XRight;
+                    // std::vector<unsigned int> YLeft, YRight;
+
+                    // XLeft.reserve(exp.x.size());
+                    // XRight.reserve(exp.x.size());
+                    // YLeft.reserve(exp.x.size());
+                    // YRight.reserve(exp.x.size());
+                    // for (unsigned int i = 0; i < exp.x.size(); ++i) {
+                    //     if (exp.x[i][f] <= t) {
+                    //         XLeft.push_back(exp.x[i]);
+                    //         YLeft.push_back(exp.y[i]);
+                    //     } else {
+                    //         XRight.push_back(exp.x[i]);
+                    //         YRight.push_back(exp.y[i]);
+                    //     }
+                    // }
+
+                    // to_expand.push(TreeExpansion(XLeft, YLeft, cur_idx, true, exp.depth+1));
+                    // to_expand.push(TreeExpansion(XRight, YRight, cur_idx, false, exp.depth+1));
                 } else {
                     auto cur_node = insert_leaf(class_cnt, n_classes);
 
@@ -405,11 +444,11 @@ public:
     unsigned int num_bytes() const {
         unsigned int node_size = 0;
         
-        if (nodes.size() > 0) {
-            node_size = nodes[0].num_bytes();
-        } 
+        for (auto const &n : nodes) {
+            node_size += n.num_bytes();
+        }
 
-        return 3 * sizeof(unsigned int) + node_size * nodes.size() + sizeof(std::vector<Node<pred_t>>) + sizeof(std::mt19937);
+        return 3 * sizeof(unsigned int) + node_size + sizeof(std::mt19937);
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad, data_t step_size) {

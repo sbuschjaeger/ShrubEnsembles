@@ -360,44 +360,60 @@ int main() {
     std::iota(std::begin(batch_idx), std::end(batch_idx), 0); 
 
     unsigned int epochs = 1;
-    unsigned int batch_size = 32;
+    unsigned int batch_size = 128;
 
 	unsigned int n_classes = 2;
-	unsigned int max_depth = 8;
+	unsigned int max_depth = 15;
 	unsigned long seed = 12345;
 	bool normalize_weights = true;
 	STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT;
 	data_t step_size = 1e-2;
 	LOSS::TYPE loss = LOSS::TYPE::CROSS_ENTROPY;
-	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::L1;
-	data_t l_ensemble_reg = 1;
+	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::hard_L0;
+	data_t l_ensemble_reg = 32;
 	TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO;
 	data_t l_tree_reg = 0.0;
 
-	Tree<TREE_INIT::TRAIN, TREE_NEXT::NONE, double> tree(
-		max_depth, 
-		n_classes,
-		seed, 
-		X, 
-		Y
-	);
-
-	data_t accuracy = 0.0;
-	auto proba = tree.predict_proba(X);
-	for (unsigned int i = 0; i < proba.size(); ++i) {
-		std::cout << proba[i][0] << " " << proba[i][1] << std::endl; 
-	}
-	std::cout << std::endl;
-
-	for (unsigned int i = 0; i < proba.size(); ++i) {
-		auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
-		if (max_idx == Y[i]) {
-			accuracy++;
+	auto start = std::chrono::steady_clock::now();
+	double accuracy = 0.0;
+	for (unsigned int i = 0; i < epochs; ++i) {
+		Tree<TREE_INIT::RANDOM, TREE_NEXT::NONE, double> tree(
+			max_depth, 
+			n_classes,
+			seed, 
+			X, 
+			Y
+		);
+		
+		auto proba = tree.predict_proba(X);
+		for (unsigned int i = 0; i < proba.size(); ++i) {
+			auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
+			if (max_idx == Y[i]) {
+				accuracy++;
+			}
 		}
 	}
-	
-	std::cout << "Single tree acc: " << accuracy / proba.size() * 100.0 << std::endl;
+	auto end = std::chrono::steady_clock::now();
+	std::chrono::duration<double> runtime_seconds = end-start;
+    std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+	// data_t accuracy = 0.0;
+	// auto proba = tree.predict_proba(X);
+	// for (unsigned int i = 0; i < proba.size(); ++i) {
+	// 	std::cout << proba[i][0] << " " << proba[i][1] << std::endl; 
+	// }
+	// std::cout << std::endl;
 
+
+	// for (unsigned int i = 0; i < proba.size(); ++i) {
+	// 	auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
+	// 	if (max_idx == Y[i]) {
+	// 		accuracy++;
+	// 	}
+	// }
+	
+	std::cout << "Single tree acc: " << accuracy / (epochs * X.size()) * 100.0 << std::endl;
+
+	/*
     Prime<TREE_INIT::TRAIN, TREE_NEXT::GRADIENT, double> est(
 		n_classes,
 		max_depth,
@@ -481,4 +497,5 @@ int main() {
     auto end = std::chrono::steady_clock::now();   
     std::chrono::duration<double> runtime_seconds = end-start;
     std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+	*/
 }
