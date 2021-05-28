@@ -377,8 +377,8 @@ private:
                         }
                     }
 
-                    to_expand.push(TreeExpansion(XLeft, YLeft, true, cur_idx, exp.depth+1));
-                    to_expand.push(TreeExpansion(XRight, YRight, false, cur_idx, exp.depth+1));
+                    to_expand.push(TreeExpansion(XLeft, YLeft, cur_idx, true, exp.depth+1));
+                    to_expand.push(TreeExpansion(XRight, YRight, cur_idx, false, exp.depth+1));
                 } else {
                     auto cur_node = insert_leaf(class_cnt, n_classes);
 
@@ -399,7 +399,6 @@ private:
 public:
 
     Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), gen(seed) {
-
         std::vector<bool> is_nominal(X[0].size(), false);
         train(X, Y, is_nominal, max_depth);
     }

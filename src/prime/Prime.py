@@ -60,12 +60,10 @@ class Prime(ClassifierMixin, BaseEstimator):
 
     Attributes
     ----------
-    max_depth : int
-        Maximum depth of DTs trained on each batch
-    step_size : float or str
-        The step_size used for stochastic gradient descent. Can be set to "adaptive" for an adaptive step size. 
     loss : str
         The loss function for training. Should be one of `{"mse", "cross-entropy", "hinge2"}`
+    step_size : float or str
+        The step_size used for stochastic gradient descent. Can be set to "adaptive" for an adaptive step size. 
     normalize_weights : boolean
         True if nonzero weights should be projected onto the probability simplex, that is they should sum to 1. 
     ensemble_regularizer : str
@@ -167,7 +165,7 @@ class Prime(ClassifierMixin, BaseEstimator):
         np.random.seed(self.seed)
         random.seed(self.seed)
         
-        self.dt_seed = seed
+        self.dt_seed = self.seed
         self.step_size = step_size
         self.loss = loss
         self.normalize_weights = normalize_weights
@@ -547,7 +545,7 @@ class Prime(ClassifierMixin, BaseEstimator):
                     loss_sum += loss
                     time_sum += batch_time
                     trees_sum += self.num_trees()
-                    nodes_sum += self.num_parameters()
+                    nodes_sum += self.num_nodes()
 
                     batch_cnt += 1
                     pbar.update(data.shape[0])

@@ -14,7 +14,6 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.tree import export_text
 
 from prime.Prime import Prime
-from prime.CPrime import CPrime
 
 '''
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
@@ -321,81 +320,11 @@ Y = np.array([
 
 is_nominal = [False, True, True, True, True, True, False, False, True, True, True, True, False, True, False, False, False, False]
 
-# model = Prime(
-#     max_depth = 2,
-#     loss = "cross-entropy",
-#     step_size = 1e-2,
-#     ensemble_regularizer = "hard-L1",
-#     l_ensemble_reg = 1,
-#     tree_regularizer = None,
-#     l_tree_reg = 0, 
-#     normalize_weights = True,
-#     init_weight = 1.0,
-#     update_leaves = False,
-#     batch_size = 32,
-#     epochs = 1,
-#     verbose = True
-# ) 
-
-# model.fit(X, Y)
-
 n_splits = 5
 kf = KFold(n_splits=n_splits)
 models = {
-    # "CPrime trained" : [
-    #     CPrime(
-    #         max_depth = 5,
-    #         loss = "mse",
-    #         step_size = 1e-2,
-    #         ensemble_regularizer = "hard-L0",
-    #         l_ensemble_reg = 32,
-    #         tree_regularizer = None,
-    #         l_tree_reg = 0, 
-    #         normalize_weights = True,
-    #         update_leaves = True,
-    #         batch_size = 64,
-    #         epochs = 10,
-    #         verbose = False,
-	# 		additional_tree_options={"tree_init_mode": "train"}
-    #     ) for _ in range(n_splits)
-    # ], 
-	# "CPrime random" : [
-    #     CPrime(
-    #         max_depth = 5,
-    #         loss = "mse",
-    #         step_size = 1e-2,
-    #         ensemble_regularizer = "hard-L0",
-    #         l_ensemble_reg = 32,
-    #         tree_regularizer = None,
-    #         l_tree_reg = 0, 
-    #         normalize_weights = True,
-    #         update_leaves = True,
-    #         batch_size = 64,
-    #         epochs = 10,
-    #         verbose = False,
-	# 		additional_tree_options={"tree_init_mode": "random"}
-    #     ) for _ in range(n_splits)
-    # ], 
-	# "CPrime fully random" : [
-    #     CPrime(
-    #         max_depth = 5,
-    #         loss = "mse",
-    #         step_size = 1e-2,
-    #         ensemble_regularizer = "hard-L0",
-    #         l_ensemble_reg = 32,
-    #         tree_regularizer = None,
-    #         l_tree_reg = 0, 
-    #         normalize_weights = True,
-    #         update_leaves = True,
-    #         batch_size = 64,
-    #         epochs = 10,
-    #         verbose = False,
-	# 		additional_tree_options={"tree_init_mode": "fully-random"}
-    #     ) for _ in range(n_splits)
-    # ], 
-    "Prime d = 5, T = 32, leaves updated" : [
+	"CPrime d = 5, T = 32, leaves updated" : [
         Prime(
-            max_depth = 5,
             loss = "mse",
             step_size = 1e-2,
             ensemble_regularizer = "hard-L0",
@@ -408,66 +337,66 @@ models = {
             epochs = 10,
             verbose = False,
 			backend = "c++",
-			additional_tree_options={"tree_init_mode": "train"}
+			additional_tree_options={"tree_init_mode": "train", "max_depth": 5}
         ) for _ in range(n_splits)
     ], 
-    # "Prime d = 2, T = 32, leaves updated" : [
-    #     Prime(
-    #         max_depth = 2,
-    #         loss = "cross-entropy",
-    #         step_size = 1e-2,
-    #         ensemble_regularizer = "hard-L1",
-    #         l_ensemble_reg = 32,
-    #         tree_regularizer = None,
-    #         l_tree_reg = 0, 
-    #         normalize_weights = True,
-    #         init_weight = "average",
-    #         update_leaves = True,
-    #         batch_size = 64,
-    #         epochs = 50,
-    #         verbose = False
-    #     ) for _ in range(n_splits)
-    # ],
-    # "Prime d = 5, T = 32, leaves not updated" : [
-    #     Prime(
-    #         max_depth = 5,
-    #         loss = "cross-entropy",
-    #         step_size = 1e-2,
-    #         ensemble_regularizer = "hard-L1",
-    #         l_ensemble_reg = 32,
-    #         tree_regularizer = None,
-    #         l_tree_reg = 0, 
-    #         normalize_weights = True,
-    #         init_weight = "average",
-    #         update_leaves = False,
-    #         batch_size = 64,
-    #         epochs = 50,
-    #         verbose = False
-    #     ) for _ in range(n_splits)
-    # ],
-    # "Prime d = 2, T = 32, leaves not updated" : [
-    #     Prime(
-    #         max_depth = 2,
-    #         loss = "cross-entropy",
-    #         step_size = 1e-2,
-    #         ensemble_regularizer = "hard-L1",
-    #         l_ensemble_reg = 64,
-    #         tree_regularizer = None,
-    #         l_tree_reg = 0, 
-    #         normalize_weights = True,
-    #         init_weight = "average",
-    #         update_leaves = False,
-    #         batch_size = 32,
-    #         epochs = 50,
-    #         verbose = False
-    #     ) for _ in range(n_splits)
-    # ],
-    # "RandomForestClassifier d = 2, T = 32": [
-    #     RandomForestClassifier(n_estimators = 32, max_depth = 2) for _ in range(n_splits)
-    # ],
-    # "RandomForestClassifier d = 5, T = 32": [
-    #     RandomForestClassifier(n_estimators = 32, max_depth = 5) for _ in range(n_splits)
-    # ]
+	"CPrime random d = 5, T = 32, leaves updated" : [
+        Prime(
+            loss = "mse",
+            step_size = 1e-2,
+            ensemble_regularizer = "hard-L0",
+            l_ensemble_reg = 32,
+            tree_regularizer = None,
+            l_tree_reg = 0, 
+            normalize_weights = True,
+            update_leaves = True,
+            batch_size = 64,
+            epochs = 10,
+            verbose = False,
+			backend = "c++",
+			additional_tree_options={"tree_init_mode": "random", "max_depth": 5}
+        ) for _ in range(n_splits)
+    ], 
+    "Prime d = 5, T = 32, leaves updated" : [
+        Prime(
+            loss = "mse",
+            step_size = 1e-2,
+            ensemble_regularizer = "hard-L0",
+            l_ensemble_reg = 32,
+            tree_regularizer = None,
+            l_tree_reg = 0, 
+            normalize_weights = True,
+            update_leaves = True,
+            batch_size = 64,
+            epochs = 10,
+            verbose = False,
+			backend = "python",
+			additional_tree_options={"splitter": "best", "max_depth": 5}
+        ) for _ in range(n_splits)
+    ], 
+	"Prime random d = 5, T = 32, leaves updated" : [
+        Prime(
+            loss = "mse",
+            step_size = 1e-2,
+            ensemble_regularizer = "hard-L0",
+            l_ensemble_reg = 32,
+            tree_regularizer = None,
+            l_tree_reg = 0, 
+            normalize_weights = True,
+            update_leaves = True,
+            batch_size = 64,
+            epochs = 10,
+            verbose = False,
+			backend = "python",
+			additional_tree_options={"splitter": "random", "max_depth": 5}
+        ) for _ in range(n_splits)
+    ],
+    "RandomForestClassifier d = 2, T = 32": [
+        RandomForestClassifier(n_estimators = 32, max_depth = 2) for _ in range(n_splits)
+    ],
+    "RandomForestClassifier d = 5, T = 32": [
+        RandomForestClassifier(n_estimators = 32, max_depth = 5) for _ in range(n_splits)
+    ]
 }
 
 accuracies = {}
@@ -494,6 +423,6 @@ for i, (train_index, test_index) in enumerate(kf.split(X)):
 for key in accuracies.keys():
 	accs = accuracies[key]
 	ts = times[key]
-	print("Accuracy {}: {} +- {} with runtime {} +- {}".format(key, np.mean(accs), np.std(accs), np.mean(ts), np.std(ts)) )
+	print("Accuracy {}: {:2.4f} +- {:2.4f} with runtime {:2.4f} +- {:2.4f}".format(key, np.mean(accs), np.std(accs), np.mean(ts), np.std(ts)) )
 	print("Accuracies: {}".format(accs))
 	print("")

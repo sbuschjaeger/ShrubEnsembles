@@ -363,7 +363,7 @@ int main() {
     unsigned int batch_size = 32;
 
 	unsigned int n_classes = 2;
-	unsigned int max_depth = 2;
+	unsigned int max_depth = 8;
 	unsigned long seed = 12345;
 	bool normalize_weights = true;
 	STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT;
@@ -375,29 +375,29 @@ int main() {
 	TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO;
 	data_t l_tree_reg = 0.0;
 
-	// Tree<TREE_INIT::TRAIN, TREE_NEXT::NONE, double> tree(
-	// 	max_depth, 
-	// 	n_classes,
-	// 	seed, 
-	// 	X, 
-	// 	Y
-	// );
+	Tree<TREE_INIT::TRAIN, TREE_NEXT::NONE, double> tree(
+		max_depth, 
+		n_classes,
+		seed, 
+		X, 
+		Y
+	);
 
-	// data_t accuracy = 0.0;
-	// auto proba = tree.predict_proba(X);
-	// for (unsigned int i = 0; i < proba.size(); ++i) {
-	// 	std::cout << proba[i][0] << " " << proba[i][1] << std::endl; 
-	// }
-	// std::cout << std::endl;
+	data_t accuracy = 0.0;
+	auto proba = tree.predict_proba(X);
+	for (unsigned int i = 0; i < proba.size(); ++i) {
+		std::cout << proba[i][0] << " " << proba[i][1] << std::endl; 
+	}
+	std::cout << std::endl;
 
-	// for (unsigned int i = 0; i < proba.size(); ++i) {
-	// 	auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
-	// 	if (max_idx == Y[i]) {
-	// 		accuracy++;
-	// 	}
-	// }
+	for (unsigned int i = 0; i < proba.size(); ++i) {
+		auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
+		if (max_idx == Y[i]) {
+			accuracy++;
+		}
+	}
 	
-	// std::cout << "Tree acc: " << accuracy / proba.size() * 100.0 << std::endl;
+	std::cout << "Single tree acc: " << accuracy / proba.size() * 100.0 << std::endl;
 
     Prime<TREE_INIT::TRAIN, TREE_NEXT::GRADIENT, double> est(
 		n_classes,
@@ -459,15 +459,15 @@ int main() {
 			}
 			data_t loss = mean_all_dim(losses);
 
-			std::cout << "DATA: " << std::endl;
-			print_matrix(data);
+			// std::cout << "DATA: " << std::endl;
+			// print_matrix(data);
 			
-			std::cout << "PROBA: " << std::endl;
-			print_matrix(proba);
+			// std::cout << "PROBA: " << std::endl;
+			// print_matrix(proba);
 
-			std::cout << "WEIGHTS: " << std::endl;
-			print_vector(est.weights());
-			std::cout << std::endl;
+			// std::cout << "WEIGHTS: " << std::endl;
+			// print_vector(est.weights());
+			// std::cout << std::endl;
 
             nonzero_epoch += est.num_trees();
             loss_epoch += loss;
