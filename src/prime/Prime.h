@@ -169,13 +169,13 @@ public:
 
     unsigned int num_bytes() const {
         unsigned int tree_size = 0;
-        if (_trees.size() > 0) {
-            tree_size = _trees[0].num_bytes();
+        for (auto const & t : _trees) {
+            tree_size += t.num_bytes();
         }
 
-        return tree_size * _trees.size() + sizeof(std::vector< Tree<tree_init, tree_next, pred_t> >)
+        return tree_size + sizeof(std::vector< Tree<tree_init, tree_next, pred_t> >)
                 + sizeof(data_t) * _weights.size() + sizeof(std::vector<data_t>)
-                + sizeof(unsigned int) * 2  + sizeof(long)  + sizeof(bool) + sizeof(STEP_SIZE_MODE) + sizeof(data_t) 
+                + sizeof(unsigned int) * 2  + sizeof(long) + sizeof(bool) + sizeof(STEP_SIZE_MODE) + sizeof(data_t) 
                 + 2 * sizeof(std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) >)
                 + sizeof(std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) >)
                 + sizeof(std::function< data_t(Tree<tree_init, tree_next, pred_t> const &) >)

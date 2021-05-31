@@ -20,19 +20,22 @@ public:
     data_t threshold;
     unsigned int feature;
     unsigned int left, right;
-    std::vector<pred_t> preds;
-    // pred_t * preds;
+    pred_t * preds;
 
     unsigned int num_bytes() const {
-        return sizeof(data_t) + 3*sizeof(unsigned int) + sizeof(pred_t) * preds.size() + sizeof(std::vector<pred_t>);
+        return sizeof(data_t) + 3*sizeof(unsigned int) + sizeof(pred_t *);
     }
 
-    Node(data_t threshold, unsigned int feature) : threshold(threshold), feature(feature) {}
-    Node() = default;
+    Node(data_t threshold, unsigned int feature) : threshold(threshold), feature(feature), preds(nullptr) {
+    }
+
+    Node() : preds(nullptr) {};
     
-    // ~Node() {
-    //     delete[] preds;
-    // }
+    ~Node() {
+        if (preds != nullptr) {
+            delete[] preds;
+        }
+    }
 };
 
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
@@ -40,6 +43,7 @@ class Tree {
 private:
     std::vector<Node<pred_t>> nodes;
     unsigned int n_classes;
+    unsigned int n_leafs;
     std::mt19937 gen; 
 
     inline unsigned int node_index(std::vector<data_t> const &x) const {
@@ -288,20 +292,20 @@ private:
         }
     }
 
-    static auto insert_leaf(std::vector<pred_t> &class_cnt, unsigned int n_classes) {
+    static auto insert_leaf(pred_t * class_cnt, unsigned int n_classes) {
+        if constexpr (tree_next != INCREMENTAL) {
+            data_t sum = std::accumulate(class_cnt, class_cnt + n_classes, pred_t(0.0));
+            if (sum > 0) {
+                std::transform(class_cnt, class_cnt + n_classes, class_cnt, [sum](auto& c){return 1.0/sum*c;});
+            } else {
+                std::fill_n(class_cnt, n_classes, 1.0/n_classes);
+            }
+        }
+
         Node<pred_t> cur_node;
         cur_node.left = 0;
         cur_node.right = 0;
         cur_node.preds = class_cnt;
-
-        if constexpr (tree_next != INCREMENTAL) {
-            data_t sum = std::accumulate(class_cnt.begin(), class_cnt.end(), pred_t(0.0));
-            if (sum > 0) {
-                std::transform(cur_node.preds.begin(), cur_node.preds.end(), cur_node.preds.begin(), [sum](auto& c){return 1.0/sum*c;});
-            } else {
-                std::fill(cur_node.preds.begin(), cur_node.preds.end(), 1.0/n_classes);
-            }
-        }
         return cur_node;
     }
 
@@ -331,7 +335,8 @@ private:
             auto exp = to_expand.front();
             to_expand.pop();
 
-            std::vector<pred_t> class_cnt(n_classes, 0.0);
+            pred_t * class_cnt = new pred_t[n_classes];
+            std::fill_n(class_cnt, n_classes, 0);
             for (unsigned int i = 0; i < exp.x.size(); ++i) {
                 class_cnt[exp.y[i]]++;
             }
@@ -437,7 +442,7 @@ private:
 
 public:
 
-    Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), gen(seed) {
+    Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), n_leafs(0), gen(seed) {
         train(X, Y, max_depth);
     }
 
@@ -448,7 +453,7 @@ public:
             node_size += n.num_bytes();
         }
 
-        return 3 * sizeof(unsigned int) + node_size + sizeof(std::mt19937);
+        return 2 * sizeof(unsigned int) + sizeof(std::mt19937) + node_size + n_classes * n_leafs;
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad, data_t step_size) {
@@ -472,7 +477,9 @@ public:
     std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
         std::vector<std::vector<data_t>> preds(X.size());
         for (unsigned int i = 0; i < X.size(); ++i) {
-            preds[i] = nodes[node_index(X[i])].preds;
+            //preds[i] = nodes[node_index(X[i])].preds;
+            data_t const * const node_preds = nodes[node_index(X[i])].preds;
+            preds[i].assign(node_preds, node_preds + n_classes);
         }
         return preds;
     }
