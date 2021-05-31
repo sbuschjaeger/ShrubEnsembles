@@ -8,6 +8,7 @@
 #include <queue>
 #include <optional>
 #include <string_view>
+#include <memory>
 
 #include "Datatypes.h"
 
@@ -20,22 +21,24 @@ public:
     data_t threshold;
     unsigned int feature;
     unsigned int left, right;
-    pred_t * preds;
+    //pred_t * preds;
+    std::unique_ptr<pred_t []> preds;
 
     unsigned int num_bytes() const {
         return sizeof(data_t) + 3*sizeof(unsigned int) + sizeof(pred_t *);
     }
 
-    Node(data_t threshold, unsigned int feature) : threshold(threshold), feature(feature), preds(nullptr) {
-    }
 
-    Node() : preds(nullptr) {};
+    // Node(data_t threshold, unsigned int feature) : threshold(threshold), feature(feature), preds(nullptr) {
+    // }
+
+    // Node() : preds(nullptr) {};
     
-    ~Node() {
-        if (preds != nullptr) {
-            delete[] preds;
-        }
-    }
+    // ~Node() {
+    //     if (preds != nullptr) {
+    //         delete[] preds;
+    //     }
+    // }
 };
 
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
@@ -292,21 +295,19 @@ private:
         }
     }
 
-    static auto insert_leaf(pred_t * class_cnt, unsigned int n_classes) {
+    //static auto insert_leaf(pred_t * class_cnt, unsigned int n_classes) {
+    static void make_leaf(Node<pred_t> & node, unsigned int n_classes) {
         if constexpr (tree_next != INCREMENTAL) {
-            data_t sum = std::accumulate(class_cnt, class_cnt + n_classes, pred_t(0.0));
+            data_t sum = std::accumulate(node.preds.get(), node.preds.get() + n_classes, pred_t(0.0));
             if (sum > 0) {
-                std::transform(class_cnt, class_cnt + n_classes, class_cnt, [sum](auto& c){return 1.0/sum*c;});
+                std::transform(node.preds.get(), node.preds.get() + n_classes, node.preds.get(), [sum](auto& c){return 1.0/sum*c;});
             } else {
-                std::fill_n(class_cnt, n_classes, 1.0/n_classes);
+                std::fill_n(node.preds.get(), n_classes, 1.0/n_classes);
             }
         }
 
-        Node<pred_t> cur_node;
-        cur_node.left = 0;
-        cur_node.right = 0;
-        cur_node.preds = class_cnt;
-        return cur_node;
+        node.left = 0;
+        node.right = 0;
     }
 
     void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int max_depth) {
@@ -335,31 +336,34 @@ private:
             auto exp = to_expand.front();
             to_expand.pop();
 
-            pred_t * class_cnt = new pred_t[n_classes];
-            std::fill_n(class_cnt, n_classes, 0);
+            nodes.push_back(Node<pred_t>());
+            if (exp.parent >= 0) {
+                if (exp.left) {
+                    nodes[exp.parent].left = cur_idx;
+                } else {
+                    nodes[exp.parent].right = cur_idx;
+                }
+            }
+
+            //nodes[cur_idx].preds = new pred_t[n_classes];
+            nodes[cur_idx].preds = std::make_unique<pred_t []>(n_classes);
+
+            std::fill_n(nodes[cur_idx].preds.get(), n_classes, 0);
             for (unsigned int i = 0; i < exp.x.size(); ++i) {
-                class_cnt[exp.y[i]]++;
+                nodes[cur_idx].preds.get()[exp.y[i]]++;
             }
 
             bool is_leaf = false;
             for (unsigned int i = 0; i < n_classes; ++i) {
-                if (class_cnt[i] == exp.y.size()) {
+                if (nodes[cur_idx].preds.get()[i] == exp.y.size()) {
                     is_leaf = true;
                     break;
                 }
             }
 
             if (is_leaf || exp.depth >= max_depth) {
-                auto cur_node = insert_leaf(class_cnt, n_classes);
-
-                nodes.push_back(cur_node);
-                if (exp.parent >= 0) {
-                    if (exp.left) {
-                        nodes[exp.parent].left = cur_idx;
-                    } else {
-                        nodes[exp.parent].right = cur_idx;
-                    }
-                }
+                make_leaf(nodes[cur_idx], n_classes);
+                n_leafs++;
             } else {
                 std::optional<std::pair<data_t, unsigned int>> split;
                 if constexpr (tree_init == TRAIN) {
@@ -371,15 +375,12 @@ private:
                 if (split.has_value()) {
                     auto t = split.value().first;
                     auto f = split.value().second;
-                    nodes.push_back(Node<pred_t>(t,f));
-                    
-                    if (exp.parent >= 0) {
-                        if (exp.left) {
-                            nodes[exp.parent].left = cur_idx;
-                        } else {
-                            nodes[exp.parent].right = cur_idx;
-                        }
-                    }
+                    nodes[cur_idx].feature = f;
+                    nodes[cur_idx].threshold = t;
+
+                    // We do not need to store the predictions in inner nodes. Thus delete them here
+                    //delete [] nodes[cur_idx].preds;
+                    nodes[cur_idx].preds.reset();
 
                     TreeExpansion exp_left;
                     exp_left.parent = cur_idx;
@@ -424,16 +425,8 @@ private:
                     // to_expand.push(TreeExpansion(XLeft, YLeft, cur_idx, true, exp.depth+1));
                     // to_expand.push(TreeExpansion(XRight, YRight, cur_idx, false, exp.depth+1));
                 } else {
-                    auto cur_node = insert_leaf(class_cnt, n_classes);
-
-                    nodes.push_back(cur_node);
-                    if (exp.parent >= 0) {
-                        if (exp.left) {
-                            nodes[exp.parent].left = cur_idx;
-                        } else {
-                            nodes[exp.parent].right = cur_idx;
-                        }
-                    }
+                    make_leaf(nodes[cur_idx], n_classes);
+                    n_leafs++;
                 }
 
             }
@@ -478,7 +471,7 @@ public:
         std::vector<std::vector<data_t>> preds(X.size());
         for (unsigned int i = 0; i < X.size(); ++i) {
             //preds[i] = nodes[node_index(X[i])].preds;
-            data_t const * const node_preds = nodes[node_index(X[i])].preds;
+            data_t const * const node_preds = nodes[node_index(X[i])].preds.get();
             preds[i].assign(node_preds, node_preds + n_classes);
         }
         return preds;
@@ -487,6 +480,7 @@ public:
     unsigned int get_num_nodes() const {
         return nodes.size();
     }
+
 };
 
 #endif
