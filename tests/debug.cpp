@@ -363,7 +363,7 @@ int main() {
     unsigned int batch_size = 128;
 
 	unsigned int n_classes = 2;
-	unsigned int max_depth = 15;
+	unsigned int max_depth = 1;
 	unsigned long seed = 12345;
 	bool normalize_weights = true;
 	STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT;
@@ -376,6 +376,8 @@ int main() {
 
 	auto start = std::chrono::steady_clock::now();
 	double accuracy = 0.0;
+	double size = 0.0;
+	double n_nodes = 0.0;
 	for (unsigned int i = 0; i < epochs; ++i) {
 		Tree<TREE_INIT::RANDOM, TREE_NEXT::NONE, double> tree(
 			max_depth, 
@@ -392,10 +394,15 @@ int main() {
 				accuracy++;
 			}
 		}
+
+		size += tree.num_bytes();
+		n_nodes += tree.get_num_nodes();
 	}
 	auto end = std::chrono::steady_clock::now();
 	std::chrono::duration<double> runtime_seconds = end-start;
     std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    std::cout << "Size is " << size / epochs << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << n_nodes / epochs << std::endl; 
 	// data_t accuracy = 0.0;
 	// auto proba = tree.predict_proba(X);
 	// for (unsigned int i = 0; i < proba.size(); ++i) {

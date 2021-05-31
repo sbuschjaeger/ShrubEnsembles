@@ -25,7 +25,7 @@ public:
     std::unique_ptr<pred_t []> preds;
 
     unsigned int num_bytes() const {
-        return sizeof(data_t) + 3*sizeof(unsigned int) + sizeof(pred_t *);
+        return sizeof(data_t) + 3*sizeof(unsigned int) + sizeof(std::unique_ptr<pred_t []>);
     }
 
 
@@ -47,7 +47,7 @@ private:
     std::vector<Node<pred_t>> nodes;
     unsigned int n_classes;
     unsigned int n_leafs;
-    std::mt19937 gen; 
+    //std::mt19937 gen; 
 
     inline unsigned int node_index(std::vector<data_t> const &x) const {
         unsigned int idx = 0;
@@ -310,7 +310,7 @@ private:
         node.right = 0;
     }
 
-    void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int max_depth) {
+    void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int max_depth, unsigned long seed) {
         struct TreeExpansion {
             std::vector<std::vector<data_t>> x;
             std::vector<unsigned int> y;
@@ -330,6 +330,8 @@ private:
         root.left = false;
         root.depth = 0;
         to_expand.push(root);
+
+        std::mt19937 gen(seed);
 
         while(to_expand.size() > 0) {
             unsigned int cur_idx = nodes.size();
@@ -435,8 +437,8 @@ private:
 
 public:
 
-    Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), n_leafs(0), gen(seed) {
-        train(X, Y, max_depth);
+    Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), n_leafs(0) {
+        train(X, Y, max_depth, seed);
     }
 
     unsigned int num_bytes() const {
@@ -446,7 +448,7 @@ public:
             node_size += n.num_bytes();
         }
 
-        return 2 * sizeof(unsigned int) + sizeof(std::mt19937) + node_size + n_classes * n_leafs;
+        return 2 * sizeof(unsigned int) + node_size + sizeof(pred_t) * n_classes * n_leafs;
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad, data_t step_size) {
