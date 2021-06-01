@@ -396,7 +396,7 @@ int main() {
 		}
 
 		size += tree.num_bytes();
-		n_nodes += tree.get_num_nodes();
+		n_nodes += tree.num_nodes();
 	}
 	auto end = std::chrono::steady_clock::now();
 	std::chrono::duration<double> runtime_seconds = end-start;

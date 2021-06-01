@@ -20,7 +20,7 @@ data_t no_reg(Tree<tree_init, tree_next, pred_t> const &tree) {
 
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
 data_t nodes_reg(Tree<tree_init, tree_next, pred_t> const &tree) {
-    return tree.get_num_nodes();
+    return tree.num_nodes();
 }
 
 // https://stackoverflow.com/questions/14848924/how-to-define-typedef-of-function-pointer-which-has-template-arguments

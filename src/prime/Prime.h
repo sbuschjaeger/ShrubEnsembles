@@ -83,6 +83,8 @@ public:
     virtual unsigned int num_trees() const = 0;
 
     virtual unsigned int num_bytes() const = 0;
+    
+    virtual unsigned int num_nodes() const = 0;
 
     virtual ~PrimeInterface() { }
 };
@@ -289,6 +291,14 @@ public:
             output = weighted_sum_first_dim(all_proba, _weights);
         }
         return output;
+    }
+
+    unsigned int num_nodes() const {
+        unsigned int n_nodes = 0;
+        for (auto const & t : _trees) {
+            n_nodes += t.num_nodes();
+        }
+        return n_nodes;
     }
 
     unsigned int num_trees() const {

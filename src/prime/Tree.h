@@ -21,28 +21,34 @@ public:
     data_t threshold;
     unsigned int feature;
     unsigned int left, right;
-    //pred_t * preds;
     std::unique_ptr<pred_t []> preds;
 
     unsigned int num_bytes() const {
         return sizeof(data_t) + 3*sizeof(unsigned int) + sizeof(std::unique_ptr<pred_t []>);
     }
+};
 
-
-    // Node(data_t threshold, unsigned int feature) : threshold(threshold), feature(feature), preds(nullptr) {
-    // }
-
-    // Node() : preds(nullptr) {};
+/**
+ * @brief  The main reason why this interface exists, is because it makes class instansiation a little easier for the Pythonbindings. See Python.cpp for details.
+ * @note   
+ * @retval None
+ */
+template <typename pred_t>
+class TreeInterface {
+public:
+    virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad, data_t step_size) = 0;
     
-    // ~Node() {
-    //     if (preds != nullptr) {
-    //         delete[] preds;
-    //     }
-    // }
+    virtual std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
+
+    virtual unsigned int num_bytes() const = 0;
+
+    virtual unsigned int num_nodes() const = 0;
+
+    virtual ~TreeInterface() { }
 };
 
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
-class Tree {
+class Tree : public TreeInterface<pred_t> {
 private:
     std::vector<Node<pred_t>> nodes;
     unsigned int n_classes;
@@ -384,6 +390,7 @@ private:
                     //delete [] nodes[cur_idx].preds;
                     nodes[cur_idx].preds.reset();
 
+                    // TODO: Benchmark this part for larger batches
                     TreeExpansion exp_left;
                     exp_left.parent = cur_idx;
                     exp_left.left = true;
@@ -479,7 +486,7 @@ public:
         return preds;
     }
 
-    unsigned int get_num_nodes() const {
+    unsigned int num_nodes() const {
         return nodes.size();
     }
 

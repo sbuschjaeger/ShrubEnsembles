@@ -407,8 +407,7 @@ class Prime(ClassifierMixin, BaseEstimator):
 
     def num_nodes(self):
         if self.backend == "c++":
-            max_depth = self.additional_tree_options["max_depth"]
-            return (2**(max_depth + 1) - 1)*self.num_trees()
+            return self.model.num_nodes()
         else:
             return sum( [ est.tree_.node_count if w != 0 else 0 for w, est in zip(self.estimator_weights_, self.estimators_)] )
 
