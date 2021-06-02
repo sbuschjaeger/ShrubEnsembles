@@ -33,6 +33,7 @@ is_nominal = (df.nunique() == 2).values
 X = df.values
 
 **/
+
 std::vector<std::vector<data_t>> X = {
 	{0.8541666666666666, 1.0, 0.0, 0.0, 0.0, 1.0, 0.339622641509434, 0.44748858447488576, 0.0, 0.0, 0.0, 1.0, 0.2900763358778625, 0.0, 0.3870967741935484, 0.5, 1.0, 0.0},
 	{0.7916666666666666, 0.0, 0.0, 0.0, 1.0, 0.0, 0.19811320754716977, 0.9999999999999998, 0.0, 0.0, 0.0, 1.0, 0.6793893129770993, 0.0, 0.25806451612903225, 0.5, 0.0, 1.0},
@@ -355,15 +356,37 @@ void print_vector(std::vector<data_t> const &X) {
 	std::cout << std::endl;
 }
 
+std::vector<std::vector<data_t>> random_data(unsigned int N, unsigned int d) {
+	auto gen = std::bind(std::uniform_real_distribution<>(0,1),std::default_random_engine());
+	std::vector<data_t> tmp(N*d);
+	std::generate(tmp.begin(), tmp.end(), gen);
+
+	std::vector<std::vector<data_t>> X(N);
+	for (unsigned int i = 0; i < N; ++i) {
+		X[i] = std::vector<data_t>(&tmp[i*d],&tmp[i*d] + d); 
+	}
+	return X;
+}
+
+std::vector<unsigned int> random_targets(unsigned int N) {
+	std::vector<unsigned int> Y(N);
+	auto gen = std::bind(std::uniform_int_distribution<>(0,1),std::default_random_engine());
+	std::generate(Y.begin(), Y.end(), gen);
+	return Y;
+}
+
 int main() {
+	// auto X = random_data(1 << 15, 128);
+	// auto Y = random_targets(1 << 15);
+
     std::vector<unsigned int> batch_idx(X.size());
     std::iota(std::begin(batch_idx), std::end(batch_idx), 0); 
 
-    unsigned int epochs = 1;
+    unsigned int epochs = 5;
     unsigned int batch_size = 128;
 
 	unsigned int n_classes = 2;
-	unsigned int max_depth = 1;
+	unsigned int max_depth = 10;
 	unsigned long seed = 12345;
 	bool normalize_weights = true;
 	STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT;
@@ -379,7 +402,7 @@ int main() {
 	double size = 0.0;
 	double n_nodes = 0.0;
 	for (unsigned int i = 0; i < epochs; ++i) {
-		Tree<TREE_INIT::RANDOM, TREE_NEXT::NONE, double> tree(
+		Tree<TREE_INIT::TRAIN, TREE_NEXT::NONE, double> tree(
 			max_depth, 
 			n_classes,
 			seed, 

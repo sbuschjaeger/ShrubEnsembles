@@ -199,7 +199,7 @@ private:
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> const & idx, long n_classes, std::mt19937 &gen) {
+    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx, long n_classes, std::mt19937 &gen) {
         if (idx.size() <= 2) {
             return std::nullopt;
         }
@@ -228,15 +228,16 @@ private:
 
             // Copy feature values and targets into new vector
             // TODO Benchmark this vs 2 std::vectors
-            std::vector<std::pair<data_t, unsigned int>> f_values(n_data);
-            for (unsigned int j = 0; j < n_data; ++j) {
-                auto jindex = idx[j];
-                f_values[j] = std::make_pair(X[jindex][i], Y[jindex]);
-            }
-            // By default sort sorts after the first feature
-            std::sort(f_values.begin(), f_values.end());
+            // std::vector<std::pair<data_t, unsigned int>> f_values(n_data);
+            // for (unsigned int j = 0; j < n_data; ++j) {
+            //     auto jindex = idx[j];
+            //     f_values[j] = std::make_pair(X[jindex][i], Y[jindex]);
+            // }
+            // // By default sort sorts after the first feature
+            // std::sort(f_values.begin(), f_values.end());
             //data_t max_t = f_values[n_data - 1].first;
-            
+            std::sort(idx.begin(), idx.end(), [&X, i](unsigned int i1, unsigned int i2){return X[i1][i] < X[i2][i];});
+
             std::fill(left_cnts.begin(), left_cnts.end(), 0);
             std::fill(right_cnts.begin(), right_cnts.end(), 0);
             
@@ -244,17 +245,20 @@ private:
             unsigned int begin = 0; 
             data_t best_threshold;
 
+            unsigned int jfirst = idx[0];
             for (unsigned int j = 0; j < n_data; ++j) {
-                if (f_values[j].first == f_values[0].first) {
-                    left_cnts[f_values[j].second] += 1;
+                auto jidx = idx[j]; 
+            
+                if (X[jidx][i] == X[jfirst][i]) {
+                    left_cnts[Y[jidx]] += 1;
                 } else {
                     if (first) {
-                        best_threshold = f_values[0].first / 2.0 + f_values[j].first / 2.0;
+                        best_threshold = X[jfirst][i] / 2.0 + X[jidx][i] / 2.0;
                         //best_threshold = 0.5 * (f_values[0].first + f_values[j].first); 
                         first = false;
                         begin = j;
                     }
-                    right_cnts[f_values[j].second] += 1;
+                    right_cnts[Y[jidx]] += 1;
                 }
             }
             
@@ -270,19 +274,22 @@ private:
             unsigned int j = begin;
 
             while(j < n_data) {
-                data_t left = f_values[j].first;
+                auto lidx = idx[j]; 
+
+                //data_t left = f_values[j].first;
 
                 do {
-                    auto const & f = f_values[j];
-                    left_cnts[f.second] += 1;
-                    right_cnts[f.second] -= 1;
+                    //auto const & f = f_values[j];
+                    // auto jidx = idx[j]; 
+                    left_cnts[Y[idx[j]]] += 1;
+                    right_cnts[Y[idx[j]]] -= 1;
                     ++j;
-                } while(j < n_data && f_values[j].first == left);
+                } while(j < n_data && X[idx[j]][i] == X[lidx][i]);
                 
                 if (j >= n_data) break;
-
+ 
                 data_t cur_gini = gini(left_cnts, right_cnts);
-                data_t threshold = left / 2.0 + f_values[j].first / 2.0;
+                data_t threshold = X[lidx][i] / 2.0 + X[idx[j]][i] / 2.0;
                 if (cur_gini < best_gini) {
                     best_gini = cur_gini;
                     best_threshold = threshold;
@@ -323,15 +330,18 @@ private:
     }
 
     void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int max_depth, unsigned long seed) {
+        /**
+         *  For my future self I tried to make the code somewhat understandable while begin reasonably fast / optimized. 
+         *  For training the tree we follow the "regular" top-down appraoch in which we expand each node by two child nodes. The current set of leaf
+         *  nodes-to-be-expanded are kept in a simple queue. The struct below is used to keep track of the current leaf node, its parent, if its a 
+         *  left (or right) child as well as the data on that node. Originally, I p
+         *      1) Each split 
+         * */
         struct TreeExpansion {
-            // std::vector<std::vector<data_t>> x;
-            // std::vector<unsigned int> y;
             std::vector<unsigned int> idx;
             int parent;
             bool left;
             unsigned int depth;
-            // TreeExpansion(std::vector<std::vector<data_t>> const &x, std::vector<unsigned int> const &y, int parent, bool left, unsigned int depth) 
-            //     : x(x),y(y),parent(parent),left(left),depth(depth) {}
         };
 
         std::queue<TreeExpansion> to_expand; 
