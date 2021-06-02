@@ -481,7 +481,7 @@ class Prime(ClassifierMixin, BaseEstimator):
         self.y_ = y
         
         for epoch in range(self.epochs):
-            mini_batches = create_mini_batches(X, y, self.batch_size, False, False) 
+            mini_batches = create_mini_batches(X, y, self.batch_size, True, False) 
 
             acc_sum = 0
             loss_sum = 0

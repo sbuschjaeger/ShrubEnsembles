@@ -212,6 +212,10 @@ private:
         std::iota(features.begin(),features.end(), 0); 
         std::shuffle(features.begin(), features.end(), gen);
 
+        // Prepare class statistics
+        std::vector<unsigned int> left_cnts(n_classes);
+        std::vector<unsigned int> right_cnts(n_classes);
+
         for (auto i: features) {
             // In order to compute the best spliting threshold for the current feature we need to evaluate every possible split value.
             // These can be up to n_data - 1 points and for each threshold we need to evaluate if they belong to the left or right child. 
@@ -220,6 +224,7 @@ private:
             // move the split-threshold to the next value and onyl update the statistics.
 
             // Copy feature values and targets into new vector
+            // TODO Benchmark this vs 2 std::vectors
             std::vector<std::pair<data_t, unsigned int>> f_values(n_data);
             for (unsigned int j = 0; j < n_data; ++j) {
                 f_values[j] = std::make_pair(X[j][i], Y[j]);
@@ -227,10 +232,7 @@ private:
             // By default sort sorts after the first feature
             std::sort(f_values.begin(), f_values.end());
             //data_t max_t = f_values[n_data - 1].first;
-
-            // Prepare class statistics
-            std::vector<unsigned int> left_cnts(n_classes);
-            std::vector<unsigned int> right_cnts(n_classes);
+            
             std::fill(left_cnts.begin(), left_cnts.end(), 0);
             std::fill(right_cnts.begin(), right_cnts.end(), 0);
             
@@ -335,13 +337,13 @@ private:
         root.parent = -1;
         root.left = false;
         root.depth = 0;
-        to_expand.push(root);
+        to_expand.push(std::move(root));
 
         std::mt19937 gen(seed);
 
         while(to_expand.size() > 0) {
             unsigned int cur_idx = nodes.size();
-            auto exp = to_expand.front();
+            auto exp = std::move(to_expand.front());
             to_expand.pop();
 
             nodes.push_back(Node<pred_t>());
@@ -390,7 +392,6 @@ private:
                     //delete [] nodes[cur_idx].preds;
                     nodes[cur_idx].preds.reset();
 
-                    // TODO: Benchmark this part for larger batches
                     TreeExpansion exp_left;
                     exp_left.parent = cur_idx;
                     exp_left.left = true;
@@ -403,16 +404,17 @@ private:
 
                     for (unsigned int i = 0; i < exp.x.size(); ++i) {
                         if (exp.x[i][f] <= t) {
-                            exp_left.x.push_back(exp.x[i]);
-                            exp_left.y.push_back(exp.y[i]);
+                            to_expand[lidx].x.push_back(exp.x[i]);
+                            to_expand[lidx].y.push_back(exp.y[i]);
                         } else {
-                            exp_right.x.push_back(exp.x[i]);
-                            exp_right.y.push_back(exp.y[i]);
+                            to_expand[ridx].x.push_back(exp.x[i]);
+                            to_expand[ridx].y.push_back(exp.y[i]);
                         }
                     }
 
-                    to_expand.push(exp_left);
-                    to_expand.push(exp_right);
+                    // TODO CHECK IF THIS PREVENTS UNNCESSARY COPIES
+                    to_expand.push(std::move(exp_left));
+                    to_expand.push(std::move(exp_right));
 
                     // std::vector<std::vector<data_t>> XLeft, XRight;
                     // std::vector<unsigned int> YLeft, YRight;
