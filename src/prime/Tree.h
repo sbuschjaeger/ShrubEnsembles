@@ -93,10 +93,10 @@ private:
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> random_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::mt19937 &gen) {
-        // if (X.size() <= 1) {
-        //     return random_node(is_nominal, gen);
-        // }
+    static std::optional<std::pair<data_t, unsigned int>> random_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> const & idx, std::mt19937 &gen) {
+        if (idx.size() <= 1) {
+            return std::nullopt;
+        }
 
         // We want to split at a random feature. However, we also want to ensure that the left / right child receive at-least one example with this random
         // split. Sometimes there are features which cannot ensure this (e.g. a binary features are '1'). Thus, we iterate over a random permutation of features 
@@ -104,29 +104,33 @@ private:
         std::vector<unsigned int> features(X[0].size());
         std::iota(std::begin(features), std::end(features), 0); 
         std::shuffle(features.begin(), features.end(), gen);
-
+ 
         for (auto const & f: features) {
             // We need to find the next smallest and next biggest value of the data to ensure that left/right will receive at-least 
             // one example. This is a brute force implementation in O(N)
+            auto ifirst = idx[0];
+            auto isecond = idx[1];
+
             data_t smallest, second_smallest;
-            if(X[0][f] <X[1][f]){
-                smallest = X[0][f];
-                second_smallest = X[1][f];
+            if(X[ifirst][f] < X[isecond][f]){
+                smallest = X[ifirst][f];
+                second_smallest = X[isecond][f];
             } else {
-                smallest = X[1][f];
-                second_smallest = X[0][f];
+                smallest = X[isecond][f];
+                second_smallest = X[ifirst][f];
             }
 
             data_t biggest, second_biggest;
-            if(X[0][f] > X[1][f]){
-                biggest = X[0][f];
-                second_biggest = X[1][f];
+            if(X[ifirst][f] > X[isecond][f]){
+                biggest = X[ifirst][f];
+                second_biggest = X[isecond][f];
             } else {
-                biggest = X[1][f];
-                second_biggest = X[0][f];
+                biggest = X[isecond][f];
+                second_biggest = X[ifirst][f];
             }
 
-            for (unsigned int i = 2; i < X.size(); ++i) {
+            for (unsigned int j = 2; j < idx.size(); ++j) {
+                auto i = idx[j];
                 if(X[i][f] > smallest ) { 
                     second_smallest = smallest;
                     smallest = X[i][f];
@@ -195,13 +199,12 @@ private:
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, long n_classes, std::mt19937 &gen) {
-        // if (X.size() <= 1) {
-        //     return std::make_pair(1.0, static_cast<unsigned int>(0));
-        //     //return random_node(is_nominal, gen);
-        // }
+    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> const & idx, long n_classes, std::mt19937 &gen) {
+        if (idx.size() <= 2) {
+            return std::nullopt;
+        }
 
-        unsigned int n_data = X.size();
+        unsigned int n_data = idx.size();
         unsigned int n_features = X[0].size();
 
         data_t overall_best_gini = 0;
@@ -215,7 +218,7 @@ private:
         // Prepare class statistics
         std::vector<unsigned int> left_cnts(n_classes);
         std::vector<unsigned int> right_cnts(n_classes);
-
+ 
         for (auto i: features) {
             // In order to compute the best spliting threshold for the current feature we need to evaluate every possible split value.
             // These can be up to n_data - 1 points and for each threshold we need to evaluate if they belong to the left or right child. 
@@ -227,7 +230,8 @@ private:
             // TODO Benchmark this vs 2 std::vectors
             std::vector<std::pair<data_t, unsigned int>> f_values(n_data);
             for (unsigned int j = 0; j < n_data; ++j) {
-                f_values[j] = std::make_pair(X[j][i], Y[j]);
+                auto jindex = idx[j];
+                f_values[j] = std::make_pair(X[jindex][i], Y[jindex]);
             }
             // By default sort sorts after the first feature
             std::sort(f_values.begin(), f_values.end());
@@ -320,8 +324,9 @@ private:
 
     void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int max_depth, unsigned long seed) {
         struct TreeExpansion {
-            std::vector<std::vector<data_t>> x;
-            std::vector<unsigned int> y;
+            // std::vector<std::vector<data_t>> x;
+            // std::vector<unsigned int> y;
+            std::vector<unsigned int> idx;
             int parent;
             bool left;
             unsigned int depth;
@@ -332,8 +337,10 @@ private:
         std::queue<TreeExpansion> to_expand; 
         //to_expand.push(TreeExpansion(X, Y, -1, false, 0));
         TreeExpansion root;
-        root.x = X;
-        root.y = Y;
+        // root.x = X;
+        // root.y = Y;
+        root.idx.resize(X.size());
+        std::iota(root.idx.begin(), root.idx.end(), 0);
         root.parent = -1;
         root.left = false;
         root.depth = 0;
@@ -359,13 +366,14 @@ private:
             nodes[cur_idx].preds = std::make_unique<pred_t []>(n_classes);
 
             std::fill_n(nodes[cur_idx].preds.get(), n_classes, 0);
-            for (unsigned int i = 0; i < exp.x.size(); ++i) {
-                nodes[cur_idx].preds.get()[exp.y[i]]++;
+            // for (unsigned int i = 0; i < exp.x.size(); ++i) {
+            for (auto i : exp.idx) {
+                nodes[cur_idx].preds.get()[Y[i]]++;
             }
 
             bool is_leaf = false;
             for (unsigned int i = 0; i < n_classes; ++i) {
-                if (nodes[cur_idx].preds.get()[i] == exp.y.size()) {
+                if (nodes[cur_idx].preds.get()[i] == exp.idx.size()) {
                     is_leaf = true;
                     break;
                 }
@@ -377,9 +385,9 @@ private:
             } else {
                 std::optional<std::pair<data_t, unsigned int>> split;
                 if constexpr (tree_init == TRAIN) {
-                    split = best_split(exp.x, exp.y, n_classes, gen);
+                    split = best_split(X, Y, exp.idx, n_classes, gen);
                 } else {
-                    split = random_split(exp.x, exp.y, gen);
+                    split = random_split(X, Y, exp.idx, gen);
                 }
 
                 if (split.has_value()) {
@@ -402,17 +410,19 @@ private:
                     exp_right.left = false;
                     exp_right.depth = exp.depth + 1;
 
-                    for (unsigned int i = 0; i < exp.x.size(); ++i) {
-                        if (exp.x[i][f] <= t) {
-                            to_expand[lidx].x.push_back(exp.x[i]);
-                            to_expand[lidx].y.push_back(exp.y[i]);
+                    // for (unsigned int i = 0; i < exp.x.size(); ++i) {
+                    for (auto i : exp.idx) {
+                        if (X[i][f] <= t) {
+                            exp_left.idx.push_back(i);
+                            // exp_left.x.push_back(exp.x[i]);
+                            // exp_left.y.push_back(exp.y[i]);
                         } else {
-                            to_expand[ridx].x.push_back(exp.x[i]);
-                            to_expand[ridx].y.push_back(exp.y[i]);
+                            exp_right.idx.push_back(i);
+                            // exp_right.x.push_back(exp.x[i]);
+                            // exp_right.y.push_back(exp.y[i]);
                         }
                     }
 
-                    // TODO CHECK IF THIS PREVENTS UNNCESSARY COPIES
                     to_expand.push(std::move(exp_left));
                     to_expand.push(std::move(exp_right));
 
@@ -439,7 +449,6 @@ private:
                     make_leaf(nodes[cur_idx], n_classes);
                     n_leafs++;
                 }
-
             }
         }
     }
