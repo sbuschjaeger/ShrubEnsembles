@@ -23,6 +23,12 @@ public:
     unsigned int left, right;
     std::unique_ptr<pred_t []> preds;
 
+    // I want to make sure that these objects are only moved and never copied. I expect the code below to not 
+    // use any copy c'tors, but for safe measures we delete the copy constructor entirely.
+    Node(const Node&) = delete;
+    Node() = default;
+    Node(Node &&) = default;
+
     unsigned int num_bytes() const {
         return sizeof(data_t) + 3*sizeof(unsigned int) + sizeof(std::unique_ptr<pred_t []>);
     }
@@ -53,7 +59,6 @@ private:
     std::vector<Node<pred_t>> nodes;
     unsigned int n_classes;
     unsigned int n_leafs;
-    //std::mt19937 gen; 
 
     inline unsigned int node_index(std::vector<data_t> const &x) const {
         unsigned int idx = 0;
@@ -69,21 +74,6 @@ private:
         return idx;
     }
 
-    // static auto random_node(std::vector<bool> const &is_nominal, std::mt19937 &gen) {
-    //     std::uniform_int_distribution<> idis(0, is_nominal.size() - 1);
-    //     std::uniform_real_distribution<> fdis(0,1);
-        
-    //     unsigned int feature = idis(gen);
-    //     data_t threshold;
-    //     if (is_nominal[feature]) {
-    //         threshold = 0.5; 
-    //     } else {
-    //         threshold = fdis(gen);
-    //     }
-
-    //     return std::pair<data_t, unsigned int>(threshold, feature);
-    // }
-
      /**
      * @brief  Compute a random split for the given data. This algorithm has O(d * log d + d * N) runtime in the worst case, but should usually run in O(d * log d + N), where N is the number of examples and d is the number of features.
      * This implementation ensures that the returned split splits the data so that each child is non-empty if applied to the given data (at-least one example form X is routed towards left and towards right). The only exception occurs if X is empty or contains one example. In this case we return feature 0 with threshold 1. Threshold-values are placed in the middle between two samples. 
@@ -94,12 +84,15 @@ private:
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
     static std::optional<std::pair<data_t, unsigned int>> random_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> const & idx, std::mt19937 &gen) {
-        if (idx.size() <= 1) {
+        // At-least 2 points are required for splitting.
+        // Technically this check is unncessary since we stop tree construction once there is only one label in the data which is always the case 
+        // if we have 0 or 1 examples. For safea measure we keep this check alive however.
+        if (idx.size() < 2) {
             return std::nullopt;
         }
 
         // We want to split at a random feature. However, we also want to ensure that the left / right child receive at-least one example with this random
-        // split. Sometimes there are features which cannot ensure this (e.g. a binary features are '1'). Thus, we iterate over a random permutation of features 
+        // split. Sometimes there are features which cannot ensure this (e.g. a binary features where all elements are '1'). Thus, we iterate over a random permutation of features 
         // and return as soon as we find a valid split
         std::vector<unsigned int> features(X[0].size());
         std::iota(std::begin(features), std::end(features), 0); 
@@ -154,12 +147,9 @@ private:
             //return std::make_pair<data_t, unsigned int>(static_cast<data_t>(fdis(gen)), f);
             int ftmp = f;
             return std::optional<std::pair<data_t, unsigned int>>{std::make_pair<data_t, unsigned int>(static_cast<data_t>(fdis(gen)), ftmp)};
-            //return std::make_pair<data_t, unsigned int>(static_cast<data_t>(fdis(gen)), ftmp);
         }
 
         return std::nullopt;
-        //return random_node(is_nominal, gen);
-        //return std::make_pair<data_t, unsigned int>(1.0, 0);
     }
 
     /**
@@ -192,15 +182,17 @@ private:
      * @brief  Compute the best split for the given data. This algorithm has O(d * N log N) runtime, where N is the number of examples and d is the number of features.
      * This implementation ensures that the returned split splits the data so that each child is non-empty if applied to the given data (at-least one example form X is routed towards left and towards right). The only exception occurs if X is empty or contains one example. In this case we return feature 0 with threshold 1. Threshold-values are placed in the middle between two samples. 
      * If two splits are equally good, then the first split is chosen. Note that this introduces a slight bias towards the first features. 
-     * TODO: Change code for tie-breaking
      * @note   
      * @param  &X: The example-set which is used to compute the splitting
      * @param  &Y: The label-set which is used to compute the splitting
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx, long n_classes, std::mt19937 &gen) {
-        if (idx.size() <= 2) {
+    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx, long n_classes, unsigned int max_features, std::mt19937 &gen) {
+        // At-least 2 points are required for splitting.
+        // Technically this check is unncessary since we stop tree construction once there is only one label in the data which is always the case 
+        // if we have 0 or 1 examples. For safea measure we keep this check alive however.
+        if (idx.size() < 2) {
             return std::nullopt;
         }
 
@@ -211,6 +203,12 @@ private:
         unsigned int overall_best_feature = 0;
         data_t overall_best_threshold = 0;
         bool split_set = false;
+
+        // Sometimes multiple features have equally good splits (= same gini score). Thus, 
+        // we terate over the features in a random order to promote some diversity. Additionally,
+        // we also evalute at most max_feature features and return the best unless we were not able
+        // to find a suitable feature yet. In that case, we keep looking.
+        // This matches the approach SKLearn implements
         std::vector<unsigned int> features(n_features);
         std::iota(features.begin(),features.end(), 0); 
         std::shuffle(features.begin(), features.end(), gen);
@@ -218,7 +216,8 @@ private:
         // Prepare class statistics
         std::vector<unsigned int> left_cnts(n_classes);
         std::vector<unsigned int> right_cnts(n_classes);
- 
+
+        unsigned int fcnt = 0;
         for (auto i: features) {
             // In order to compute the best spliting threshold for the current feature we need to evaluate every possible split value.
             // These can be up to n_data - 1 points and for each threshold we need to evaluate if they belong to the left or right child. 
@@ -226,18 +225,11 @@ private:
             // To do so, we first the examples according to their feature values and compute the initial statistics for the left/right child. Then, we gradually 
             // move the split-threshold to the next value and onyl update the statistics.
 
-            // Copy feature values and targets into new vector
-            // TODO Benchmark this vs 2 std::vectors
-            // std::vector<std::pair<data_t, unsigned int>> f_values(n_data);
-            // for (unsigned int j = 0; j < n_data; ++j) {
-            //     auto jindex = idx[j];
-            //     f_values[j] = std::make_pair(X[jindex][i], Y[jindex]);
-            // }
-            // // By default sort sorts after the first feature
-            // std::sort(f_values.begin(), f_values.end());
-            //data_t max_t = f_values[n_data - 1].first;
+            // The data is always accessed indirectly via the idx array sinc this array contains all the indices of the data used 
+            // for building the current node. Thus, sort this index wrt. to the current feature.
             std::sort(idx.begin(), idx.end(), [&X, i](unsigned int i1, unsigned int i2){return X[i1][i] < X[i2][i];});
 
+            // Re-set class statistics
             std::fill(left_cnts.begin(), left_cnts.end(), 0);
             std::fill(right_cnts.begin(), right_cnts.end(), 0);
             
@@ -263,7 +255,7 @@ private:
             }
             
             if (first) {
-                // We never choose a threshold which means that f_values[0] = f_values[1] = ... = f_values[end]. 
+                // We never choose a threshold which means that X[idx[0]][i] = X[idx[1]][i] = ... = X[idx[end]][i]. 
                 // This will not give us a good split, so ignore this feature
                 continue;
             }
@@ -276,11 +268,7 @@ private:
             while(j < n_data) {
                 auto lidx = idx[j]; 
 
-                //data_t left = f_values[j].first;
-
                 do {
-                    //auto const & f = f_values[j];
-                    // auto jidx = idx[j]; 
                     left_cnts[Y[idx[j]]] += 1;
                     right_cnts[Y[idx[j]]] -= 1;
                     ++j;
@@ -305,6 +293,10 @@ private:
                 overall_best_threshold = best_threshold;
                 split_set = true;
             } 
+
+            // Evaluate at most max_features, but keep looking for splits if we haven found a valid one yet
+            fcnt += 1;
+            if (fcnt >= max_features && split_set) break;
         }
 
         if (!split_set) {
@@ -314,9 +306,10 @@ private:
         }
     }
 
-    //static auto insert_leaf(pred_t * class_cnt, unsigned int n_classes) {
     static void make_leaf(Node<pred_t> & node, unsigned int n_classes) {
         if constexpr (tree_next != INCREMENTAL) {
+            // Normalize the leaf predictions to be proper probabilities (sum to 1)
+            // This does not effect the incremental learning. In this case, we store the counts and update them directly
             data_t sum = std::accumulate(node.preds.get(), node.preds.get() + n_classes, pred_t(0.0));
             if (sum > 0) {
                 std::transform(node.preds.get(), node.preds.get() + n_classes, node.preds.get(), [sum](auto& c){return 1.0/sum*c;});
@@ -329,26 +322,31 @@ private:
         node.right = 0;
     }
 
-    void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int max_depth, unsigned long seed) {
+    void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int max_depth, unsigned int max_features, unsigned long seed) {
         /**
          *  For my future self I tried to make the code somewhat understandable while begin reasonably fast / optimized. 
-         *  For training the tree we follow the "regular" top-down appraoch in which we expand each node by two child nodes. The current set of leaf
-         *  nodes-to-be-expanded are kept in a simple queue. The struct below is used to keep track of the current leaf node, its parent, if its a 
-         *  left (or right) child as well as the data on that node. Originally, I p
-         *      1) Each split 
+         *  For training the tree we follow the "regular" top-down approach in which we expand each node by two child nodes. The current set of 
+         *  nodes-to-be-expanded are kept in a simple queue. The struct below is used to keep track of the current to-be-expanded node, its parent, if its a 
+         *  left (or right) child as well as the data on that node. Originally, I used std::vector<std::vector<data_t>> / std::vector<unsigned int> inside
+         *  this struct to keep track of the corresponding parts of the data, but this resulted in a large overhead (malloc / free) when splitting large 
+         *  datasets. Thus I decided to only store indices to each data point and not copy the whole data. This leads to more indirect memory accesses later 
+         *  when computing the best_split but this approach seems to quicker anyhow.  
          * */
         struct TreeExpansion {
             std::vector<unsigned int> idx;
             int parent;
             bool left;
             unsigned int depth;
+
+            // I want to make sure that these objects are only moved and never copied. I expect the code below to not 
+            // use any copy c'tors, but for safe measures we delete the copy constructor entirely.
+            TreeExpansion(const TreeExpansion&) = delete;
+            TreeExpansion() = default;
+            TreeExpansion(TreeExpansion &&) = default;
         };
 
         std::queue<TreeExpansion> to_expand; 
-        //to_expand.push(TreeExpansion(X, Y, -1, false, 0));
         TreeExpansion root;
-        // root.x = X;
-        // root.y = Y;
         root.idx.resize(X.size());
         std::iota(root.idx.begin(), root.idx.end(), 0);
         root.parent = -1;
@@ -358,11 +356,14 @@ private:
 
         std::mt19937 gen(seed);
 
+        // TODO: Maybe reserve some size in nodes?
         while(to_expand.size() > 0) {
             unsigned int cur_idx = nodes.size();
             auto exp = std::move(to_expand.front());
             to_expand.pop();
 
+            // To mitigate costly copy operations of the entire node, we first add it do the vector and then work
+            // on the reference via nodes[cur_idx]
             nodes.push_back(Node<pred_t>());
             if (exp.parent >= 0) {
                 if (exp.left) {
@@ -372,11 +373,10 @@ private:
                 }
             }
 
-            //nodes[cur_idx].preds = new pred_t[n_classes];
             nodes[cur_idx].preds = std::make_unique<pred_t []>(n_classes);
 
+            // Calculate class statistics and check if its a pure node with one class (= leaf node)
             std::fill_n(nodes[cur_idx].preds.get(), n_classes, 0);
-            // for (unsigned int i = 0; i < exp.x.size(); ++i) {
             for (auto i : exp.idx) {
                 nodes[cur_idx].preds.get()[Y[i]]++;
             }
@@ -390,24 +390,28 @@ private:
             }
 
             if (is_leaf || exp.depth >= max_depth) {
+                // Either this node is pure or we reached the max_depth
+                // Thus we make this node a leaf and stop building this sub-tree
                 make_leaf(nodes[cur_idx], n_classes);
                 n_leafs++;
             } else {
+                // Compute a suitable split
                 std::optional<std::pair<data_t, unsigned int>> split;
                 if constexpr (tree_init == TRAIN) {
-                    split = best_split(X, Y, exp.idx, n_classes, gen);
+                    split = best_split(X, Y, exp.idx, n_classes, max_features, gen);
                 } else {
                     split = random_split(X, Y, exp.idx, gen);
                 }
 
                 if (split.has_value()) {
+                    // A suitable split as been found
                     auto t = split.value().first;
                     auto f = split.value().second;
                     nodes[cur_idx].feature = f;
                     nodes[cur_idx].threshold = t;
 
                     // We do not need to store the predictions in inner nodes. Thus delete them here
-                    //delete [] nodes[cur_idx].preds;
+                    // If we want to perform post-pruning at some point we should probably keep these statistics
                     nodes[cur_idx].preds.reset();
 
                     TreeExpansion exp_left;
@@ -420,42 +424,20 @@ private:
                     exp_right.left = false;
                     exp_right.depth = exp.depth + 1;
 
-                    // for (unsigned int i = 0; i < exp.x.size(); ++i) {
+                    // Split the data and expand the tree construction
                     for (auto i : exp.idx) {
                         if (X[i][f] <= t) {
                             exp_left.idx.push_back(i);
-                            // exp_left.x.push_back(exp.x[i]);
-                            // exp_left.y.push_back(exp.y[i]);
                         } else {
                             exp_right.idx.push_back(i);
-                            // exp_right.x.push_back(exp.x[i]);
-                            // exp_right.y.push_back(exp.y[i]);
                         }
                     }
 
                     to_expand.push(std::move(exp_left));
                     to_expand.push(std::move(exp_right));
-
-                    // std::vector<std::vector<data_t>> XLeft, XRight;
-                    // std::vector<unsigned int> YLeft, YRight;
-
-                    // XLeft.reserve(exp.x.size());
-                    // XRight.reserve(exp.x.size());
-                    // YLeft.reserve(exp.x.size());
-                    // YRight.reserve(exp.x.size());
-                    // for (unsigned int i = 0; i < exp.x.size(); ++i) {
-                    //     if (exp.x[i][f] <= t) {
-                    //         XLeft.push_back(exp.x[i]);
-                    //         YLeft.push_back(exp.y[i]);
-                    //     } else {
-                    //         XRight.push_back(exp.x[i]);
-                    //         YRight.push_back(exp.y[i]);
-                    //     }
-                    // }
-
-                    // to_expand.push(TreeExpansion(XLeft, YLeft, cur_idx, true, exp.depth+1));
-                    // to_expand.push(TreeExpansion(XRight, YRight, cur_idx, false, exp.depth+1));
                 } else {
+                    // For some reason we were not able to find a suitable split (std::nullopt was returned). 
+                    // Thus we make this node a leaf and stop building this sub-tree
                     make_leaf(nodes[cur_idx], n_classes);
                     n_leafs++;
                 }
@@ -465,8 +447,9 @@ private:
 
 public:
 
-    Tree(unsigned int max_depth, unsigned int n_classes, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), n_leafs(0) {
-        train(X, Y, max_depth, seed);
+    Tree(unsigned int max_depth, unsigned int n_classes, unsigned int max_features, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), n_leafs(0) {
+        if (max_features == 0) max_features = X[0].size();
+        train(X, Y, max_depth, max_features, seed);
     }
 
     unsigned int num_bytes() const {

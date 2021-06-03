@@ -2,7 +2,7 @@ name: prime
 channels:
   - conda-forge
 dependencies:
-  - python=3.8
+  - python #=3.8
   - numpy
   - pylint
   - scikit-learn
@@ -13,5 +13,8 @@ dependencies:
   - jupyter
   - tqdm
   - pdoc3
+  - cmake
+  - gcc_linux-64
+  - gxx_linux-64
   # - pip:
   #   - -e file:.

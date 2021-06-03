@@ -56,6 +56,15 @@ class CMakeBuild(build_ext):
             build_args += ['--', '/m']
         else:
             cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
+
+            # CMake does not really respect CC / CXX environment variables. Anaconda on the other hand sets these variables
+            # if a compiler is installed inside the enviroment. If they are set, then lets just use whatever is set in CC / CXX
+            if "CC" in os.environ:
+                cmake_args += ['-DCMAKE_C_COMPILER=' + os.environ["CC"]]
+            
+            if "CXX" in os.environ:
+                cmake_args += ['-DCMAKE_CXX_COMPILER=' + os.environ["CXX"]]
+            
             build_args += ['--', '-j2']
 
         env = os.environ.copy()

@@ -22,4 +22,3 @@ add_executable(debug tests/debug.cpp)
 target_include_directories(debug PUBLIC)
 
 pybind11_add_module(CPrimeBindings src/prime/PythonBindings.cpp)
-#target_include_directories(CPrimeBindings PUBLIC)

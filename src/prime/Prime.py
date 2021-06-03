@@ -34,23 +34,26 @@ def to_prob_simplex(x):
     return projected_x
 
 # Modified from https://stackoverflow.com/questions/38157972/how-to-implement-mini-batch-gradient-descent-in-python
-def create_mini_batches(inputs, targets, batch_size, shuffle=False, sliding_window=False):
+def create_mini_batches(inputs, targets, batch_size, shuffle=False, with_replacement=False):
     assert inputs.shape[0] == targets.shape[0]
+    if with_replacement:
+        assert shuffle == True
+
     indices = np.arange(inputs.shape[0])
     if shuffle:
         np.random.shuffle(indices)
-    
+
     start_idx = 0
     while start_idx < len(indices):
-        if start_idx + batch_size > len(indices) - 1:
-            excerpt = indices[start_idx:]
+        if not with_replacement:
+            if start_idx + batch_size > len(indices) - 1:
+                excerpt = indices[start_idx:]
+            else:
+                excerpt = indices[start_idx:start_idx + batch_size]
         else:
-            excerpt = indices[start_idx:start_idx + batch_size]
-        
-        if sliding_window:
-            start_idx += 1
-        else:
-            start_idx += batch_size
+            excerpt = np.random.choice(indices, size = batch_size, replace=with_replacement)
+
+        start_idx += batch_size
 
         yield inputs[excerpt], targets[excerpt]
 
@@ -66,6 +69,8 @@ class Prime(ClassifierMixin, BaseEstimator):
         The step_size used for stochastic gradient descent. Can be set to "adaptive" for an adaptive step size. 
     normalize_weights : boolean
         True if nonzero weights should be projected onto the probability simplex, that is they should sum to 1. 
+    burnin_steps : int
+        Number of gradient steps per batch to "burn in" the current batch.
     ensemble_regularizer : str
         The ensemble_regularizer. Should be one of `{None, "L0", "L1", "hard-L0"}`
     l_ensemble_reg : float
@@ -102,19 +107,20 @@ class Prime(ClassifierMixin, BaseEstimator):
                 tree_regularizer = None,
                 l_tree_reg = 0,
                 normalize_weights = False,
+                burnin_steps = 0,
                 update_leaves = False,
                 batch_size = 256,
                 verbose = False,
                 out_path = None,
                 seed = None,
+                bootstrap = True,
                 epochs = 1,
                 backend = "python",
                 additional_tree_options = {
                     "splitter" : "best", 
                     "criterion" : "gini",
                     "max_depth": None
-                },
-                warmstart = True
+                }
         ):
 
         assert loss in ["mse","cross-entropy","hinge2"], "Currently only {{mse, cross-entropy, hinge2}} loss is supported"
@@ -123,7 +129,11 @@ class Prime(ClassifierMixin, BaseEstimator):
         assert tree_regularizer is None or tree_regularizer in ["node"], "Currently only {{none, node}} regularizer is supported for tree the regularizer."
 
         if backend == "c++":
-            assert "max_depth" in additional_tree_options and additional_tree_options["max_depth"] > 0, "The C++ backend required a maximum tree depth to be set, but none was given"
+            assert "max_depth" in additional_tree_options and additional_tree_options["max_depth"] > 0, "The C++ backend requires a maximum tree depth to be set, but none was given"
+
+        if backend == "c++":
+            if "max_features" not in additional_tree_options or additional_tree_options["max_features"] is None or additional_tree_options["max_features"] < 0:
+                additional_tree_options["max_features"] = 0
 
         if batch_size is None or batch_size < 1:
             print("WARNING: batch_size should be 2 for PyBiasedProxEnsemble for optimal performance, but was {}. Fixing it for you.".format(batch_size))
@@ -147,7 +157,7 @@ class Prime(ClassifierMixin, BaseEstimator):
             step_size = float(step_size)
 
         if "tree_init_mode" in additional_tree_options:
-            assert additional_tree_options["tree_init_mode"] in ["train", "fully-random", "random"], "Currently only {{train, fully-random, random}} as tree_init_mode is supported"
+            assert additional_tree_options["tree_init_mode"] in ["train", "random"], "Currently only {{train, fully-random, random}} as tree_init_mode is supported"
             self.tree_init_mode = additional_tree_options["tree_init_mode"]
         else:
             self.tree_init_mode = "train"
@@ -179,7 +189,8 @@ class Prime(ClassifierMixin, BaseEstimator):
         self.verbose = verbose
         self.out_path = out_path
         self.epochs = epochs
-        self.warmstart = warmstart
+        self.bootstrap = bootstrap
+        self.burnin_steps = burnin_steps
 
     def _individual_proba(self, X):
         ''' Predict class probabilities for each individual learner in the ensemble without considering the weights.
@@ -295,8 +306,15 @@ class Prime(ClassifierMixin, BaseEstimator):
             #     # TODO WHAT TO DO IF ONLY ONE LABEL IS IN THE CURRENT BATCH?
             #     pass
 
-            if len(self.estimators_) > 0:
-                all_proba = self._individual_proba(data)
+            # Perform the gradient step. Note that L0 / L1 regularizer is performed via the prox operator 
+            # and thus performed _after_ this update.
+            if self.step_size == "adaptive":
+                step_size = 1.0 / (len(self.estimators_) + 1.0)
+            else:
+                step_size = self.step_size
+
+            all_proba = self._individual_proba(data)
+            for i in range(self.burnin_steps + 1):
                 output = np.array([w * p for w,p in zip(all_proba, self.estimator_weights_)]).sum(axis=0)
 
                 # Compute the appropriate loss. 
@@ -306,7 +324,7 @@ class Prime(ClassifierMixin, BaseEstimator):
                     loss_deriv = 2 * (output - target_one_hot)
                 elif self.loss == "cross-entropy":
                     target_one_hot = np.array( [ [1.0 if y == i else 0.0 for i in range(self.n_classes_)] for y in target] )
-                    p = softmax(output, axis=1)
+                    #p = softmax(output, axis=1)
                     # loss = -target_one_hot*np.log(p + 1e-7)
                     m = target.shape[0]
                     loss_deriv = softmax(output, axis=1)
@@ -329,68 +347,65 @@ class Prime(ClassifierMixin, BaseEstimator):
                 else:
                     node_deriv = 0
 
-                # Perform the gradient step. Note that L0 / L1 regularizer is performed via the prox operator 
-                # and thus performed _after_ this update.
-                if self.step_size == "adaptive":
-                    step_size = 1.0 / (len(self.estimators_) + 1.0)
-                else:
-                    step_size = self.step_size
-
-                tmp_w = self.estimator_weights_ - step_size*directions - step_size*node_deriv
+                self.estimator_weights_ = self.estimator_weights_ - step_size*directions - step_size*node_deriv
+                
+                # The latest tree should only receive updates in the last round of burn-in. Reset its weight here
+                if i < self.burnin_steps:
+                    self.estimator_weights_[-1] = 0    
                 
                 if self.update_leaves:
-                    for i, h in enumerate(self.estimators_):
-                        tree_grad = (self.estimator_weights_[i] * loss_deriv)[:,np.newaxis,:]
+                    for j, h in enumerate(self.estimators_):
+                        # The latest tree should only receive updates in the last round of burn-in. Skip it here
+                        if i < self.burnin_steps and j == len(self.estimators_) - 1: 
+                            continue
+
+                        tree_grad = (self.estimator_weights_[j] * loss_deriv)[:,np.newaxis,:]
                         # find idx
                         idx = h.apply(data)
                         h.tree_.value[idx] = h.tree_.value[idx] - step_size * tree_grad[:,:,h.classes_.astype(int)]
 
-                # Compute the prox step. 
-                if self.ensemble_regularizer == "L0":
-                    tmp = np.sqrt(2 * self.l_ensemble_reg * step_size)
-                    tmp_w = np.array([0 if abs(w) < tmp else w for w in tmp_w])
-                elif self.ensemble_regularizer == "L1":
-                    sign = np.sign(tmp_w)
-                    tmp_w = np.abs(tmp_w) - step_size*self.l_ensemble_reg
-                    tmp_w = sign*np.maximum(tmp_w,0)
-                elif self.ensemble_regularizer == "hard-L0":
-                    top_K = np.argsort(tmp_w)[-self.l_ensemble_reg:]
-                    tmp_w = np.array([w if i in top_K else 0 for i,w in enumerate(tmp_w)])
+            # Compute the prox step. 
+            if self.ensemble_regularizer == "L0":
+                tmp = np.sqrt(2 * self.l_ensemble_reg * step_size)
+                tmp_w = np.array([0 if abs(w) < tmp else w for w in self.estimator_weights_])
+            elif self.ensemble_regularizer == "L1":
+                sign = np.sign(self.estimator_weights_)
+                tmp_w = np.abs(self.estimator_weights_) - step_size*self.l_ensemble_reg
+                tmp_w = sign*np.maximum(tmp_w,0)
+            elif self.ensemble_regularizer == "hard-L0":
+                top_K = np.argsort(self.estimator_weights_)[-self.l_ensemble_reg:]
+                tmp_w = np.array([w if i in top_K else 0 for i,w in enumerate(self.estimator_weights_)])
+            else:
+                tmp_w = self.estimator_weights_
 
-                # If set, normalize the weights. Note that we use the support of tmp_w for the projection onto the probability simplex
-                # as described in http://proceedings.mlr.press/v28/kyrillidis13.pdf
-                # Thus, we first need to extract the nonzero weights, project these and then copy them back into corresponding array
-                # print("PRE PROX: ", tmp_w)
-                if self.normalize_weights and len(tmp_w) > 0:
-                    nonzero_idx = np.nonzero(tmp_w)[0]
-                    nonzero_w = tmp_w[nonzero_idx]
-                    nonzero_w = to_prob_simplex(nonzero_w)
-                    self.estimator_weights_ = np.zeros((len(tmp_w)))
-                    for i,w in zip(nonzero_idx, nonzero_w):
-                        self.estimator_weights_[i] = w
-                else:
-                    self.estimator_weights_ = tmp_w
-                
-                new_est = []
-                new_w = []
-                for h, w in zip(self.estimators_, self.estimator_weights_):
-                    if w > 0:
-                        new_est.append(h)
-                        new_w.append(w)
+            # If set, normalize the weights. Note that we use the support of tmp_w for the projection onto the probability simplex
+            # as described in http://proceedings.mlr.press/v28/kyrillidis13.pdf
+            # Thus, we first need to extract the nonzero weights, project these and then copy them back into corresponding array
+            if self.normalize_weights and len(tmp_w) > 0:
+                nonzero_idx = np.nonzero(tmp_w)[0]
+                nonzero_w = tmp_w[nonzero_idx]
+                nonzero_w = to_prob_simplex(nonzero_w)
+                self.estimator_weights_ = np.zeros((len(tmp_w)))
+                for i,w in zip(nonzero_idx, nonzero_w):
+                    self.estimator_weights_[i] = w
+            else:
+                self.estimator_weights_ = tmp_w
+            
+            new_est = []
+            new_w = []
+            for h, w in zip(self.estimators_, self.estimator_weights_):
+                if w > 0:
+                    new_est.append(h)
+                    new_w.append(w)
 
-                self.estimators_ = new_est
-                self.estimator_weights_ = new_w
+            self.estimators_ = new_est
+            self.estimator_weights_ = new_w
 
 
     def num_bytes(self):
-        self_size = sys.getsizeof(self.step_size) + sys.getsizeof(self.loss) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.ensemble_regularizer) + sys.getsizeof(self.l_ensemble_reg) + sys.getsizeof(self.tree_regularizer) + sys.getsizeof(self.l_tree_reg) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.dt_seed) + sys.getsizeof(self.update_leaves) + sys.getsizeof(self.additional_tree_options) + sys.getsizeof(self.backend) + sys.getsizeof(self.batch_size) + sys.getsizeof(self.verbose) + sys.getsizeof(self.out_path) + sys.getsizeof(self.epochs) + sys.getsizeof(self.warmstart) + sys.getsizeof(self.tree_init_mode)
+        self_size = sys.getsizeof(self.step_size) + sys.getsizeof(self.loss) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.ensemble_regularizer) + sys.getsizeof(self.l_ensemble_reg) + sys.getsizeof(self.tree_regularizer) + sys.getsizeof(self.l_tree_reg) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.dt_seed) + sys.getsizeof(self.update_leaves) + sys.getsizeof(self.additional_tree_options) + sys.getsizeof(self.backend) + sys.getsizeof(self.batch_size) + sys.getsizeof(self.verbose) + sys.getsizeof(self.out_path) + sys.getsizeof(self.epochs) + sys.getsizeof(self.bootstrap) + sys.getsizeof(self.tree_init_mode) + sys.getsizeof(self.burnin_steps)
 
         if self.backend == "c++":
-            # model = self.model
-            # self.model = None
-            # p = pickle.dumps(self)
-            # size = sys.getsizeof(p)
-            # self.model = model
             return self_size + self.model.num_bytes()
         else:
             sk_size = 0
@@ -398,6 +413,12 @@ class Prime(ClassifierMixin, BaseEstimator):
                 p = pickle.dumps(e)
                 sk_size += sys.getsizeof(p)
             return self_size + sys.getsizeof(self.estimator_weights_) + sk_size
+
+    def estimator_weights(self):
+        if self.backend == "c++":
+            return self.model.weights()
+        else:
+            return self.estimator_weights_
 
     def num_trees(self):
         if self.backend == "c++":
@@ -433,6 +454,8 @@ class Prime(ClassifierMixin, BaseEstimator):
                 self.additional_tree_options["max_depth"],
                 self.seed,
                 self.normalize_weights,
+                self.burnin_steps,
+                self.additional_tree_options["max_features"],
                 self.loss,
                 step_size,
                 step_size_mode,
@@ -443,32 +466,6 @@ class Prime(ClassifierMixin, BaseEstimator):
                 self.tree_init_mode, 
                 tree_update_mode
             )
-
-        if self.warmstart:
-            if self.ensemble_regularizer == "hard-L0":
-                n_estimators = self.l_ensemble_reg
-            else:
-                # TODO Add a parameter for this?
-                n_estimators = 32
-
-            # TODO This can be done in parallel
-            for _ in range(n_estimators):
-                idx = np.random.choice(range(0,len(X)), replace = True, size = self.batch_size)
-                data, target = X[idx],y[idx]
-                w = 1.0 / n_estimators
-
-                if self.backend == "c++":
-                    self.model.add_tree(data, target, w)
-                else:
-                    tree = DecisionTreeClassifier(random_state=self.dt_seed, **self.additional_tree_options)
-
-                    self.dt_seed += 1
-                    tree.fit(data, target)
-                
-                    tree.tree_.value[:] = tree.tree_.value / tree.tree_.value.sum(axis=(1,2))[:,np.newaxis,np.newaxis]
-
-                    self.estimators_.append(tree)
-                    self.estimator_weights_.append(w)
         
         # TODO respect sample weights in loss
         X, y = check_X_y(X, y)
@@ -477,11 +474,14 @@ class Prime(ClassifierMixin, BaseEstimator):
         self.n_classes_ = len(self.classes_)
         self.n_outputs_ = self.n_classes_
         
+        if self.batch_size > X.shape[0]:
+            self.batch_size = X.shape[0]
+
         self.X_ = X
         self.y_ = y
         
         for epoch in range(self.epochs):
-            mini_batches = create_mini_batches(X, y, self.batch_size, True, False) 
+            mini_batches = create_mini_batches(X, y, self.batch_size, shuffle = True, with_replacement = self.bootstrap) 
 
             acc_sum = 0
             loss_sum = 0

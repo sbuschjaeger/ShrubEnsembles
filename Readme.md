@@ -9,9 +9,14 @@ Activate the conda environment
 
     conda env create -f environment.yml
     conda activate prime
-    pip insstall -e .
+    pip install -e .
 
 Have some fun with the Python code.
+
+# Compile
+
+Compiler is installed inside the enviroment. The setup script uses
+`-DCMAKE_CXX_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX`if they are set. If not, we let CMake try to figure out whats going on. This only happens on windows. 
 
 # Acknowledgements 
 

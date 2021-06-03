@@ -100,6 +100,8 @@ private:
     unsigned int const max_depth;
     unsigned long seed;
     bool const normalize_weights;
+    unsigned int const burnin_steps;
+    unsigned int const max_features;
 
     data_t step_size;
     STEP_SIZE_MODE const step_size_mode;
@@ -119,6 +121,8 @@ public:
         unsigned int max_depth = 5,
         unsigned long seed = 12345,
         bool normalize_weights = true,
+        unsigned int burnin_steps = 0,
+        unsigned int max_features = 0,
         LOSS::TYPE loss = LOSS::TYPE::MSE,
         data_t step_size = 1e-2,
         STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT,
@@ -131,6 +135,8 @@ public:
         max_depth(max_depth), 
         seed(seed), 
         normalize_weights(normalize_weights), 
+        burnin_steps(burnin_steps),
+        max_features(max_features),
         step_size(step_size), 
         step_size_mode(step_size_mode),
         loss(LOSS::from_enum(loss)), 
@@ -146,6 +152,8 @@ public:
         unsigned int max_depth = 5,
         unsigned long seed = 12345,
         bool normalize_weights = true,
+        unsigned int burnin_steps = 0,
+        unsigned int max_features = 0,
         std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss = LOSS::mse,
         std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) > loss_deriv = LOSS::mse_deriv,
         data_t step_size = 1e-2,
@@ -159,6 +167,8 @@ public:
         max_depth(max_depth), 
         seed(seed), 
         normalize_weights(normalize_weights), 
+        burnin_steps(burnin_steps),
+        max_features(max_features),
         step_size(step_size), 
         step_size_mode(step_size_mode),
         loss(loss), 
@@ -177,7 +187,7 @@ public:
 
         return tree_size + sizeof(std::vector< Tree<tree_init, tree_next, pred_t> >)
                 + sizeof(data_t) * _weights.size() + sizeof(std::vector<data_t>)
-                + sizeof(unsigned int) * 2  + sizeof(long) + sizeof(bool) + sizeof(STEP_SIZE_MODE) + sizeof(data_t) 
+                + sizeof(unsigned int) * 4  + sizeof(long) + sizeof(bool) + sizeof(STEP_SIZE_MODE) + sizeof(data_t) 
                 + 2 * sizeof(std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) >)
                 + sizeof(std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) >)
                 + sizeof(std::function< data_t(Tree<tree_init, tree_next, pred_t> const &) >)
@@ -186,7 +196,7 @@ public:
 
     void add_tree(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, data_t weight) {
         _weights.push_back(weight);
-        _trees.push_back(Tree<tree_init, tree_next, pred_t>(max_depth, n_classes, seed++, X, Y));
+        _trees.push_back(Tree<tree_init, tree_next, pred_t>(max_depth, n_classes, max_features, seed++, X, Y));
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
@@ -200,49 +210,56 @@ public:
         }
 
         std::vector<std::vector<std::vector<data_t>>> all_proba(_trees.size());
-        std::vector<std::vector<data_t>> output;
-
         if (_trees.size() > 0) {
             for (unsigned int i = 0; i < _trees.size(); ++i) {
                 all_proba[i] = _trees[i].predict_proba(X);
             }
-            output = weighted_sum_first_dim(all_proba, _weights);
-        } else {
+        } 
+        /*else {
             std::vector<std::vector<data_t>> tmp(X.size());
             for (unsigned int i = 0; i < tmp.size(); ++i) {
                 tmp[i] = std::vector<data_t>(n_classes, 1.0 / n_classes);
             }
             output = tmp;
             all_proba.push_back(tmp);
-        }
+        }*/
 
-        //std::vector<std::vector<data_t>> losses = loss(output, Y);
-        std::vector<std::vector<data_t>> losses_deriv = loss_deriv(output, Y);
+        for (unsigned int j = 0; j < burnin_steps + 1; ++j) {
+            std::vector<std::vector<data_t>> output;
+            output = weighted_sum_first_dim(all_proba, _weights);
+            // if (_trees.size() > 0) {
+            //     output = weighted_sum_first_dim(all_proba, _weights);
+            // } 
 
-        //data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
+            //std::vector<std::vector<data_t>> losses = loss(output, Y);
+            std::vector<std::vector<data_t>> losses_deriv = loss_deriv(output, Y);
 
-        for (unsigned int i = 0; i < _trees.size(); ++i) {
-            // The update for a single tree is cur_leaf = cur_leaf - step_size * tree_grad 
-            // where tree_grad = _weights[i] * loss_deriv
-            // Thus, _weights[i] should be be part of losses_deriv. But for simplictiy, we will 
-            // simply use _weights[i] * step_size as "step size" here
-            _trees[i].next(X, Y, losses_deriv, _weights[i] * step_size);
-        }
+            //data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
+            for (unsigned int i = 0; i < _weights.size(); ++i) {
+                
+                // If we are not in the last round of burn-in and i is the latest tree, then dont update the tree 
+                if (j < burnin_steps && i == _weights.size() - 1) continue;
 
-        for (unsigned int i = 0; i < _weights.size(); ++i) {
-            data_t dir = 0;
-            for (unsigned int j = 0; j < all_proba[i].size(); ++j) {
-                for (unsigned int k = 0; k < all_proba[i][j].size(); ++k) {
-                    dir += all_proba[i][j][k] * losses_deriv[j][k];
+                // The update for a single tree is cur_leaf = cur_leaf - step_size * tree_grad 
+                // where tree_grad = _weights[i] * loss_deriv
+                // Thus, _weights[i] should be be part of losses_deriv. But for simplictiy, we will 
+                // simply use _weights[i] * step_size as "step size" here
+                _trees[i].next(X, Y, losses_deriv, _weights[i] * step_size);
+
+                data_t dir = 0;
+                for (unsigned int j = 0; j < all_proba[i].size(); ++j) {
+                    for (unsigned int k = 0; k < all_proba[i][j].size(); ++k) {
+                        dir += all_proba[i][j][k] * losses_deriv[j][k];
+                    }
                 }
-            }
-            dir /= (X.size() * n_classes);
+                dir /= (X.size() * n_classes);
 
-            if (l_tree_reg > 0) {
-                dir += l_tree_reg * tree_regularizer(_trees[i]);
-            }
+                if (l_tree_reg > 0) {
+                    dir += l_tree_reg * tree_regularizer(_trees[i]);
+                }
 
-            _weights[i] = _weights[i] - step_size * dir;
+                _weights[i] = _weights[i] - step_size * dir;
+            }
         }
         _weights = ensemble_regularizer(_weights, l_ensemble_reg);
         

@@ -382,12 +382,14 @@ int main() {
     std::vector<unsigned int> batch_idx(X.size());
     std::iota(std::begin(batch_idx), std::end(batch_idx), 0); 
 
-    unsigned int epochs = 5;
+    unsigned int epochs = 2;
     unsigned int batch_size = 128;
 
 	unsigned int n_classes = 2;
-	unsigned int max_depth = 10;
+	unsigned int max_depth = 15;
+	unsigned int max_features = 0.5*X[0].size();
 	unsigned long seed = 12345;
+	unsigned int burnin_steps = 0;
 	bool normalize_weights = true;
 	STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT;
 	data_t step_size = 1e-2;
@@ -405,6 +407,7 @@ int main() {
 		Tree<TREE_INIT::TRAIN, TREE_NEXT::NONE, double> tree(
 			max_depth, 
 			n_classes,
+			max_features,
 			seed, 
 			X, 
 			Y
@@ -443,12 +446,13 @@ int main() {
 	
 	std::cout << "Single tree acc: " << accuracy / (epochs * X.size()) * 100.0 << std::endl;
 
-	/*
     Prime<TREE_INIT::TRAIN, TREE_NEXT::GRADIENT, double> est(
 		n_classes,
 		max_depth,
 		seed,
 		normalize_weights,
+		burnin_steps,
+		max_features,
 		loss,
 		step_size,
 		step_size_mode,
@@ -457,7 +461,7 @@ int main() {
 		tree_regularizer,
 		l_tree_reg
 	);
-    auto start = std::chrono::steady_clock::now();
+    start = std::chrono::steady_clock::now();
 
     for (unsigned int i = 0; i < epochs; ++i) {
         //std::shuffle(batch_idx.begin(), batch_idx.end(), std::default_random_engine(seed));
@@ -524,8 +528,7 @@ int main() {
         std::cout << std::endl;
     }
 
-    auto end = std::chrono::steady_clock::now();   
-    std::chrono::duration<double> runtime_seconds = end-start;
+    end = std::chrono::steady_clock::now();   
+    runtime_seconds = end-start;
     std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-	*/
 }
