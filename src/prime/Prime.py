@@ -136,7 +136,7 @@ class Prime(ClassifierMixin, BaseEstimator):
                 additional_tree_options["max_features"] = 0
 
         if batch_size is None or batch_size < 1:
-            print("WARNING: batch_size should be 2 for PyBiasedProxEnsemble for optimal performance, but was {}. Fixing it for you.".format(batch_size))
+            print("WARNING: batch_size should be greater than 2 for Prime for optimal performance, but was {}. Fixing it for you.".format(batch_size))
             batch_size = 2
 
         if ensemble_regularizer == "hard-L0" and l_ensemble_reg < 1:
