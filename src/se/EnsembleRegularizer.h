@@ -41,6 +41,15 @@ std::vector<data_t> L1_reg(std::vector<data_t> const &w, data_t scale) {
     return tmp_w;
 }
 
+std::vector<data_t> L2_reg(std::vector<data_t> const &w, data_t scale) {
+    std::vector<data_t> tmp_w(w.size());
+    for (unsigned int i = 0; i < w.size(); ++i) {
+        tmp_w[i] = 2*w[i];
+    }
+
+    return tmp_w;
+}
+
 // https://stackoverflow.com/questions/14902876/indices-of-the-k-largest-elements-in-an-unsorted-length-n-array
 std::vector<unsigned int> top_k(std::vector<data_t> const &a, unsigned int K) {
     std::vector<unsigned int> top_idx;

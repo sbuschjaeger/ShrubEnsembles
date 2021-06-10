@@ -339,6 +339,7 @@ for d in [5]:
                 bootstrap = True if T > 1 else False,
                 epochs = 5*T,
                 burnin_steps = 0,
+                l_l2_reg = 1.0,
                 verbose = False,
                 backend = "c++",
                 additional_tree_options={"tree_init_mode": "train", "max_depth": d, "max_features":0}, #

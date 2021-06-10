@@ -398,6 +398,7 @@ int main() {
 	data_t l_ensemble_reg = 32;
 	TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO;
 	data_t l_tree_reg = 0.0;
+	data_t l_l2_reg = 0.0;
 
 	auto start = std::chrono::steady_clock::now();
 	double accuracy = 0.0;
@@ -459,7 +460,8 @@ int main() {
 		ensemble_regularizer,
 		l_ensemble_reg,
 		tree_regularizer,
-		l_tree_reg
+		l_tree_reg, 
+		l_l2_reg
 	);
     start = std::chrono::steady_clock::now();
 

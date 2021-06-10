@@ -114,6 +114,7 @@ private:
     std::function< data_t(Tree<tree_init, tree_next, pred_t> const &) > tree_regularizer;
     data_t const l_tree_reg;
 
+    data_t const l_l2_reg;
 public:
 
     ShrubEnsemble(
@@ -129,7 +130,8 @@ public:
         ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::NO,
         data_t l_ensemble_reg = 0.0,
         TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO,
-        data_t l_tree_reg = 0.0
+        data_t l_tree_reg = 0.0,
+        data_t l_l2_reg = 0.0
     ) : 
         n_classes(n_classes), 
         max_depth(max_depth), 
@@ -144,7 +146,8 @@ public:
         ensemble_regularizer(ENSEMBLE_REGULARIZER::from_enum(ensemble_regularizer)), 
         l_ensemble_reg(l_ensemble_reg),
         tree_regularizer(TREE_REGULARIZER::from_enum<tree_init, tree_next, pred_t>(tree_regularizer)),
-        l_tree_reg(l_tree_reg) 
+        l_tree_reg(l_tree_reg), 
+        l_l2_reg(l_l2_reg)
     {}
 
     ShrubEnsemble(
@@ -161,7 +164,8 @@ public:
         std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) > ensemble_regularizer = ENSEMBLE_REGULARIZER::no_reg,
         data_t l_ensemble_reg = 0.0,
         std::function< data_t(Tree<tree_init, tree_next, pred_t>) const &> tree_regularizer = TREE_REGULARIZER::no_reg,
-        data_t l_tree_reg = 0.0
+        data_t l_tree_reg = 0.0,
+        data_t l_l2_reg = 0.0
     ) : 
         n_classes(n_classes), 
         max_depth(max_depth), 
@@ -176,7 +180,8 @@ public:
         ensemble_regularizer(ensemble_regularizer), 
         l_ensemble_reg(l_ensemble_reg),
         tree_regularizer(tree_regularizer),
-        l_tree_reg(l_tree_reg) 
+        l_tree_reg(l_tree_reg),
+        l_l2_reg(l_l2_reg)
     {}
 
     unsigned int num_bytes() const {
@@ -191,7 +196,7 @@ public:
                 + 2 * sizeof(std::function< std::vector<std::vector<data_t>>(std::vector<std::vector<data_t>> const &, std::vector<unsigned int> const &) >)
                 + sizeof(std::function< std::vector<data_t>(std::vector<data_t> const &, data_t scale) >)
                 + sizeof(std::function< data_t(Tree<tree_init, tree_next, pred_t> const &) >)
-                + 2 * sizeof(data_t);
+                + 3 * sizeof(data_t);
     }
 
     void add_tree(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, data_t weight) {
@@ -258,7 +263,7 @@ public:
                     dir += l_tree_reg * tree_regularizer(_trees[i]);
                 }
 
-                _weights[i] = _weights[i] - step_size * dir;
+                _weights[i] = _weights[i] - step_size * dir - step_size * l_l2_reg * _weights[i];
             }
         }
         _weights = ensemble_regularizer(_weights, l_ensemble_reg);

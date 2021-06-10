@@ -107,6 +107,7 @@ class ShrubEnsemble(ClassifierMixin, BaseEstimator):
                 tree_regularizer = None,
                 l_tree_reg = 0,
                 normalize_weights = False,
+                l_l2_reg = 0,
                 burnin_steps = 0,
                 update_leaves = False,
                 batch_size = 256,
@@ -178,6 +179,7 @@ class ShrubEnsemble(ClassifierMixin, BaseEstimator):
         self.l_ensemble_reg = l_ensemble_reg
         self.tree_regularizer = tree_regularizer
         self.l_tree_reg = l_tree_reg
+        self.l_l2_reg = l_l2_reg
         self.normalize_weights = normalize_weights
         self.estimators_ = [] # Only used if backend is python
         self.estimator_weights_ = [] # Only used if backend is python
@@ -347,7 +349,7 @@ class ShrubEnsemble(ClassifierMixin, BaseEstimator):
                 else:
                     node_deriv = 0
 
-                self.estimator_weights_ = self.estimator_weights_ - step_size*directions - step_size*node_deriv
+                self.estimator_weights_ = self.estimator_weights_ - step_size*directions - step_size*node_deriv - step_size*self.l_l2_reg*self.estimator_weights_
                 
                 # The latest tree should only receive updates in the last round of burn-in. Reset its weight here
                 if i < self.burnin_steps:
@@ -403,7 +405,7 @@ class ShrubEnsemble(ClassifierMixin, BaseEstimator):
 
 
     def num_bytes(self):
-        self_size = sys.getsizeof(self.step_size) + sys.getsizeof(self.loss) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.ensemble_regularizer) + sys.getsizeof(self.l_ensemble_reg) + sys.getsizeof(self.tree_regularizer) + sys.getsizeof(self.l_tree_reg) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.dt_seed) + sys.getsizeof(self.update_leaves) + sys.getsizeof(self.additional_tree_options) + sys.getsizeof(self.backend) + sys.getsizeof(self.batch_size) + sys.getsizeof(self.verbose) + sys.getsizeof(self.out_path) + sys.getsizeof(self.epochs) + sys.getsizeof(self.bootstrap) + sys.getsizeof(self.tree_init_mode) + sys.getsizeof(self.burnin_steps)
+        self_size = sys.getsizeof(self.step_size) + sys.getsizeof(self.loss) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.ensemble_regularizer) + sys.getsizeof(self.l_ensemble_reg) + sys.getsizeof(self.tree_regularizer) + sys.getsizeof(self.l_tree_reg) + sys.getsizeof(self.normalize_weights) + sys.getsizeof(self.dt_seed) + sys.getsizeof(self.update_leaves) + sys.getsizeof(self.additional_tree_options) + sys.getsizeof(self.backend) + sys.getsizeof(self.batch_size) + sys.getsizeof(self.verbose) + sys.getsizeof(self.out_path) + sys.getsizeof(self.epochs) + sys.getsizeof(self.bootstrap) + sys.getsizeof(self.tree_init_mode) + sys.getsizeof(self.burnin_steps) + sys.getsizeof(self.l_l2_reg)
 
         if self.backend == "c++":
             return self_size + self.model.num_bytes()
@@ -463,6 +465,7 @@ class ShrubEnsemble(ClassifierMixin, BaseEstimator):
                 float(self.l_ensemble_reg),
                 tree_regularizer,
                 float(self.l_tree_reg),
+                float(self.l_l2_reg),
                 self.tree_init_mode, 
                 tree_update_mode
             )
