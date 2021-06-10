@@ -243,7 +243,7 @@ public:
             for (unsigned int i = 0; i < _weights.size(); ++i) {
                 
                 // If we are not in the last round of burn-in and i is the latest tree, then dont update the tree 
-                if (j < burnin_steps && i == _weights.size() - 1) continue;
+                //if (j < burnin_steps && i == _weights.size() - 1) continue;
 
                 // The update for a single tree is cur_leaf = cur_leaf - step_size * tree_grad 
                 // where tree_grad = _weights[i] * loss_deriv
@@ -263,7 +263,7 @@ public:
                     dir += l_tree_reg * tree_regularizer(_trees[i]);
                 }
 
-                _weights[i] = _weights[i] - step_size * dir - step_size * l_l2_reg * _weights[i];
+                _weights[i] = _weights[i] - step_size * dir - step_size * l_l2_reg * 2 * _weights[i];
             }
         }
         _weights = ensemble_regularizer(_weights, l_ensemble_reg);

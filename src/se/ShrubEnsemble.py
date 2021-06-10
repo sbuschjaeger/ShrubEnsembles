@@ -349,7 +349,7 @@ class ShrubEnsemble(ClassifierMixin, BaseEstimator):
                 else:
                     node_deriv = 0
 
-                self.estimator_weights_ = self.estimator_weights_ - step_size*directions - step_size*node_deriv - step_size*self.l_l2_reg*self.estimator_weights_
+                self.estimator_weights_ = self.estimator_weights_ - step_size*directions - step_size*node_deriv - step_size*self.l_l2_reg*2*self.estimator_weights_
                 
                 # The latest tree should only receive updates in the last round of burn-in. Reset its weight here
                 if i < self.burnin_steps:
@@ -358,8 +358,8 @@ class ShrubEnsemble(ClassifierMixin, BaseEstimator):
                 if self.update_leaves:
                     for j, h in enumerate(self.estimators_):
                         # The latest tree should only receive updates in the last round of burn-in. Skip it here
-                        if i < self.burnin_steps and j == len(self.estimators_) - 1: 
-                            continue
+                        # if i < self.burnin_steps and j == len(self.estimators_) - 1: 
+                        #     continue
 
                         tree_grad = (self.estimator_weights_[j] * loss_deriv)[:,np.newaxis,:]
                         # find idx
