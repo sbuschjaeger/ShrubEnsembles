@@ -5,7 +5,7 @@
 #include <chrono>
 
 #include "Losses.h"
-#include "Prime.h"
+#include "ShrubEnsemble.h"
 
 /**
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
@@ -446,7 +446,7 @@ int main() {
 	
 	std::cout << "Single tree acc: " << accuracy / (epochs * X.size()) * 100.0 << std::endl;
 
-    Prime<TREE_INIT::TRAIN, TREE_NEXT::GRADIENT, double> est(
+    ShrubEnsemble<TREE_INIT::TRAIN, TREE_NEXT::GRADIENT, double> est(
 		n_classes,
 		max_depth,
 		seed,

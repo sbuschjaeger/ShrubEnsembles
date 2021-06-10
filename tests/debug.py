@@ -13,7 +13,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.tree import export_text
 
-from prime.Prime import Prime
+from se.ShrubEnsemble import ShrubEnsemble
 
 '''
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
@@ -326,7 +326,7 @@ models = {}
 for d in [5]:
     for T in [32]:
         models["CP d = {}, T = {}, leaves not updated".format(d, T)] = [
-            Prime(
+            ShrubEnsemble(
                 loss = "mse",
                 step_size = 1e-1,
                 ensemble_regularizer = "hard-L0",
@@ -347,7 +347,7 @@ for d in [5]:
         ]
 
         # models["PP d = {}, T = {}, leaves not updated".format(d, T)] = [
-        #     Prime(
+        #     ShrubEnsemble(
         #         loss = "mse",
         #         step_size = 1e-1,
         #         ensemble_regularizer = "hard-L0",

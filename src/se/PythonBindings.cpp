@@ -4,14 +4,14 @@
 #include <pybind11/operators.h>
 #include <pybind11/functional.h>
 
-#include "Prime.h"
+#include "ShrubEnsemble.h"
 
-class PrimeAdaptor {
+class ShrubEnsembleAdaptor {
 private:
-    PrimeInterface<data_t> * model = nullptr;
+    ShrubEnsembleInterface<data_t> * model = nullptr;
 
 public:
-    PrimeAdaptor(
+    ShrubEnsembleAdaptor(
         unsigned int n_classes, 
         unsigned int max_depth,
         unsigned long seed,
@@ -32,23 +32,23 @@ public:
         // Yeha this is ugly and there is probably clever way to do this with C++17/20, but this was quicker to code and it gets the job done.
         // Also, lets be real here: There is only a limited chance more init/next modes are added without much refactoring of the whole project
         if (tree_init_mode == "random" && tree_update_mode == "incremental") {
-            model = new Prime<TREE_INIT::RANDOM, TREE_NEXT::INCREMENTAL, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
+            model = new ShrubEnsemble<TREE_INIT::RANDOM, TREE_NEXT::INCREMENTAL, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
         } else if (tree_init_mode == "random" && tree_update_mode == "gradient") {
-            model = new Prime<TREE_INIT::RANDOM, TREE_NEXT::GRADIENT, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
+            model = new ShrubEnsemble<TREE_INIT::RANDOM, TREE_NEXT::GRADIENT, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
         } else if (tree_init_mode == "random" && tree_update_mode == "none") {
-            model = new Prime<TREE_INIT::RANDOM, TREE_NEXT::NONE, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
+            model = new ShrubEnsemble<TREE_INIT::RANDOM, TREE_NEXT::NONE, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
         // } else if (tree_init_mode == "fully-random" && tree_update_mode == "incremental") {
-        //     model = new Prime<TREE_INIT::FULLY_RANDOM, TREE_NEXT::INCREMENTAL, data_t>( n_classes, max_depth, seed, normalize_weights, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
+        //     model = new ShrubEnsemble<TREE_INIT::FULLY_RANDOM, TREE_NEXT::INCREMENTAL, data_t>( n_classes, max_depth, seed, normalize_weights, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
         // } else if (tree_init_mode == "fully-random" && tree_update_mode == "gradient") {
-        //     model = new Prime<TREE_INIT::FULLY_RANDOM, TREE_NEXT::GRADIENT, data_t>( n_classes, max_depth, seed, normalize_weights, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
+        //     model = new ShrubEnsemble<TREE_INIT::FULLY_RANDOM, TREE_NEXT::GRADIENT, data_t>( n_classes, max_depth, seed, normalize_weights, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
         // } else if (tree_init_mode == "fully-random" && tree_update_mode == "none") {
-        //     model = new Prime<TREE_INIT::FULLY_RANDOM, TREE_NEXT::NONE, data_t>( n_classes, max_depth, seed, normalize_weights, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
+        //     model = new ShrubEnsemble<TREE_INIT::FULLY_RANDOM, TREE_NEXT::NONE, data_t>( n_classes, max_depth, seed, normalize_weights, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
         } else if (tree_init_mode == "train" && tree_update_mode == "incremental") {
-            model = new Prime<TREE_INIT::TRAIN, TREE_NEXT::INCREMENTAL, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
+            model = new ShrubEnsemble<TREE_INIT::TRAIN, TREE_NEXT::INCREMENTAL, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
         } else if (tree_init_mode == "train" && tree_update_mode == "gradient") {
-            model = new Prime<TREE_INIT::TRAIN, TREE_NEXT::GRADIENT, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
+            model = new ShrubEnsemble<TREE_INIT::TRAIN, TREE_NEXT::GRADIENT, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
         } else if (tree_init_mode == "train" && tree_update_mode == "none") {
-            model = new Prime<TREE_INIT::TRAIN, TREE_NEXT::NONE, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
+            model = new ShrubEnsemble<TREE_INIT::TRAIN, TREE_NEXT::NONE, data_t>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, from_string(step_size_mode), ENSEMBLE_REGULARIZER::from_string(ensemble_regularizer), l_ensemble_reg, TREE_REGULARIZER::from_string(tree_regularizer), l_tree_reg );
         } else {
             throw std::runtime_error("Currently only the two tree_init_mode {random, train} and the three tree_update_mode {incremental, none, gradient} are supported for trees, but you provided a combination of " + tree_init_mode + " and " + tree_update_mode);
         }
@@ -75,7 +75,7 @@ public:
         }
     }
     
-    ~PrimeAdaptor() {
+    ~ShrubEnsembleAdaptor() {
         if (model != nullptr) {
             delete model;
         }
@@ -188,17 +188,17 @@ public:
 };
 
 namespace py = pybind11;
-PYBIND11_MODULE(CPrimeBindings, m) {
+PYBIND11_MODULE(CShrubEnsembleBindings, m) {
 
-py::class_<PrimeAdaptor>(m, "CPrimeBindings")
+py::class_<ShrubEnsembleAdaptor>(m, "CShrubEnsembleBindings")
     .def(py::init<unsigned int, unsigned int,unsigned long, bool, unsigned int, unsigned int, std::string, data_t, std::string, std::string, data_t, std::string, data_t, std::string, std::string>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("normalize_weights"), py::arg("burnin_steps"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("step_size_mode"), py::arg("ensemble_regularizer"), py::arg("l_ensemble_reg"), py::arg("tree_regularizer"), py::arg("l_tree_reg"), py::arg("tree_init_mode"), py::arg("tree_update_mode"))
-    .def ("next", &PrimeAdaptor::next, py::arg("X"), py::arg("Y"))
-    .def ("add_tree", &PrimeAdaptor::add_tree, py::arg("X"), py::arg("Y"), py::arg("weight"))
-    .def ("num_trees", &PrimeAdaptor::num_trees)
-    .def ("num_bytes", &PrimeAdaptor::num_bytes)
-    .def ("num_nodes", &PrimeAdaptor::num_nodes)
-    .def ("weights", &PrimeAdaptor::weights)
-    .def ("predict_proba", &PrimeAdaptor::predict_proba, py::arg("X")
+    .def ("next", &ShrubEnsembleAdaptor::next, py::arg("X"), py::arg("Y"))
+    .def ("add_tree", &ShrubEnsembleAdaptor::add_tree, py::arg("X"), py::arg("Y"), py::arg("weight"))
+    .def ("num_trees", &ShrubEnsembleAdaptor::num_trees)
+    .def ("num_bytes", &ShrubEnsembleAdaptor::num_bytes)
+    .def ("num_nodes", &ShrubEnsembleAdaptor::num_nodes)
+    .def ("weights", &ShrubEnsembleAdaptor::weights)
+    .def ("predict_proba", &ShrubEnsembleAdaptor::predict_proba, py::arg("X")
 );
 
 py::class_<TreeAdaptor>(m, "CTreeBindings")

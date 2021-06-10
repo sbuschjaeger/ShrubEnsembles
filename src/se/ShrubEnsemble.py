@@ -15,7 +15,7 @@ from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 
-from .CPrimeBindings import CPrimeBindings
+from .CShrubEnsembleBindings import CShrubEnsembleBindings
 
 def to_prob_simplex(x):
     if x is None or len(x) == 0:
@@ -58,7 +58,7 @@ def create_mini_batches(inputs, targets, batch_size, shuffle=False, with_replace
         yield inputs[excerpt], targets[excerpt]
 
 # TODO Add Regressor
-class Prime(ClassifierMixin, BaseEstimator):
+class ShrubEnsemble(ClassifierMixin, BaseEstimator):
     """ 
 
     Attributes
@@ -150,7 +150,7 @@ class Prime(ClassifierMixin, BaseEstimator):
             print("WARNING: You set l_ensemble_reg to 0, but choose regularizer {}.".format(ensemble_regularizer))
 
         if "random_seed" in additional_tree_options:
-            print("WARNING: You passed `random_seed` to additional_tree_options. However, the random_seed is defined internally for individual trees. You can control the random seed by setting the `seed` parameter of Prime. I am going to ignore the random_seed parameter passed to additional_tree_options")
+            print("WARNING: You passed `random_seed` to additional_tree_options. However, the random_seed is defined internally for individual trees. You can control the random seed by setting the `seed` parameter of ShrubEnsemble. I am going to ignore the random_seed parameter passed to additional_tree_options")
             del additional_tree_options["random_seed"]
 
         if isinstance(step_size, str) and step_size != "adaptive":
@@ -449,7 +449,7 @@ class Prime(ClassifierMixin, BaseEstimator):
             ensemble_regularizer = "none" if self.ensemble_regularizer is None else str(self.ensemble_regularizer)
             tree_regularizer = "none" if self.tree_regularizer is None else str(self.tree_regularizer)
 
-            self.model = CPrimeBindings(
+            self.model = CShrubEnsembleBindings(
                 len(unique_labels(y)), 
                 self.additional_tree_options["max_depth"],
                 self.seed,

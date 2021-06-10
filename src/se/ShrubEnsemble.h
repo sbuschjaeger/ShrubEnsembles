@@ -1,5 +1,5 @@
-#ifndef BIASED_PROX_ENSEMBLE_H
-#define BIASED_PROX_ENSEMBLE_H
+#ifndef SHRUB_ENSEMBLE_H
+#define SHRUB_ENSEMBLE_H
 
 #include <vector>
 #include <math.h>
@@ -70,7 +70,7 @@ std::vector<std::vector<data_t>> weighted_sum_first_dim(std::vector<std::vector<
  * @retval None
  */
 template <typename pred_t>
-class PrimeInterface {
+class ShrubEnsembleInterface {
 public:
     virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
 
@@ -86,11 +86,11 @@ public:
     
     virtual unsigned int num_nodes() const = 0;
 
-    virtual ~PrimeInterface() { }
+    virtual ~ShrubEnsembleInterface() { }
 };
 
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
-class Prime : public PrimeInterface<pred_t> {
+class ShrubEnsemble : public ShrubEnsembleInterface<pred_t> {
 
 private:
     std::vector< Tree<tree_init, tree_next, pred_t> > _trees;
@@ -116,7 +116,7 @@ private:
 
 public:
 
-    Prime(
+    ShrubEnsemble(
         unsigned int n_classes, 
         unsigned int max_depth = 5,
         unsigned long seed = 12345,
@@ -147,7 +147,7 @@ public:
         l_tree_reg(l_tree_reg) 
     {}
 
-    Prime(
+    ShrubEnsemble(
         unsigned int n_classes, 
         unsigned int max_depth = 5,
         unsigned long seed = 12345,

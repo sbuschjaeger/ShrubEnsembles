@@ -80,9 +80,9 @@ class CMakeBuild(build_ext):
         print()  # Add an empty line for cleaner output
 
 setup(
-    name='Prime',
+    name='ShrubEnsemble',
     version='0.1',
-    url='https://github.com/sbuschjaeger/prime',
+    url='https://github.com/sbuschjaeger/ShrubEnsembles',
     author='Sebastian Buschjäger',
     author_email='sebastian.buschjaeger@tu-dortmund.de',
     description='Ensemble Learning via (biased) proximal gradient descent implemented in Python and C++.',
@@ -95,7 +95,7 @@ setup(
     zip_safe=False,
     # add an extension module named 'python_cpp_example' to the package 
     # 'python_cpp_example'
-    ext_modules=[CMakeExtension('prime/CPrimeBindings')],
+    ext_modules=[CMakeExtension('se/CShrubEnsembleBindings')],
     # add custom build_ext command
     cmdclass=dict(build_ext=CMakeBuild),
     #include_package_data=True,

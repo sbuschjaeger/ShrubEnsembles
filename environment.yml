@@ -1,4 +1,4 @@
-name: prime
+name: se
 channels:
   - conda-forge
 dependencies:

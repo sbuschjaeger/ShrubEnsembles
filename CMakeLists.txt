@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
-project(CPrime LANGUAGES CXX)
+project(CShrubEnsemble LANGUAGES CXX)
 
 SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,9 +16,9 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -ffast-math -march=native -mtune=native")
 
 add_subdirectory(lib/pybind11)
 
-include_directories("src/prime")
+include_directories("src/se")
 
 add_executable(debug tests/debug.cpp)
 target_include_directories(debug PUBLIC)
 
-pybind11_add_module(CPrimeBindings src/prime/PythonBindings.cpp)
+pybind11_add_module(CShrubEnsembleBindings src/se/PythonBindings.cpp)
