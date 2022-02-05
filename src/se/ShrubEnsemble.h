@@ -54,7 +54,7 @@ std::vector<std::vector<data_t>> weighted_sum_first_dim(std::vector<std::vector<
 }
 
 auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, long seed = 1234) {
-    if (batch_size >= X.size()) {
+    if (batch_size >= X.size() || batch_size == 0) {
         batch_size = X.size();
     }
 
