@@ -7,13 +7,13 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import KFold
 
 # from sklearn.metrics import make_scorer, accuracy_score
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.tree import export_text
 
-from se.ShrubEnsemble import ShrubEnsemble
+# from se.ShrubEnsemble import ShrubEnsemble
+
+from se.OnlineShrubEnsemble import OnlineShrubEnsemble
+from se.DistributedShrubEnsemble import DistributedShrubEnsemble
 
 '''
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
@@ -323,29 +323,29 @@ is_nominal = [False, True, True, True, True, True, False, False, True, True, Tru
 n_splits = 5
 kf = KFold(n_splits=n_splits)
 models = {}
-for d in [5]:
-    for T in [32]:
-        models["CP d = {}, T = {}, leaves not updated".format(d, T)] = [
-            ShrubEnsemble(
-                loss = "mse",
-                step_size = 1e-1,
-                ensemble_regularizer = "hard-L0",
-                l_ensemble_reg = T,
-                tree_regularizer = None,
-                l_tree_reg = 0, 
-                normalize_weights = True,
-                update_leaves = False,
-                batch_size = 32, #128,
-                bootstrap = True if T > 1 else False,
-                epochs = 5*T,
-                burnin_steps = 0,
-                l_l2_reg = 1.0,
-                verbose = False,
-                backend = "c++",
-                additional_tree_options={"tree_init_mode": "train", "max_depth": d, "max_features":0}, #
-                seed=123
-            ) for _ in range(n_splits)
-        ]
+for d in [1,2,5]:
+    # for T in [32]:
+    #     models["CP d = {}, T = {}, leaves not updated".format(d, T)] = [
+    #         ShrubEnsemble(
+    #             loss = "mse",
+    #             step_size = 1e-1,
+    #             ensemble_regularizer = "hard-L0",
+    #             l_ensemble_reg = T,
+    #             tree_regularizer = None,
+    #             l_tree_reg = 0, 
+    #             normalize_weights = True,
+    #             update_leaves = False,
+    #             batch_size = 32, #128,
+    #             bootstrap = True if T > 1 else False,
+    #             epochs = 5*T,
+    #             burnin_steps = 0,
+    #             l_l2_reg = 1.0,
+    #             verbose = False,
+    #             backend = "c++",
+    #             additional_tree_options={"tree_init_mode": "train", "max_depth": d, "max_features":0}, #
+    #             seed=123
+    #         ) for _ in range(n_splits)
+    #     ]
 
         # models["PP d = {}, T = {}, leaves not updated".format(d, T)] = [
         #     ShrubEnsemble(
@@ -369,17 +369,75 @@ for d in [5]:
         # ]
     
 
+    models["OSE d = {}, T = 32".format(d)] = [
+    	OnlineShrubEnsemble(
+            max_depth = d,
+            seed = 12345,
+            normalize_weights = True,
+            burnin_steps = 0,
+            max_features = 0,
+            loss = "mse",
+            step_size = 1e-2,
+            optimizer = "sgd", 
+            tree_init_mode = "train", 
+            regularizer = "none",
+            l_reg = 0,
+            batch_size = 32, 
+            epochs = 5,
+            verbose = True,
+            out_path = None
+        ) for _ in range(n_splits)
+    ]
+
+    models["P-DSE d = {}, T = 32".format(d)] = [
+    	DistributedShrubEnsemble(
+            max_depth = d,
+            seed = 12345,
+            burnin_steps = 0,
+            max_features = 0,
+            loss = "mse",
+            step_size = 1e-2,
+            optimizer = "sgd", 
+            tree_init_mode = "train", 
+            n_trees = 32, 
+            n_rounds = 5,
+            batch_size = 32, 
+            bootstrap = True,
+            verbose = True,
+            out_path = None
+        ) for _ in range(n_splits)
+    ]
+
+    models["C-DSE d = {}, T = 32".format(d)] = [
+    	DistributedShrubEnsemble(
+            max_depth = d,
+            seed = 12345,
+            burnin_steps = 0,
+            max_features = 0,
+            loss = "mse",
+            step_size = 1e-2,
+            optimizer = "sgd", 
+            tree_init_mode = "train", 
+            n_trees = 32, 
+            n_rounds = 5,
+            batch_size = 32, 
+            bootstrap = True,
+            verbose = False,
+            out_path = None
+        ) for _ in range(n_splits)
+    ]
+
     models["DT d = {}, T = 1".format(d)] = [
     	DecisionTreeClassifier(max_depth = d,random_state=1234) for _ in range(n_splits)
     ]
         
-    models["RF d = {}, T = 6".format(d)] = [
-        RandomForestClassifier(n_estimators = 6, max_depth = d,max_features=int(np.sqrt(X.shape[1])),random_state=11) for _ in range(n_splits)
-    ]
+    # models["RF d = {}, T = 6".format(d)] = [
+    #     RandomForestClassifier(n_estimators = 6, max_depth = d,max_features=int(np.sqrt(X.shape[1])),random_state=11) for _ in range(n_splits)
+    # ]
 
-    models["RF d = {}, T = 32".format(d)] = [
-        RandomForestClassifier(n_estimators = 32, max_depth = d,max_features=int(np.sqrt(X.shape[1])),random_state=11) for _ in range(n_splits)
-    ]
+    # models["RF d = {}, T = 32".format(d)] = [
+    #     RandomForestClassifier(n_estimators = 32, max_depth = d,max_features=int(np.sqrt(X.shape[1])),random_state=11) for _ in range(n_splits)
+    # ]
         
 
 test_accuracies = {}
@@ -394,9 +452,6 @@ for i, (train_index, test_index) in enumerate(kf.split(X)):
     for m in models:
         start = time.time()
         models[m][i].fit(Xtrain,Ytrain)
-        if "CP" in m or "PP" in m:
-            print("WEIGHTS: ", models[m][i].estimator_weights())
-            print("")
         end = time.time()
 
         test_proba = models[m][i].predict_proba(Xtest)

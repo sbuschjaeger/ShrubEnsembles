@@ -13,25 +13,25 @@
 enum TREE_INIT {TRAIN, FULLY_RANDOM, RANDOM};
 enum TREE_NEXT {GRADIENT, NONE, INCREMENTAL};
 
-template <typename pred_t>
+template <typename internal_t>
 class Node {
 public:
     data_t threshold;
     unsigned int feature;
-    std::vector<pred_t> preds;
+    std::vector<internal_t> preds;
 
     unsigned int num_bytes() const {
-        return sizeof(data_t) + sizeof(unsigned int) + sizeof(pred_t) * preds.size() + sizeof(std::vector<pred_t>);
+        return sizeof(data_t) + sizeof(unsigned int) + sizeof(internal_t) * preds.size() + sizeof(std::vector<internal_t>);
     }
 
     Node(data_t threshold, unsigned int feature) : threshold(threshold), feature(feature) {}
     Node() = default;
 };
 
-template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
+template <TREE_INIT tree_init, TREE_NEXT tree_next, typename internal_t>
 class BalancedTree {
 private:
-    std::vector<Node<pred_t>> nodes;
+    std::vector<Node<internal_t>> nodes;
     unsigned int start_leaf;
     unsigned int n_nodes;
     unsigned int n_classes;
@@ -347,7 +347,7 @@ private:
             // and that each path in the tree has max_depth length. Now it might happen that XLeft / XRight is empty. 
             // In this case, best_split returns with t = 1, which means that _all_ data points are routed towards XLeft
             // and we keep on adding nodes as long as required to built the complete tree
-            nodes.push_back(Node<pred_t>(t, f));
+            nodes.push_back(Node<internal_t>(t, f));
             
             std::vector<std::vector<data_t>> XLeft, XRight;
             std::vector<unsigned int> YLeft, YRight;
@@ -368,7 +368,7 @@ private:
         while(to_expand.size() > 0) {
             auto data = to_expand.front();
             to_expand.pop();
-            Node<pred_t> n;
+            Node<internal_t> n;
             n.preds.resize(n_classes);
             std::fill(n.preds.begin(), n.preds.end(), 0);
 
@@ -428,7 +428,7 @@ public:
             node_size = nodes[0].num_bytes();
         } 
 
-        return 3 * sizeof(unsigned int) + node_size * nodes.size() + sizeof(std::vector<Node<pred_t>>) + sizeof(std::mt19937);
+        return 3 * sizeof(unsigned int) + node_size * nodes.size() + sizeof(std::vector<Node<internal_t>>) + sizeof(std::mt19937);
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad, data_t step_size) {

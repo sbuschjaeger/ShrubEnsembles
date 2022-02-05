@@ -11,26 +11,27 @@
 #include <memory>
 
 #include "Datatypes.h"
+#include "Optimizer.h"
 
 enum TREE_INIT {TRAIN, RANDOM};
-enum TREE_NEXT {GRADIENT, NONE, INCREMENTAL};
 
-template <typename pred_t>
 class Node {
 public:
     data_t threshold;
     unsigned int feature;
     unsigned int left, right;
-    std::unique_ptr<pred_t []> preds;
+    bool left_is_leaf, right_is_leaf;
 
     // I want to make sure that these objects are only moved and never copied. I expect the code below to not 
     // use any copy c'tors, but for safe measures we delete the copy constructor entirely.
-    Node(const Node&) = delete;
+    Node(const Node&) = default; //delete;
     Node() = default;
     Node(Node &&) = default;
 
+    //Node( const Node& node ) : preds( new int( *a.up_ ) ) {}
+
     unsigned int num_bytes() const {
-        return sizeof(data_t) + 3*sizeof(unsigned int) + sizeof(std::unique_ptr<pred_t []>);
+        return sizeof(*this);
     }
 };
 
@@ -39,10 +40,12 @@ public:
  * @note   
  * @retval None
  */
-template <typename pred_t>
 class TreeInterface {
 public:
-    virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad, data_t step_size) = 0;
+
+    virtual void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
+
+    //virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad) = 0;
     
     virtual std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
 
@@ -53,24 +56,40 @@ public:
     virtual ~TreeInterface() { }
 };
 
-template <TREE_INIT tree_init, TREE_NEXT tree_next, typename pred_t>
-class Tree : public TreeInterface<pred_t> {
-private:
-    std::vector<Node<pred_t>> nodes;
-    unsigned int n_classes;
-    unsigned int n_leafs;
+template <TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
+class Tree : public TreeInterface {
 
-    inline unsigned int node_index(std::vector<data_t> const &x) const {
+template <OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, TREE_INIT friend_tree_init>
+friend class ShrubEnsemble;
+
+private:
+    std::vector<Node> nodes;
+    std::vector<internal_t> leafs;
+    unsigned int n_classes;
+    unsigned int max_depth;
+    unsigned int max_features;
+    unsigned long seed;
+
+    OPTIMIZER::Optimizer<tree_opt,OPTIMIZER::STEP_SIZE_TYPE::CONSTANT> optimizer;
+
+    //unsigned int n_leafs;
+
+    inline unsigned int leaf_index(std::vector<data_t> const &x) const {
         unsigned int idx = 0;
 
-        while(nodes[idx].left != 0) { /* or nodes[idx].right != 0 */
-            auto const f = nodes[idx].feature;
-            if (x[f] <= nodes[idx].threshold) {
-                idx = nodes[idx].left;
-            } else {
-                idx = nodes[idx].right;
+        // On small datasets / batchs there might be no node fitted. In this case we only have leaf nodes
+        if (nodes.size() > 0) {
+            while(true){
+                auto const & n = nodes[idx];
+                if (x[n.feature] <= n.threshold) {
+                    idx = nodes[idx].left;
+                    if (n.left_is_leaf) break;
+                } else {
+                    idx = nodes[idx].right;
+                    if (n.right_is_leaf) break;
+                }
             }
-        }
+        } 
         return idx;
     }
 
@@ -306,23 +325,72 @@ private:
         }
     }
 
-    static void make_leaf(Node<pred_t> & node, unsigned int n_classes) {
-        if constexpr (tree_next != INCREMENTAL) {
-            // Normalize the leaf predictions to be proper probabilities (sum to 1)
-            // This does not effect the incremental learning. In this case, we store the counts and update them directly
-            data_t sum = std::accumulate(node.preds.get(), node.preds.get() + n_classes, pred_t(0.0));
-            if (sum > 0) {
-                std::transform(node.preds.get(), node.preds.get() + n_classes, node.preds.get(), [sum](auto& c){return 1.0/sum*c;});
-            } else {
-                std::fill_n(node.preds.get(), n_classes, 1.0/n_classes);
-            }
+    void make_leaf(int pid, std::vector<internal_t> &preds, bool is_left) {
+        // Normalize the leaf predictions to be proper probabilities (sum to 1)
+        data_t sum = std::accumulate(preds.begin(), preds.end(), internal_t(0.0));
+        if (sum > 0) {
+            std::transform(preds.begin(), preds.end(), preds.begin(), [sum](auto& c){return 1.0/sum*c;});
+        } else {
+            std::fill_n(preds.begin(), n_classes, internal_t(1.0 / n_classes));
         }
 
-        node.left = 0;
-        node.right = 0;
+        if (pid >= 0) {
+            auto & parent = nodes[pid];
+            if (is_left) {
+                parent.left_is_leaf = true;
+                parent.left = leafs.size();
+            } else {
+                parent.right_is_leaf = true;
+                parent.right = leafs.size();
+            }
+        }
+        leafs.insert(leafs.end(), preds.begin(), preds.end());
     }
 
-    void train(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int max_depth, unsigned int max_features, unsigned long seed) {
+public:
+
+    Tree(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed, internal_t step_size) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),optimizer(step_size) {}
+
+    unsigned int num_bytes() const {
+        unsigned int node_size = 0;
+        
+        for (auto const &n : nodes) {
+            node_size += n.num_bytes();
+        }
+
+        return sizeof(*this) + node_size + sizeof(internal_t) * leafs.size() + optimizer.num_bytes();
+    }
+
+    // void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad) {
+    //     if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+    //         std::vector<internal_t> grad(leafs.size(), 0);
+    //         for (unsigned int i = 0; i < X.size(); ++i) {
+    //             auto idx = leaf_index(X[i]);
+    //             for (unsigned int j = 0; j < n_classes; ++j) {
+    //                 grad[idx+j] += tree_grad[i][j];
+    //             }
+    //         }
+            
+    //         optimizer.step(leafs, grad);
+    //     }
+    // }
+
+    std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
+        std::vector<std::vector<data_t>> preds(X.size());
+        for (unsigned int i = 0; i < X.size(); ++i) {
+            //preds[i] = nodes[node_index(X[i])].preds;
+            //data_t const * const node_preds = nodes[node_index(X[i])].preds.get();
+            internal_t const * const node_preds = &leafs[leaf_index(X[i])]; //.preds.get();
+            preds[i].assign(node_preds, node_preds + n_classes);
+        }
+        return preds;
+    }
+
+    unsigned int num_nodes() const {
+        return nodes.size() + int(leafs.size() / n_classes);
+    }
+
+    void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         /**
          *  For my future self I tried to make the code somewhat understandable while begin reasonably fast / optimized. 
          *  For training the tree we follow the "regular" top-down approach in which we expand each node by two child nodes. The current set of 
@@ -344,6 +412,7 @@ private:
             TreeExpansion() = default;
             TreeExpansion(TreeExpansion &&) = default;
         };
+        if (max_features == 0) max_features = X[0].size();
 
         std::queue<TreeExpansion> to_expand; 
         TreeExpansion root;
@@ -362,39 +431,32 @@ private:
             auto exp = std::move(to_expand.front());
             to_expand.pop();
 
-            // To mitigate costly copy operations of the entire node, we first add it do the vector and then work
-            // on the reference via nodes[cur_idx]
-            nodes.push_back(Node<pred_t>());
-            if (exp.parent >= 0) {
-                if (exp.left) {
-                    nodes[exp.parent].left = cur_idx;
-                } else {
-                    nodes[exp.parent].right = cur_idx;
-                }
+            std::vector<internal_t> preds(n_classes, 0.0);
+            for (auto i : exp.idx) {
+                preds[Y[i]]++;
             }
-
-            nodes[cur_idx].preds = std::make_unique<pred_t []>(n_classes);
+            // nodes[cur_idx].preds = std::make_unique<internal_t []>(n_classes);
 
             // Calculate class statistics and check if its a pure node with one class (= leaf node)
-            std::fill_n(nodes[cur_idx].preds.get(), n_classes, 0);
-            for (auto i : exp.idx) {
-                nodes[cur_idx].preds.get()[Y[i]]++;
-            }
+            // std::fill_n(nodes[cur_idx].preds.get(), n_classes, 0);
+            // for (auto i : exp.idx) {
+            //     nodes[cur_idx].preds.get()[Y[i]]++;
+            // }
 
             bool is_leaf = false;
             for (unsigned int i = 0; i < n_classes; ++i) {
-                if (nodes[cur_idx].preds.get()[i] == exp.idx.size()) {
+                if (preds[i] == exp.idx.size()) {
                     is_leaf = true;
                     break;
                 }
             }
 
-            if (is_leaf || exp.depth >= max_depth) {
+            if (is_leaf || (max_depth > 0 && exp.depth >= max_depth)) {
                 // Either this node is pure or we reached the max_depth
                 // Thus we make this node a leaf and stop building this sub-tree
-                make_leaf(nodes[cur_idx], n_classes);
-                n_leafs++;
+                this->make_leaf(exp.parent, preds, exp.left);
             } else {
+            
                 // Compute a suitable split
                 std::optional<std::pair<data_t, unsigned int>> split;
                 if constexpr (tree_init == TRAIN) {
@@ -405,6 +467,19 @@ private:
 
                 if (split.has_value()) {
                     // A suitable split as been found
+                    // To mitigate costly copy operations of the entire node, we first add it do the vector and then work
+                    // on the reference via nodes[cur_idx]
+                    nodes.push_back(Node());
+                    if (exp.parent >= 0) {
+                        if (exp.left) {
+                            nodes[exp.parent].left = cur_idx;
+                            nodes[exp.parent].left_is_leaf = false;
+                        } else {
+                            nodes[exp.parent].right = cur_idx;
+                            nodes[exp.parent].right_is_leaf = false;
+                        }
+                    }
+
                     auto t = split.value().first;
                     auto f = split.value().second;
                     nodes[cur_idx].feature = f;
@@ -412,7 +487,7 @@ private:
 
                     // We do not need to store the predictions in inner nodes. Thus delete them here
                     // If we want to perform post-pruning at some point we should probably keep these statistics
-                    nodes[cur_idx].preds.reset();
+                    //nodes[cur_idx].preds.reset();
 
                     TreeExpansion exp_left;
                     exp_left.parent = cur_idx;
@@ -438,60 +513,10 @@ private:
                 } else {
                     // For some reason we were not able to find a suitable split (std::nullopt was returned). 
                     // Thus we make this node a leaf and stop building this sub-tree
-                    make_leaf(nodes[cur_idx], n_classes);
-                    n_leafs++;
+                    this->make_leaf(exp.parent, preds, exp.left);
                 }
             }
         }
-    }
-
-public:
-
-    Tree(unsigned int max_depth, unsigned int n_classes, unsigned int max_features, unsigned long seed, std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) : n_classes(n_classes), n_leafs(0) {
-        if (max_features == 0) max_features = X[0].size();
-        train(X, Y, max_depth, max_features, seed);
-    }
-
-    unsigned int num_bytes() const {
-        unsigned int node_size = 0;
-        
-        for (auto const &n : nodes) {
-            node_size += n.num_bytes();
-        }
-
-        return 2 * sizeof(unsigned int) + node_size + sizeof(pred_t) * n_classes * n_leafs;
-    }
-
-    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad, data_t step_size) {
-        if constexpr (tree_next == GRADIENT) {
-            for (unsigned int i = 0; i < X.size(); ++i) {
-                auto idx = node_index(X[i]);
-                for (unsigned int j = 0; j < n_classes; ++j) {
-                    nodes[idx].preds[j] = nodes[idx].preds[j] - step_size * tree_grad[i][j];
-                } 
-            }
-        } else if constexpr (tree_next == INCREMENTAL) {
-            for (unsigned int i = 0; i < X.size(); ++i) {
-                auto idx = node_index(X[i]);
-                nodes[idx].preds[Y[i]]++;
-            }
-        } else {
-            /* Do nothing */
-        }
-    }
-
-    std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
-        std::vector<std::vector<data_t>> preds(X.size());
-        for (unsigned int i = 0; i < X.size(); ++i) {
-            //preds[i] = nodes[node_index(X[i])].preds;
-            data_t const * const node_preds = nodes[node_index(X[i])].preds.get();
-            preds[i].assign(node_preds, node_preds + n_classes);
-        }
-        return preds;
-    }
-
-    unsigned int num_nodes() const {
-        return nodes.size();
     }
 
 };

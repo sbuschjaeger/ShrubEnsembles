@@ -12,7 +12,7 @@ endif()
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -g -Wno-unused-parameter")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -ffast-math -march=native -mtune=native")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -ffast-math -march=native -mtune=native -fopenmp")
 
 add_subdirectory(lib/pybind11)
 

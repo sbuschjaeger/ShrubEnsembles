@@ -12,16 +12,16 @@ namespace LOSS {
 
 enum class TYPE {CROSS_ENTROPY, MSE};
 
-std::vector<data_t> softmax(std::vector<data_t> const &x) {
-    std::vector<data_t> tmp(x);
-    data_t m = *std::max_element(tmp.begin(), tmp.end());
+std::vector<internal_t> softmax(std::vector<internal_t> const &x) {
+    std::vector<internal_t> tmp(x);
+    internal_t m = *std::max_element(tmp.begin(), tmp.end());
 
     for(unsigned int i = 0; i < tmp.size(); i++) {
         tmp[i] = std::exp(tmp[i] - m);
     } 
 
-    data_t sum = static_cast<data_t>(std::accumulate(tmp.begin(), tmp.end(), 0.0));
-    std::transform(tmp.begin(), tmp.end(), tmp.begin(), [sum](data_t xi){ return xi/sum; });
+    internal_t sum = static_cast<internal_t>(std::accumulate(tmp.begin(), tmp.end(), 0.0));
+    std::transform(tmp.begin(), tmp.end(), tmp.begin(), [sum](internal_t xi){ return xi/sum; });
 
     return tmp;
 }
@@ -32,8 +32,8 @@ std::vector<data_t> softmax(std::vector<data_t> const &x) {
  * @param  &X: Inputmatrix over which softmax will be applied. Assumed to have shape (batch_size, n_classes) 
  * @retval A new matrix with shape (batch_size, n_classes) where softmax has been applied to every row.
  */
-std::vector<std::vector<data_t>> softmax(std::vector<std::vector<data_t>> const &pred) {
-    std::vector<std::vector<data_t>> p(pred.size());
+std::vector<std::vector<internal_t>> softmax(std::vector<std::vector<internal_t>> const &pred) {
+    std::vector<std::vector<internal_t>> p(pred.size());
 
     for (unsigned int i = 0; i < pred.size(); ++i) {
         p[i] = softmax(pred[i]);
@@ -49,8 +49,8 @@ std::vector<std::vector<data_t>> softmax(std::vector<std::vector<data_t>> const 
  * @param  &target: The per-sample target which is assumed to be from {0,\dots,n_classes - 1}. This tensor is assumed to have a shape of (batch_size)
  * @retval The cross-entropy for each class and each sample. The return tensor has a shape of (batch_size, n_classes). 
  */
-std::vector<std::vector<data_t>> cross_entropy_deriv(std::vector<std::vector<data_t>> const &pred, std::vector<unsigned int> const &target) {
-    std::vector<std::vector<data_t>> p = softmax(pred);
+std::vector<std::vector<internal_t>> cross_entropy_deriv(std::vector<std::vector<internal_t>> const &pred, std::vector<unsigned int> const &target) {
+    std::vector<std::vector<internal_t>> p = softmax(pred);
 
     for (unsigned int i = 0; i < p.size(); ++i) {
         p[i][target[i]] -= 1.0;
@@ -66,12 +66,12 @@ std::vector<std::vector<data_t>> cross_entropy_deriv(std::vector<std::vector<dat
  * @param  &target: The per-sample target which is assumed to be from {0,\dots,n_classes - 1}. This tensor is assumed to have a shape of (batch_size)
  * @retval The first derivation of the cross-entropy for each class and each sample. The return tensor has a shape of (batch_size, n_classes). 
  */
-std::vector<std::vector<data_t>> cross_entropy(std::vector<std::vector<data_t>> const &pred, std::vector<unsigned int> const &target) {
-    std::vector<std::vector<data_t>> p = softmax(pred);
+std::vector<std::vector<internal_t>> cross_entropy(std::vector<std::vector<internal_t>> const &pred, std::vector<unsigned int> const &target) {
+    std::vector<std::vector<internal_t>> p = softmax(pred);
 
-    // std::vector<std::vector<data_t>> loss(
+    // std::vector<std::vector<internal_t>> loss(
     //     pred.size(),
-    //     std::vector<data_t>(pred[0].size(), 0)
+    //     std::vector<internal_t>(pred[0].size(), 0)
     // );
 
     for (unsigned int i = 0; i < pred.size(); ++i) {
@@ -94,10 +94,10 @@ std::vector<std::vector<data_t>> cross_entropy(std::vector<std::vector<data_t>> 
  * @param  &target: The per-sample target which is assumed to be from {0,\dots,n_classes - 1}. This tensor is assumed to have a shape of (batch_size)
  * @retval The mse loss for each class and each sample. The return tensor has a shape of (batch_size, n_classes). 
  */
-std::vector<std::vector<data_t>> mse(std::vector<std::vector<data_t>> const &pred, std::vector<unsigned int> const &target) {
-    std::vector<std::vector<data_t>> loss(
+std::vector<std::vector<internal_t>> mse(std::vector<std::vector<internal_t>> const &pred, std::vector<unsigned int> const &target) {
+    std::vector<std::vector<internal_t>> loss(
         pred.size(),
-        std::vector<data_t>(pred[0].size(), 0)
+        std::vector<internal_t>(pred[0].size(), 0)
     );
 
     for (unsigned int i = 0; i < pred.size(); ++i) {
@@ -113,10 +113,10 @@ std::vector<std::vector<data_t>> mse(std::vector<std::vector<data_t>> const &pre
     return loss;
 }
 
-std::vector<std::vector<data_t>> mse_deriv(std::vector<std::vector<data_t>> const &pred, std::vector<unsigned int> const &target) {
-    std::vector<std::vector<data_t>> loss_deriv(
+std::vector<std::vector<internal_t>> mse_deriv(std::vector<std::vector<internal_t>> const &pred, std::vector<unsigned int> const &target) {
+    std::vector<std::vector<internal_t>> loss_deriv(
         pred.size(),
-        std::vector<data_t>(pred[0].size(), 0)
+        std::vector<internal_t>(pred[0].size(), 0)
     );
 
     for (unsigned int i = 0; i < pred.size(); ++i) {

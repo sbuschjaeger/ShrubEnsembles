@@ -5,7 +5,8 @@
 #include <chrono>
 
 #include "Losses.h"
-#include "ShrubEnsemble.h"
+#include "OnlineShrubEnsemble.h"
+#include "DistributedShrubEnsemble.h"
 
 /**
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
@@ -313,19 +314,6 @@ std::vector<unsigned int> Y = {
 
 std::vector<bool> is_nominal = {false, true, true, true, true, true, false, false, true, true, true, true, false, true, false, false, false, false};
 
-std::string to_string(std::vector<std::vector<data_t>> const &data) {
-    std::string s;
-
-    for (auto &x : data) {
-        for (auto xi : x) {
-            s += std::to_string(xi) + " ";
-        }
-        s += "\n";
-    }
-
-    return s;
-}
-
 void print_progress(unsigned int cur_epoch, unsigned int max_epoch, data_t progress, std::string const & pre_str, unsigned int width = 100, unsigned int precision = 8) {
     //data_t progress = data_t(cur_idx) / data_t(max_idx);
 
@@ -356,6 +344,20 @@ void print_vector(std::vector<data_t> const &X) {
 	std::cout << std::endl;
 }
 
+// template <TREE_INIT tree_init, TREE_NEXT tree_next, typename internal_t>
+// void print_tree(Tree<tree_init,tree_next,internal_t> &tree) {
+// 	unsigned int i = 0;
+// 	for (auto & n : tree.nodes) {
+// 		if (n.left_is_leaf)
+// 		if (n.left == 0) {
+// 			std::cout << "[" << i << "] - if x[" << n.feature << "] <= " << n.threshold << "=> " << n.prediction << " else " << n.right << std::endl;
+// 		} else {
+// 			std::cout << "[" << i << "] - if x[" << n.feature << "] <= " << n.threshold  << "=> " << n.left << " else " << n.right << std::endl;
+// 		}
+// 		++i;
+// 	}
+// }
+
 std::vector<std::vector<data_t>> random_data(unsigned int N, unsigned int d) {
 	auto gen = std::bind(std::uniform_real_distribution<>(0,1),std::default_random_engine());
 	std::vector<data_t> tmp(N*d);
@@ -375,6 +377,18 @@ std::vector<unsigned int> random_targets(unsigned int N) {
 	return Y;
 }
 
+internal_t accuracy_score(std::vector<std::vector<internal_t>> const &proba, std::vector<unsigned int> const &Y) {
+
+	internal_t accuracy = 0;
+	for (unsigned int i = 0; i < proba.size(); ++i) {
+		auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
+		if (max_idx == Y[i]) {
+			accuracy++;
+		}
+	}
+	return accuracy / proba.size() * 100.0;
+}
+
 int main() {
 	// auto X = random_data(1 << 15, 128);
 	// auto Y = random_targets(1 << 15);
@@ -382,72 +396,63 @@ int main() {
     std::vector<unsigned int> batch_idx(X.size());
     std::iota(std::begin(batch_idx), std::end(batch_idx), 0); 
 
-    unsigned int epochs = 2;
-    unsigned int batch_size = 128;
+	auto n_classes = 2;
+	auto max_depth = 15; 
+	auto max_features = (int) X[0].size() / 2;
+	auto seed = 1234L;
+	auto step_size = 1e-3;
 
-	unsigned int n_classes = 2;
-	unsigned int max_depth = 15;
-	unsigned int max_features = 0.5*X[0].size();
-	unsigned long seed = 12345;
-	unsigned int burnin_steps = 0;
-	bool normalize_weights = true;
-	STEP_SIZE_MODE step_size_mode = STEP_SIZE_MODE::CONSTANT;
-	data_t step_size = 1e-2;
-	LOSS::TYPE loss = LOSS::TYPE::CROSS_ENTROPY;
-	ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::hard_L0;
-	data_t l_ensemble_reg = 32;
-	TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO;
-	data_t l_tree_reg = 0.0;
-	data_t l_l2_reg = 0.0;
+	Tree<TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::NONE> tree(n_classes,max_depth,max_features,seed,step_size);
 
 	auto start = std::chrono::steady_clock::now();
-	double accuracy = 0.0;
-	double size = 0.0;
-	double n_nodes = 0.0;
-	for (unsigned int i = 0; i < epochs; ++i) {
-		Tree<TREE_INIT::TRAIN, TREE_NEXT::NONE, double> tree(
-			max_depth, 
-			n_classes,
-			max_features,
-			seed, 
-			X, 
-			Y
-		);
-		
-		auto proba = tree.predict_proba(X);
-		for (unsigned int i = 0; i < proba.size(); ++i) {
-			auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
-			if (max_idx == Y[i]) {
-				accuracy++;
-			}
-		}
-
-		size += tree.num_bytes();
-		n_nodes += tree.num_nodes();
-	}
+	tree.fit(X,Y);
 	auto end = std::chrono::steady_clock::now();
 	std::chrono::duration<double> runtime_seconds = end-start;
-    std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << size / epochs << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << n_nodes / epochs << std::endl; 
-	// data_t accuracy = 0.0;
-	// auto proba = tree.predict_proba(X);
-	// for (unsigned int i = 0; i < proba.size(); ++i) {
-	// 	std::cout << proba[i][0] << " " << proba[i][1] << std::endl; 
-	// }
-	// std::cout << std::endl;
+    
+	std::cout << "=== Testing single DT ===" << std::endl;
+	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    std::cout << "Size is " << tree.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << tree.num_nodes() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(tree.predict_proba(X), Y) << std::endl;
+	std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
 
+	auto normalize_weights = true;
+	auto burnin_steps = 5;
+	auto loss = LOSS::from_string("mse");
+	auto ensemble_regularizer = ENSEMBLE_REGULARIZER::from_string("hard-L0");
+	auto l_ensemble_reg = 32;
+	auto tree_regularizer = TREE_REGULARIZER::from_string("none");
+	auto l_tree_reg = 0;
+	auto epochs = 20;
+	auto batch_size = 64;
 
-	// for (unsigned int i = 0; i < proba.size(); ++i) {
-	// 	auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
-	// 	if (max_idx == Y[i]) {
-	// 		accuracy++;
-	// 	}
-	// }
-	
-	std::cout << "Single tree acc: " << accuracy / (epochs * X.size()) * 100.0 << std::endl;
+	DistributedShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> dest(
+		n_classes,
+		max_depth,
+		seed,
+		burnin_steps,
+		max_features,
+		loss,
+		step_size,
+		l_ensemble_reg,
+		epochs,
+		batch_size, 
+		true
+	);
 
-    ShrubEnsemble<TREE_INIT::TRAIN, TREE_NEXT::GRADIENT, double> est(
+	start = std::chrono::steady_clock::now();
+	dest.fit(X,Y);
+	end = std::chrono::steady_clock::now();
+	runtime_seconds = end-start;
+    
+	std::cout << "=== Testing Distributed RF ===" << std::endl;
+	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    std::cout << "Size is " << dest.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << dest.num_nodes() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(dest.predict_proba(X), Y) << std::endl;
+	std::cout << "=== Testing Distributed RF done ===" << std::endl << std::endl;
+
+	OnlineShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> oest(
 		n_classes,
 		max_depth,
 		seed,
@@ -456,81 +461,59 @@ int main() {
 		max_features,
 		loss,
 		step_size,
-		step_size_mode,
 		ensemble_regularizer,
 		l_ensemble_reg,
 		tree_regularizer,
-		l_tree_reg, 
-		l_l2_reg
+		l_tree_reg
 	);
-    start = std::chrono::steady_clock::now();
 
+	start = std::chrono::steady_clock::now();
     for (unsigned int i = 0; i < epochs; ++i) {
-        //std::shuffle(batch_idx.begin(), batch_idx.end(), std::default_random_engine(seed));
-        
         unsigned int cnt = 0;
-        data_t loss_epoch = 0;
-        data_t nonzero_epoch = 0;
-		data_t accuracy_epoch = 0;
+        internal_t loss_epoch = 0;
+        unsigned int nonzero_epoch = 0;
+		internal_t accuracy_epoch = 0;
 
         unsigned int batch_cnt = 0;
-        while(cnt < batch_idx.size()) {
-            std::vector<unsigned int> indices;
-            for (unsigned int j = 0; j < batch_size; ++j) {
-                if (cnt >= batch_idx.size()) {
-                    break;
-                } else {
-                    indices.push_back(batch_idx[cnt]);
-                    ++cnt;
-                }
-            }
+        while(cnt < X.size()) {
+			auto cur_batch_size = std::min(static_cast<int>(X.size() - cnt), batch_size);
+			if (cur_batch_size <= 0) break;
 
-            std::vector<std::vector<data_t>> data(indices.size());
-            std::vector<unsigned int> target(indices.size());
-            for (unsigned int i = 0; i < indices.size(); ++i) {
-                data[i] = X[indices[i]];
-                target[i] = Y[indices[i]];
-            }
+			auto batch = sample_data(X, Y, cur_batch_size, false, cnt);
+            auto & data = std::get<0>(batch);
+            auto & target = std::get<1>(batch);
+			cnt += cur_batch_size;
 
-			auto proba = est.predict_proba(data);
-			for (unsigned int i = 0; i < proba.size(); ++i) {
-				auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
-				if (max_idx == target[i]) {
-					accuracy_epoch++;
-				}
-			}
-			
-            est.next(data, target);
+			auto proba = oest.predict_proba(data);
+			accuracy_epoch += accuracy_score(proba, target);
+
+            oest.next(data, target);
 			std::vector<std::vector<data_t>> losses;
 			if (loss == LOSS::TYPE::CROSS_ENTROPY) {
 				losses = LOSS::cross_entropy(proba, target);
 			} else {
 				losses = LOSS::mse(proba, target);
 			}
-			data_t loss = mean_all_dim(losses);
+			internal_t loss = mean_all_dim(losses);
 
-			// std::cout << "DATA: " << std::endl;
-			// print_matrix(data);
-			
-			// std::cout << "PROBA: " << std::endl;
-			// print_matrix(proba);
-
-			// std::cout << "WEIGHTS: " << std::endl;
-			// print_vector(est.weights());
-			// std::cout << std::endl;
-
-            nonzero_epoch += est.num_trees();
+            nonzero_epoch += oest.num_trees();
             loss_epoch += loss;
             batch_cnt++;
             std::stringstream ss;
-            ss << std::setprecision(4) << "loss: " << loss_epoch / cnt << " nonzero: " << int(nonzero_epoch / batch_cnt) << " acc " << (accuracy_epoch / cnt);
-			data_t progress = data_t(cnt) / data_t(batch_idx.size());
+            ss << std::setprecision(4) << "loss: " << loss_epoch / batch_cnt << " nonzero: " << int(nonzero_epoch / batch_cnt) << " acc " << (accuracy_epoch / batch_cnt);
+			internal_t progress = internal_t(cnt) / X.size();
             print_progress(i, epochs - 1, progress, ss.str() );
         }
         std::cout << std::endl;
     }
 
-    end = std::chrono::steady_clock::now();   
-    runtime_seconds = end-start;
-    std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    end = std::chrono::steady_clock::now();
+	runtime_seconds = end-start;
+    
+	std::cout << "=== Testing Online RF ===" << std::endl;
+	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    std::cout << "Size is " << oest.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << oest.num_nodes() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(oest.predict_proba(X), Y) << std::endl;
+	std::cout << "=== Testing Online RF done ===" << std::endl << std::endl;
 }

@@ -13,13 +13,13 @@ namespace ENSEMBLE_REGULARIZER {
 
 enum class TYPE {NO,L0,L1,hard_L0};
 
-std::vector<data_t> no_reg(std::vector<data_t> const &w, data_t scale) {
+std::vector<internal_t> no_reg(std::vector<internal_t> const &w, internal_t scale) {
     return w;
 }
 
-std::vector<data_t> L0_reg(std::vector<data_t> const &w, data_t scale) {
-    std::vector<data_t> tmp_w(w.size());
-    data_t tmp = std::sqrt(2 * scale);
+std::vector<internal_t> L0_reg(std::vector<internal_t> const &w, internal_t scale) {
+    std::vector<internal_t> tmp_w(w.size());
+    internal_t tmp = std::sqrt(2 * scale);
     for (unsigned int i = 0; i < w.size(); ++i) {
         if (std::abs(w[i]) < tmp) {
             tmp_w[i] = 0;
@@ -31,18 +31,18 @@ std::vector<data_t> L0_reg(std::vector<data_t> const &w, data_t scale) {
     return tmp_w;
 }
 
-std::vector<data_t> L1_reg(std::vector<data_t> const &w, data_t scale) {
-    std::vector<data_t> tmp_w(w.size());
+std::vector<internal_t> L1_reg(std::vector<internal_t> const &w, internal_t scale) {
+    std::vector<internal_t> tmp_w(w.size());
     for (unsigned int i = 0; i < w.size(); ++i) {
-        data_t sign = w[i] > 0 ? 1 : -1;
+        internal_t sign = w[i] > 0 ? 1 : -1;
         tmp_w[i] = sign * std::max(0.0, std::abs(w[i])  - scale);
     }
 
     return tmp_w;
 }
 
-std::vector<data_t> L2_reg(std::vector<data_t> const &w, data_t scale) {
-    std::vector<data_t> tmp_w(w.size());
+std::vector<internal_t> L2_reg(std::vector<internal_t> const &w, internal_t scale) {
+    std::vector<internal_t> tmp_w(w.size());
     for (unsigned int i = 0; i < w.size(); ++i) {
         tmp_w[i] = 2*w[i];
     }
@@ -51,16 +51,16 @@ std::vector<data_t> L2_reg(std::vector<data_t> const &w, data_t scale) {
 }
 
 // https://stackoverflow.com/questions/14902876/indices-of-the-k-largest-elements-in-an-unsorted-length-n-array
-std::vector<unsigned int> top_k(std::vector<data_t> const &a, unsigned int K) {
+std::vector<unsigned int> top_k(std::vector<internal_t> const &a, unsigned int K) {
     std::vector<unsigned int> top_idx;
-    std::priority_queue< std::pair<data_t, unsigned int>, std::vector< std::pair<data_t, unsigned int> >, std::greater <std::pair<data_t, unsigned int> > > q;
+    std::priority_queue< std::pair<internal_t, unsigned int>, std::vector< std::pair<internal_t, unsigned int> >, std::greater <std::pair<internal_t, unsigned int> > > q;
   
     for (unsigned int i = 0; i < a.size(); ++i) {
         if (q.size() < K) {
-            q.push(std::pair<data_t, unsigned int>(a[i], i));
+            q.push(std::pair<internal_t, unsigned int>(a[i], i));
         } else if (q.top().first < a[i]) {
             q.pop();
-            q.push(std::pair<data_t, unsigned int>(a[i], i));
+            q.push(std::pair<internal_t, unsigned int>(a[i], i));
         }
     }
 
@@ -72,9 +72,9 @@ std::vector<unsigned int> top_k(std::vector<data_t> const &a, unsigned int K) {
     return top_idx;
 }
 
-std::vector<data_t> hard_L0_reg(std::vector<data_t> const &w, data_t K) {
+std::vector<internal_t> hard_L0_reg(std::vector<internal_t> const &w, internal_t K) {
     std::vector<unsigned int> top_idx = top_k(w, K);
-    std::vector<data_t> tmp_w(w.size(), 0);
+    std::vector<internal_t> tmp_w(w.size(), 0);
 
     for (auto i : top_idx) {
         tmp_w[i] = w[i];
@@ -83,19 +83,19 @@ std::vector<data_t> hard_L0_reg(std::vector<data_t> const &w, data_t K) {
     return tmp_w;
 }
 
-std::vector<data_t> to_prob_simplex(std::vector<data_t> const &w) {
+std::vector<internal_t> to_prob_simplex(std::vector<internal_t> const &w) {
     if (w.size() == 0) {
         return w;
     }
 
-    std::vector<data_t> u(w);
+    std::vector<internal_t> u(w);
     std::sort(u.begin(), u.end(), std::greater<int>());
 
-    data_t u_sum = 0; 
-    data_t l = 0;
+    internal_t u_sum = 0; 
+    internal_t l = 0;
     for (unsigned int i = 0; i < w.size(); ++i) {
         u_sum += u[i];
-        data_t tmp = 1.0 / (i + 1.0) * (1.0 - u_sum);
+        internal_t tmp = 1.0 / (i + 1.0) * (1.0 - u_sum);
         if ((u[i] + tmp) > 0) {
             l = tmp;
         }
