@@ -50,7 +50,7 @@ class DistributedShrubEnsemble(ClassifierMixin, BaseEstimator):
         max_features = 0,
         loss = "mse",
         step_size = 1e-2,
-        optimizer = "mse",
+        optimizer = "sgd",
         tree_init_mode = "train",
         n_trees = 32, 
         n_rounds = 5,
@@ -68,11 +68,7 @@ class DistributedShrubEnsemble(ClassifierMixin, BaseEstimator):
 
         assert max_features >= 0, "max_features must be >= 0. Use max_features = 0 if you want to evaluated all splits. You supplied: {}".format(max_features)
 
-        assert n_rounds > 0, "Epochs should be at least 1, but you gave {}".format(n_rounds)
-
-        if batch_size is None or batch_size < 1:
-            print("WARNING: batch_size should be greater than 2 for ShrubEnsemble for optimal performance, but was {}. Fixing it for you.".format(batch_size))
-            batch_size = 2
+        # assert n_rounds > 0, "Epochs should be at least 1, but you gave {}".format(n_rounds)
 
         if step_size < 0:
             print("WARNING: You supplied a negative step size of {}. Do you want to de-optimize?".format(step_size))

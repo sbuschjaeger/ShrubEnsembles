@@ -209,7 +209,7 @@ public:
             auto s = sample_data(X, Y, batch_size, boostrap, seed+i);
             _trees[i].fit(std::get<0>(s), std::get<1>(s));
         }
-        seed++;
+        seed += n_trees;
     }
 
     void next_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size) {
@@ -220,23 +220,24 @@ public:
             auto s = sample_data(X, Y, batch_size, boostrap, seed+k);
             ses[k].update_trees(std::get<0>(s), std::get<1>(s));
         }
-        seed++;
+        seed += n_parallel;
 
         #pragma omp parallel for 
         for (unsigned int j = 0; j < _trees.size(); ++j) {
             for (unsigned int k = 0; k < ses.size(); ++k) {
-                auto & cur = ses[k];
                 if ( k == 0) {
-                    _weights[j] = 1.0 / ses.size() * cur._weights[j];
-                    _trees[j].leafs = cur._trees[j].leafs;
+                    _weights[j] = ses[k]._weights[j];
+                    _trees[j].leafs = ses[k]._trees[j].leafs;
                 } else {
-                    _weights[j] += 1.0 / ses.size() * cur._weights[j];
+                    _weights[j] += ses[k]._weights[j];
 
-                    for (unsigned int l = 0; l < cur._trees[j].leafs.size(); ++l) {
-                        _trees[j].leafs[l] += 1.0 / ses.size() * cur._trees[j].leafs[l];
+                    for (unsigned int l = 0; l < ses[k]._trees[j].leafs.size(); ++l) {
+                        _trees[j].leafs[l] += ses[k]._trees[j].leafs[l];
                     }
                 }
             }
+            _weights[j] /= n_parallel;
+            std::transform(_trees[j].leafs.begin(), _trees[j].leafs.end(), _trees[j].leafs.begin(), [n_parallel](auto& c){return 1.0/n_parallel*c;});
         }
     }
 
@@ -254,24 +255,23 @@ public:
     }
 
     void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
-        std::vector<std::vector<std::vector<internal_t>>> all_proba(_trees.size());
-        if (_trees.size() > 0) {
-            for (unsigned int i = 0; i < _trees.size(); ++i) {
-                all_proba[i] = _trees[i].predict_proba(X);
-            }
-        } 
-
         for (unsigned int s = 0; s < burnin_steps + 1; ++s) {
+            std::vector<std::vector<std::vector<internal_t>>> all_proba(_trees.size());
+            if (_trees.size() > 0) {
+                for (unsigned int i = 0; i < _trees.size(); ++i) {
+                    all_proba[i] = _trees[i].predict_proba(X);
+                }
+            } 
+
             std::vector<std::vector<internal_t>> output;
             output = weighted_sum_first_dim(all_proba, _weights);
-            // if (_trees.size() > 0) {
-            //     output = weighted_sum_first_dim(all_proba, _weights);
-            // } 
 
-            //std::vector<std::vector<data_t>> losses = loss(output, Y);
+            std::vector<std::vector<data_t>> losses = loss(output, Y);
             std::vector<std::vector<internal_t>> losses_deriv = loss_deriv(output, Y);
+            data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
+            // std::cout << _trees[0].leafs[0] << "," << _trees[0].leafs[1] << std::endl;
+            // std::cout << "loss " << reg_loss << std::endl;
 
-            //data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
             if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 #pragma omp parallel for
                 for (unsigned int i = 0; i < _weights.size(); ++i) {
@@ -287,14 +287,16 @@ public:
                     for (unsigned int k = 0; k < X.size(); ++k) {
                         auto idx = _trees[i].leaf_index(X[k]);
                         for (unsigned int j = 0; j < n_classes; ++j) {
-                            grad[idx+j] += losses_deriv[k][j] * _weights[i];
+                            // TODO WAS THIS A BUG BEFOREHAND? 
+                            grad[idx+j] += losses_deriv[k][j] * _weights[i] * 1.0 / X.size() * 1.0 / n_classes;
                         }
-                        _trees[i].optimizer.step(_trees[i].leafs, grad);
                     }
+                    _trees[i].optimizer.step(_trees[i].leafs, grad);
                 }
             }
 
             if constexpr(opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+                // std::cout << "should not happen" << std::endl;
                 std::vector<internal_t> grad(_weights.size(), 0);
 
                 #pragma omp parallel for
