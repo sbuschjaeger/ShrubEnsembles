@@ -13,6 +13,12 @@
 #include "TreeRegularizer.h"
 
 void scale(std::vector<std::vector<data_t>> &X, data_t s) {
+    /**
+     * @brief  
+     * @note   
+     * @param  j: 
+     * @retval 
+     */
     for (unsigned int j = 0; j < X.size(); ++j) {
         for (unsigned int k = 0; k < X[j].size(); ++k) {
             X[j][k] *= s;
@@ -53,8 +59,7 @@ std::vector<std::vector<data_t>> weighted_sum_first_dim(std::vector<std::vector<
     return XMean;
 }
 
-template <typename RNG>
-auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, RNG &gen) {
+auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, std::minstd_rand &gen) {
     if (batch_size >= X.size() || batch_size == 0) {
         batch_size = X.size();
     }
@@ -84,6 +89,11 @@ auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned 
     return std::make_tuple(bX, bY);
 }
 
+auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, unsigned long seed = 12345L) {
+    std::minstd_rand gen(seed);
+    return sample_data(X,Y,batch_size,bootstrap,gen);
+}
+
 template <OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, TREE_INIT tree_init>
 class ShrubEnsemble {
 
@@ -94,7 +104,6 @@ private:
     unsigned int const n_classes;
     unsigned int const max_depth;
     unsigned long seed;
-    std::default_random_engine gen;
 
     bool const normalize_weights;
     unsigned int const burnin_steps;
@@ -131,7 +140,6 @@ public:
         n_classes(n_classes), 
         max_depth(max_depth), 
         seed(seed), 
-        gen(std::default_random_engine(seed)),
         normalize_weights(normalize_weights), 
         burnin_steps(burnin_steps),
         max_features(max_features),
@@ -183,9 +191,10 @@ public:
 
         #pragma omp parallel for
         for (unsigned int i = 0; i < n_trees; ++i){
-            auto s = sample_data(X, Y, batch_size, boostrap, gen);
+            auto s = sample_data(X, Y, batch_size, boostrap, seed);
             _trees[i].fit(std::get<0>(s), std::get<1>(s));
         }
+        seed += n_trees;
     }
 
     void next_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size) {
@@ -193,9 +202,10 @@ public:
 
         #pragma omp parallel for
         for (unsigned int k = 0; k < n_parallel; ++k){
-            auto s = sample_data(X, Y, batch_size, boostrap, gen);
+            auto s = sample_data(X, Y, batch_size, boostrap, seed);
             ses[k].update_trees(std::get<0>(s), std::get<1>(s));
         }
+        seed += n_parallel;
 
         #pragma omp parallel for 
         for (unsigned int j = 0; j < _trees.size(); ++j) {
