@@ -14,39 +14,15 @@ import sys
 from sklearn.utils.validation import check_X_y
 from sklearn.base import BaseEstimator, ClassifierMixin
 
-from .CShrubEnsembleBindings import CDistributedShrubEnsembleBindings
+from .CShrubEnsembleBindings import CGAShrubEnsembleBindings
 
-# Modified from https://stackoverflow.com/questions/38157972/how-to-implement-mini-batch-gradient-descent-in-python
-def create_mini_batches(inputs, targets, batch_size, shuffle=False, with_replacement=False):
-    assert inputs.shape[0] == targets.shape[0]
-    if with_replacement:
-        assert shuffle == True
-
-    indices = np.arange(inputs.shape[0])
-    if shuffle:
-        np.random.shuffle(indices)
-
-    start_idx = 0
-    while start_idx < len(indices):
-        if not with_replacement:
-            if start_idx + batch_size > len(indices) - 1:
-                excerpt = indices[start_idx:]
-            else:
-                excerpt = indices[start_idx:start_idx + batch_size]
-        else:
-            excerpt = np.random.choice(indices, size = batch_size, replace=with_replacement)
-
-        start_idx += batch_size
-
-        yield inputs[excerpt], targets[excerpt]
 
 # TODO Add Regressor
-class DistributedShrubEnsemble(ClassifierMixin, BaseEstimator):
+class GAShrubEnsemble(ClassifierMixin, BaseEstimator):
 
     def __init__(self,
         max_depth = 5,
         seed = 12345,
-        burnin_steps = 0,
         max_features = 0,
         loss = "mse",
         step_size = 1e-2,
@@ -54,7 +30,8 @@ class DistributedShrubEnsemble(ClassifierMixin, BaseEstimator):
         tree_init_mode = "train",
         n_trees = 32, 
         n_rounds = 5,
-        batch_size = 0,
+        init_batch_size = 32,
+        n_batches = 32,
         bootstrap = True,
         verbose = False,
         out_path = None
@@ -83,14 +60,14 @@ class DistributedShrubEnsemble(ClassifierMixin, BaseEstimator):
         
         self.max_depth = max_depth
         self.seed = seed
-        self.burnin_steps = burnin_steps
         self.max_features = max_features
         self.loss = loss
         self.step_size = step_size
         self.optimizer = optimizer
         self.tree_init_mode = tree_init_mode
         self.n_trees = n_trees
-        self.batch_size = batch_size
+        self.init_batch_size = init_batch_size
+        self.n_batches = n_batches
         self.n_rounds = n_rounds
         self.verbose = verbose
         self.out_path = out_path
@@ -159,38 +136,38 @@ class DistributedShrubEnsemble(ClassifierMixin, BaseEstimator):
         self.n_classes_ = len(self.classes_)
         self.n_outputs_ = self.n_classes_
         
-        if self.batch_size > X.shape[0]:
-            self.batch_size = X.shape[0]
+        if self.init_batch_size > X.shape[0]:
+            self.init_batch_size = X.shape[0]
 
         self.X_ = X
         self.y_ = y
 
-        self.model = CDistributedShrubEnsembleBindings(
+        self.model = CGAShrubEnsembleBindings(
             len(unique_labels(y)), 
             self.max_depth,
             self.seed,
-            self.burnin_steps,
             self.max_features,
             self.loss,
             self.step_size,
             self.optimizer,
             self.tree_init_mode, 
             self.n_trees,
+            self.n_batches,
             self.n_rounds,
-            self.batch_size,
+            self.init_batch_size,
             self.bootstrap
         )
 
         if not self.verbose:
             self.model.fit(X,y)
         else: 
-            self.model.init_trees(X,y)
+            self.model.init(X,y)
 
             with tqdm(total=self.n_rounds, ncols=150, disable = not self.verbose) as pbar:
 
                 for r in range(self.n_rounds):
                     
-                    self.model.next_distributed(X,y)
+                    self.model.next(X,y)
 
                     # TODO do this on a sample?
                     output = self.predict_proba(X)

@@ -14,14 +14,14 @@
  * @note   
  * @retval None
  */
-class DistributedShrubEnsembleInterface {
+class MAShrubEnsembleInterface {
 public:
 
     virtual void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
 
-    virtual void next_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
+    virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
 
-    virtual void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
+    virtual void init(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
 
     virtual std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
     
@@ -33,11 +33,11 @@ public:
     
     virtual unsigned int num_nodes() const = 0;
 
-    virtual ~DistributedShrubEnsembleInterface() { }
+    virtual ~MAShrubEnsembleInterface() { }
 };
 
 template <OPTIMIZER::OPTIMIZER_TYPE tree_opt, TREE_INIT tree_init>
-class DistributedShrubEnsemble : public DistributedShrubEnsembleInterface, private ShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init> {
+class MAShrubEnsemble : public MAShrubEnsembleInterface, private ShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init> {
     
 private:
 
@@ -48,7 +48,7 @@ private:
 
 public:
 
-    DistributedShrubEnsemble(
+    MAShrubEnsemble(
         unsigned int n_classes, 
         unsigned int max_depth = 5,
         unsigned long seed = 12345,
@@ -74,12 +74,12 @@ public:
         ShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::fit_distributed(X,Y,n_trees,bootstrap,batch_size,n_rounds);
     }
 
-    void next_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         ShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::next_distributed(X,Y,n_trees,bootstrap,batch_size);
     }
 
 
-    void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void init(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         ShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::init_trees(X,Y,n_trees,bootstrap,batch_size);
     }
 

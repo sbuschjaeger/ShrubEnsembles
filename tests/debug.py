@@ -13,7 +13,8 @@ from sklearn.tree import DecisionTreeClassifier
 # from se.ShrubEnsemble import ShrubEnsemble
 
 from se.OnlineShrubEnsemble import OnlineShrubEnsemble
-from se.DistributedShrubEnsemble import DistributedShrubEnsemble
+from se.MAShrubEnsemble import MAShrubEnsemble
+from se.GAShrubEnsemble import GAShrubEnsemble
 
 '''
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
@@ -389,8 +390,8 @@ for d in [1,2,5]:
         ) for _ in range(n_splits)
     ]
 
-    models["P-DSE d = {}, T = 32".format(d)] = [
-    	DistributedShrubEnsemble(
+    models["MASE d = {}, T = 32".format(d)] = [
+    	MAShrubEnsemble(
             max_depth = d,
             seed = 12345,
             burnin_steps = 0,
@@ -408,11 +409,10 @@ for d in [1,2,5]:
         ) for _ in range(n_splits)
     ]
 
-    models["C-DSE d = {}, T = 32".format(d)] = [
-    	DistributedShrubEnsemble(
+    models["GASE d = {}, T = 32".format(d)] = [
+    	GAShrubEnsemble(
             max_depth = d,
             seed = 12345,
-            burnin_steps = 0,
             max_features = 0,
             loss = "mse",
             step_size = 1e-2,
@@ -420,9 +420,10 @@ for d in [1,2,5]:
             tree_init_mode = "train", 
             n_trees = 32, 
             n_rounds = 5,
-            batch_size = 32, 
+            init_batch_size = 256, 
+            n_batches = 5,
             bootstrap = True,
-            verbose = False,
+            verbose = True,
             out_path = None
         ) for _ in range(n_splits)
     ]

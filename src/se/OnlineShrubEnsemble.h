@@ -18,7 +18,7 @@ class OnlineShrubEnsembleInterface {
 public:
     virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
     
-    virtual void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size) = 0;
+    virtual void init(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size) = 0;
 
     virtual std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
     
@@ -71,7 +71,7 @@ public:
         ShrubEnsemble<opt, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_init>::next(X,Y);
     }
     
-    void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size) {
+    void init(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size) {
         ShrubEnsemble<opt, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_init>::init_trees(X,Y,n_trees,bootstrap,batch_size);
     }
 

@@ -311,15 +311,24 @@ public:
         if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
             std::vector<std::vector<std::vector<internal_t>>> all_grad(n_batches);
 
+            if (X.size() < n_batches) {
+                n_batches = X.size();
+            }
+            unsigned int b_size = X.size() / n_batches;
+
             #pragma omp parallel for
             for (unsigned int b = 0; b < n_batches; ++b) {
-                unsigned int b_size = X.size() / n_batches + 1;
+                unsigned int actual_size = b_size;
+                // The last thread works on all remaining data items if they are unevenly distributed.
+                if (b == n_batches - 1) {
+                    actual_size = X.size() - b_size * b;
+                } 
+                auto Xb = std::vector<std::vector<data_t>>(actual_size);
+                auto Yb = std::vector<unsigned int>(actual_size);
 
-                auto Xb = std::vector<std::vector<data_t>>(b_size);
-                auto Yb = std::vector<unsigned int>(b_size);
-                for (unsigned int j = b * b_size; j <  X.size(); ++j) {
-                    Xb.push_back(X[j]);
-                    Yb.push_back(Y[j]);
+                for (unsigned int j = 0; j < actual_size; ++j) {
+                    Xb[j] = X[b*b_size + j];
+                    Yb[j] = Y[b*b_size + j];
                 }
                 all_grad[b] = std::vector<std::vector<internal_t>>(_trees.size());
 
@@ -331,8 +340,8 @@ public:
                     }
                 }
                 std::vector<std::vector<std::vector<internal_t>>> all_proba(_trees.size());
-
                 for (unsigned int i = 0; i < _trees.size(); ++i) {
+                    all_proba[i] = std::vector<std::vector<internal_t>>(Xb.size());
                     for (unsigned int j = 0; j < Xb.size(); ++j) {
                         internal_t const * const node_preds = &_trees[i].leafs[idx[i][j]]; 
                         all_proba[i][j].assign(node_preds, node_preds + n_classes);
@@ -357,13 +366,13 @@ public:
             }
 
             for (unsigned int j = 0; j < _trees.size(); ++j) {
-                std::vector<internal_t> t_grad(_trees[j].size(), 0); 
+                std::vector<internal_t> t_grad(_trees[j].leafs.size(), 0); 
                 for (unsigned int i = 0; i < n_batches; ++i) {
-                    for (unsigned int l = 0; l < _trees[j].leafs.size(); ++l) {
-                        _trees[j].leafs[l] += all_grad[i][j][l];
+                    for (unsigned int l = 0; l < t_grad.size(); ++l) {
+                        t_grad[l] += all_grad[i][j][l];
                     }
-                    std::transform(_trees[j].leafs.begin(), _trees[j].leafs.end(), _trees[j].leafs.begin(), [n_batches](auto& c){return 1.0/n_batches*c;});
                 }
+                std::transform(t_grad.begin(), t_grad.end(), t_grad.begin(), [n_batches](auto& c){return 1.0/n_batches*c;});
                 _trees[j].optimizer.step(_trees[j].leafs, t_grad);
             }
         }
@@ -373,7 +382,7 @@ public:
         init_trees(X, Y, n_trees, bootstrap, batch_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
-            next_gd(X,Y,n_batches);
+            //next_gd(X,Y,n_batches);
             if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 // TODO also skip if ensemble_regularizer is NO
                 prune();

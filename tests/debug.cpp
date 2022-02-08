@@ -6,7 +6,8 @@
 
 #include "Losses.h"
 #include "OnlineShrubEnsemble.h"
-#include "DistributedShrubEnsemble.h"
+#include "MAShrubEnsemble.h"
+#include "GAShrubEnsemble.h"
 
 /**
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
@@ -426,7 +427,7 @@ int main() {
 	auto epochs = 20;
 	auto batch_size = 64;
 
-	DistributedShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> dest(
+	MAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> dest(
 		n_classes,
 		max_depth,
 		seed,
@@ -445,12 +446,39 @@ int main() {
 	end = std::chrono::steady_clock::now();
 	runtime_seconds = end-start;
     
-	std::cout << "=== Testing Distributed RF ===" << std::endl;
+	std::cout << "=== Testing MA Shrubs ===" << std::endl;
 	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
     std::cout << "Size is " << dest.num_bytes() << " bytes" << std::endl; 
     std::cout << "Number of nodes was " << dest.num_nodes() << std::endl; 
 	std::cout << "Accuracy is: " << accuracy_score(dest.predict_proba(X), Y) << std::endl;
+	std::cout << "=== Testing MA RF done ===" << std::endl << std::endl;
+
+	GAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> gaest(
+		n_classes,
+		max_depth,
+		seed,
+		max_features,
+		loss,
+		step_size,
+		l_ensemble_reg,
+		8,
+		epochs,
+		batch_size, 
+		true
+	);
+
+	start = std::chrono::steady_clock::now();
+	gaest.fit(X,Y);
+	end = std::chrono::steady_clock::now();
+	runtime_seconds = end-start;
+    
+	std::cout << "=== Testing GA Shrubs ===" << std::endl;
+	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    std::cout << "Size is " << gaest.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << gaest.num_nodes() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(gaest.predict_proba(X), Y) << std::endl;
 	std::cout << "=== Testing Distributed RF done ===" << std::endl << std::endl;
+
 
 	OnlineShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> oest(
 		n_classes,
