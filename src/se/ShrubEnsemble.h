@@ -218,7 +218,8 @@ public:
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
             next_distributed(X,Y,n_trees,bootstrap,batch_size);
-            if constexpr (ensemble_regularizer != ENSEMBLE_REGULARIZER::NONE && opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+            if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+                // TODO also skip if ensemble_regularizer is NO
                 prune();
             }
         }
@@ -331,7 +332,8 @@ public:
         _trees.back().fit(X,Y);
         
         update_trees(X, Y);
-        if constexpr (ensemble_regularizer != ENSEMBLE_REGULARIZER::TYPE::NO && opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+        if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+            // TODO also skip if ensemble_regularizer is NO
             prune();
         }
     }
