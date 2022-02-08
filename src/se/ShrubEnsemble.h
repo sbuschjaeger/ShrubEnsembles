@@ -53,7 +53,8 @@ std::vector<std::vector<data_t>> weighted_sum_first_dim(std::vector<std::vector<
     return XMean;
 }
 
-auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, long seed = 1234) {
+template <typename RNG>
+auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, RNG &gen) {
     if (batch_size >= X.size() || batch_size == 0) {
         batch_size = X.size();
     }
@@ -62,7 +63,7 @@ auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned 
     std::vector<unsigned int> bY(batch_size);
 
     if (bootstrap) {
-        auto gen = std::default_random_engine(seed);
+        // auto gen = std::default_random_engine(seed);
         std::uniform_int_distribution<> dist(0, X.size()-1); 
         for (unsigned int i = 0; i < batch_size; ++i) {
             auto idx = dist(gen);
@@ -72,7 +73,8 @@ auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned 
     } else {
         std::vector<unsigned int> idx(X.size());
         std::iota(std::begin(idx), std::end(idx), 0);
-        std::shuffle(idx.begin(), idx.end(), std::default_random_engine(seed));
+        std::shuffle(idx.begin(), idx.end(), gen);
+        // std::shuffle(idx.begin(), idx.end(), std::default_random_engine(seed));
         for (unsigned int i = 0; i < batch_size; ++i) {
             bX[i] = X[idx[i]];
             bY[i] = Y[idx[i]];
@@ -92,6 +94,8 @@ private:
     unsigned int const n_classes;
     unsigned int const max_depth;
     unsigned long seed;
+    std::default_random_engine gen;
+
     bool const normalize_weights;
     unsigned int const burnin_steps;
     unsigned int const max_features;
@@ -127,6 +131,7 @@ public:
         n_classes(n_classes), 
         max_depth(max_depth), 
         seed(seed), 
+        gen(std::default_random_engine(seed)),
         normalize_weights(normalize_weights), 
         burnin_steps(burnin_steps),
         max_features(max_features),
@@ -171,17 +176,16 @@ public:
 
     void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool boostrap, unsigned int batch_size) {
         for (unsigned int i = 0; i < n_trees; ++i) {
-            _trees.push_back(Tree<tree_init, tree_opt>(n_classes, max_depth, max_features, seed, step_size));
-            seed++;
+            _trees.push_back(Tree<tree_init, tree_opt>(n_classes, max_depth, max_features, seed+i, step_size));
             _weights.push_back(1.0 / n_trees);    
         }
+        seed += n_trees;
 
         #pragma omp parallel for
         for (unsigned int i = 0; i < n_trees; ++i){
-            auto s = sample_data(X, Y, batch_size, boostrap, seed+i);
+            auto s = sample_data(X, Y, batch_size, boostrap, gen);
             _trees[i].fit(std::get<0>(s), std::get<1>(s));
         }
-        seed += n_trees;
     }
 
     void next_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size) {
@@ -189,10 +193,9 @@ public:
 
         #pragma omp parallel for
         for (unsigned int k = 0; k < n_parallel; ++k){
-            auto s = sample_data(X, Y, batch_size, boostrap, seed+k);
+            auto s = sample_data(X, Y, batch_size, boostrap, gen);
             ses[k].update_trees(std::get<0>(s), std::get<1>(s));
         }
-        seed += n_parallel;
 
         #pragma omp parallel for 
         for (unsigned int j = 0; j < _trees.size(); ++j) {
@@ -241,6 +244,7 @@ public:
             }
         }
 
+        // Prepare all_proba vector that holds all predictions of all trees on all samples
         std::vector<std::vector<std::vector<internal_t>>> all_proba(_trees.size());
         for(unsigned int i = 0; i < all_proba.size(); ++i) {
             all_proba[i] = std::vector<std::vector<internal_t>>(X.size());
@@ -264,25 +268,21 @@ public:
             if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 #pragma omp parallel for
                 for (unsigned int i = 0; i < _weights.size(); ++i) {
-                    // The update for a single tree is cur_leaf = cur_leaf - step_size * tree_grad 
-                    // where tree_grad = _weights[i] * loss_deriv
-                    // Thus, _weights[i] should be be part of losses_deriv. But for simplictiy, we will 
-                    // simply use _weights[i] * step_size as "step size" here
-                
+                    // Compute gradient for current tree
                     std::vector<internal_t> grad(_trees[i].leafs.size(), 0);
                     for (unsigned int k = 0; k < X.size(); ++k) {
                         auto idx = _trees[i].leaf_index(X[k]);
                         for (unsigned int j = 0; j < n_classes; ++j) {
-                            // TODO WAS THIS A BUG BEFOREHAND? 
                             grad[idx+j] += losses_deriv[k][j] * _weights[i] * 1.0 / X.size() * 1.0 / n_classes;
                         }
                     }
+                    // Update current tree
                     _trees[i].optimizer.step(_trees[i].leafs, grad);
                 }
             }
 
             if constexpr(opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
-                // std::cout << "should not happen" << std::endl;
+                // Compute gradient for the weights
                 std::vector<internal_t> grad(_weights.size(), 0);
 
                 #pragma omp parallel for
@@ -295,6 +295,7 @@ public:
                     }
                     dir /= (X.size() * n_classes);
 
+                    // Add regularization if necessary
                     if (l_tree_reg > 0) {
                         for (unsigned int i = 0; i < _trees.size(); ++i) {
                             dir += l_tree_reg * tree_regularizer(_trees[i]);
@@ -303,7 +304,7 @@ public:
                     grad[i] = dir;
                 }
 
-                // std::vector<internal_t> grad(_weights.size(), dir);
+                // Perform SGD step for weights and apply prox operator afterwards
                 optimizer.step(_weights, grad);
                 _weights = ensemble_regularizer(_weights, l_ensemble_reg);
             
