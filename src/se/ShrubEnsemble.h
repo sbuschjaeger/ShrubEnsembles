@@ -82,34 +82,6 @@ auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned 
     return std::make_tuple(bX, bY);
 }
 
-// /**
-//  * @brief  The main reason why this interface exists, is because it makes class instansiation a little easier for the Pythonbindings. See Python.cpp for details.
-//  * @note   
-//  * @retval None
-//  */
-// class ShrubEnsembleInterface {
-// public:
-//     virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
-    
-//     virtual void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size) = 0;
-
-//     virtual void next_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool bootstrap, unsigned int batch_size) = 0;
-
-//     virtual void fit_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds) = 0;
-
-//     virtual std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
-    
-//     virtual std::vector<internal_t> weights() const = 0;
-
-//     virtual unsigned int num_trees() const = 0;
-
-//     virtual unsigned int num_bytes() const = 0;
-    
-//     virtual unsigned int num_nodes() const = 0;
-
-//     virtual ~ShrubEnsembleInterface() { }
-// };
-
 template <OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, TREE_INIT tree_init>
 class ShrubEnsemble {
 
@@ -246,38 +218,51 @@ public:
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
             next_distributed(X,Y,n_trees,bootstrap,batch_size);
-
-            // auto output = this->predict_proba(X);
-            // std::vector<std::vector<data_t>> losses = loss(output, Y);
-
-            prune();
+            if constexpr (ensemble_regularizer != ENSEMBLE_REGULARIZER::NONE && opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+                prune();
+            }
         }
     }
 
     void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+
+        // The structure of the trees does not change with the optimization and hence we can 
+        // pre-compute the leaf indices for each tree / sample and store them. This mitigates the
+        // somewhat "costly" iteration of the trees in each round but gives direct access to the
+        // leaf nodes
+        std::vector<std::vector<unsigned int>> idx(_trees.size());
+        
+        #pragma omp parallel for
+        for (unsigned int i = 0; i < _trees.size(); ++i) {
+            idx[i].reserve(X.size());
+            for (auto const & x : X) {
+                idx[i].push_back(_trees[i].leaf_index(x));
+            }
+        }
+
+        std::vector<std::vector<std::vector<internal_t>>> all_proba(_trees.size());
+        for(unsigned int i = 0; i < all_proba.size(); ++i) {
+            all_proba[i] = std::vector<std::vector<internal_t>>(X.size());
+        }
+
         for (unsigned int s = 0; s < burnin_steps + 1; ++s) {
-            std::vector<std::vector<std::vector<internal_t>>> all_proba(_trees.size());
-            if (_trees.size() > 0) {
-                for (unsigned int i = 0; i < _trees.size(); ++i) {
-                    all_proba[i] = _trees[i].predict_proba(X);
+            // Compute the predictions for each tree / sample with the pre-computed indices.
+            #pragma omp parallel for
+            for (unsigned int i = 0; i < _trees.size(); ++i) {
+                for (unsigned int j = 0; j < X.size(); ++j) {
+                    internal_t const * const node_preds = &_trees[i].leafs[idx[i][j]]; 
+                    all_proba[i][j].assign(node_preds, node_preds + n_classes);
                 }
-            } 
+            }
 
-            std::vector<std::vector<internal_t>> output;
-            output = weighted_sum_first_dim(all_proba, _weights);
-
-            std::vector<std::vector<data_t>> losses = loss(output, Y);
+            // Compte the output and derivate of the ensmeble loss 
+            std::vector<std::vector<internal_t>> output = weighted_sum_first_dim(all_proba, _weights);
             std::vector<std::vector<internal_t>> losses_deriv = loss_deriv(output, Y);
-            data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
-            // std::cout << _trees[0].leafs[0] << "," << _trees[0].leafs[1] << std::endl;
-            // std::cout << "loss " << reg_loss << std::endl;
+            // data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
 
             if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 #pragma omp parallel for
                 for (unsigned int i = 0; i < _weights.size(); ++i) {
-                    // If we are not in the last round of burn-in and i is the latest tree, then dont update the tree 
-                    //if (j < burnin_steps && i == _weights.size() - 1) continue;
-
                     // The update for a single tree is cur_leaf = cur_leaf - step_size * tree_grad 
                     // where tree_grad = _weights[i] * loss_deriv
                     // Thus, _weights[i] should be be part of losses_deriv. But for simplictiy, we will 
@@ -346,8 +331,9 @@ public:
         _trees.back().fit(X,Y);
         
         update_trees(X, Y);
-
-        prune();
+        if constexpr (ensemble_regularizer != ENSEMBLE_REGULARIZER::TYPE::NO && opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+            prune();
+        }
     }
 
     std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
