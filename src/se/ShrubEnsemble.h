@@ -365,6 +365,7 @@ public:
                 }
             }
 
+            #pragma omp parallel for
             for (unsigned int j = 0; j < _trees.size(); ++j) {
                 std::vector<internal_t> t_grad(_trees[j].leafs.size(), 0); 
                 for (unsigned int i = 0; i < n_batches; ++i) {
@@ -382,6 +383,8 @@ public:
         init_trees(X, Y, n_trees, bootstrap, batch_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
+            auto batch = sample_data(X,Y,batch_size,bootstrap,seed++);
+
             next_gd(X,Y,n_batches);
             if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 // TODO also skip if ensemble_regularizer is NO
