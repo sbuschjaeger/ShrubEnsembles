@@ -357,7 +357,8 @@ public:
                     all_grad[b][i] = std::vector<internal_t>(_trees[i].leafs.size(), 0);
                     for (unsigned int k = 0; k < actual_size; ++k) {
                         // No need to reset loss_deriv because it will be copied anyway
-                        loss.deriv(&output[k][0], &loss_deriv[0], Y[k], n_classes);
+                        auto y = Y[b*b_size + k];
+                        loss.deriv(output[k], loss_deriv, y, n_classes);
 
                         auto lidx = idx[i][k];
                         for (unsigned int j = 0; j < n_classes; ++j) {
