@@ -3,12 +3,93 @@
 #include <sstream>
 #include <iomanip>
 #include <chrono>
+#include <functional>
 
 #include "Losses.h"
 #include "OnlineShrubEnsemble.h"
 #include "MAShrubEnsemble.h"
 #include "GAShrubEnsemble.h"
 
+
+void print_progress(unsigned int cur_epoch, unsigned int max_epoch, data_t progress, std::string const & pre_str, unsigned int width = 100, unsigned int precision = 8) {
+    //data_t progress = data_t(cur_idx) / data_t(max_idx);
+
+    std::cout << "[" << cur_epoch << "/" << max_epoch << "] " << std::setprecision(precision) << pre_str <<  " " ;
+    unsigned int pos = width * progress;
+    for (unsigned int i = 0; i < width; ++i) {
+        if (i < pos) std::cout << "█";
+        //else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << " " << int(progress * 100.0) << " %\r";
+    std::cout << std::flush;
+}
+
+void print_matrix(std::vector<std::vector<data_t>> const &X) {
+	for (auto const & Xi: X) {
+	    for (auto const & Xij : Xi) {
+	        std::cout << Xij << " ";
+	    }
+	    std::cout << std::endl;
+	}
+}
+
+void print_vector(std::vector<data_t> const &X) {
+	for (auto const & Xi: X) {
+		std::cout << Xi << " ";
+	}
+	std::cout << std::endl;
+}
+
+// template <TREE_INIT tree_init, TREE_NEXT tree_next, typename internal_t>
+// void print_tree(Tree<tree_init,tree_next,internal_t> &tree) {
+// 	unsigned int i = 0;
+// 	for (auto & n : tree.nodes) {
+// 		if (n.left_is_leaf)
+// 		if (n.left == 0) {
+// 			std::cout << "[" << i << "] - if x[" << n.feature << "] <= " << n.threshold << "=> " << n.prediction << " else " << n.right << std::endl;
+// 		} else {
+// 			std::cout << "[" << i << "] - if x[" << n.feature << "] <= " << n.threshold  << "=> " << n.left << " else " << n.right << std::endl;
+// 		}
+// 		++i;
+// 	}
+// }
+
+std::vector<std::vector<data_t>> random_data(unsigned int N, unsigned int d) {
+	auto gen = std::bind(std::uniform_real_distribution<>(0,1),std::default_random_engine());
+	std::vector<data_t> tmp(N*d);
+	std::generate(tmp.begin(), tmp.end(), gen);
+
+	std::vector<std::vector<data_t>> X(N);
+	for (unsigned int i = 0; i < N; ++i) {
+		X[i] = std::vector<data_t>(&tmp[i*d],&tmp[i*d] + d); 
+	}
+	return X;
+}
+
+std::vector<unsigned int> random_targets(unsigned int N) {
+	std::vector<unsigned int> Y(N);
+	auto gen = std::bind(std::uniform_int_distribution<>(0,1),std::default_random_engine());
+	std::generate(Y.begin(), Y.end(), gen);
+	return Y;
+}
+
+internal_t accuracy_score(std::vector<std::vector<internal_t>> const &proba, std::vector<unsigned int> const &Y) {
+
+	internal_t accuracy = 0;
+	for (unsigned int i = 0; i < proba.size(); ++i) {
+		auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
+		if (max_idx == Y[i]) {
+			accuracy++;
+		}
+	}
+	return accuracy / proba.size() * 100.0;
+}
+
+#ifdef BENCHMARK
+	std::vector<std::vector<data_t>> X = random_data(1 << 14, 32);
+	std::vector<unsigned int> Y = random_targets(1 << 14);
+#else
 /**
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
 data = [[...]]
@@ -33,9 +114,7 @@ Y = df["label"].values.astype(np.int32)
 df = df.drop("label", axis=1)
 is_nominal = (df.nunique() == 2).values
 X = df.values
-
 **/
-
 std::vector<std::vector<data_t>> X = {
 	{0.8541666666666666, 1.0, 0.0, 0.0, 0.0, 1.0, 0.339622641509434, 0.44748858447488576, 0.0, 0.0, 0.0, 1.0, 0.2900763358778625, 0.0, 0.3870967741935484, 0.5, 1.0, 0.0},
 	{0.7916666666666666, 0.0, 0.0, 0.0, 1.0, 0.0, 0.19811320754716977, 0.9999999999999998, 0.0, 0.0, 0.0, 1.0, 0.6793893129770993, 0.0, 0.25806451612903225, 0.5, 0.0, 1.0},
@@ -314,88 +393,11 @@ std::vector<unsigned int> Y = {
 };
 
 std::vector<bool> is_nominal = {false, true, true, true, true, true, false, false, true, true, true, true, false, true, false, false, false, false};
-
-void print_progress(unsigned int cur_epoch, unsigned int max_epoch, data_t progress, std::string const & pre_str, unsigned int width = 100, unsigned int precision = 8) {
-    //data_t progress = data_t(cur_idx) / data_t(max_idx);
-
-    std::cout << "[" << cur_epoch << "/" << max_epoch << "] " << std::setprecision(precision) << pre_str <<  " " ;
-    unsigned int pos = width * progress;
-    for (unsigned int i = 0; i < width; ++i) {
-        if (i < pos) std::cout << "█";
-        //else if (i == pos) std::cout << ">";
-        else std::cout << " ";
-    }
-    std::cout << " " << int(progress * 100.0) << " %\r";
-    std::cout << std::flush;
-}
-
-void print_matrix(std::vector<std::vector<data_t>> const &X) {
-	for (auto const & Xi: X) {
-	    for (auto const & Xij : Xi) {
-	        std::cout << Xij << " ";
-	    }
-	    std::cout << std::endl;
-	}
-}
-
-void print_vector(std::vector<data_t> const &X) {
-	for (auto const & Xi: X) {
-		std::cout << Xi << " ";
-	}
-	std::cout << std::endl;
-}
-
-// template <TREE_INIT tree_init, TREE_NEXT tree_next, typename internal_t>
-// void print_tree(Tree<tree_init,tree_next,internal_t> &tree) {
-// 	unsigned int i = 0;
-// 	for (auto & n : tree.nodes) {
-// 		if (n.left_is_leaf)
-// 		if (n.left == 0) {
-// 			std::cout << "[" << i << "] - if x[" << n.feature << "] <= " << n.threshold << "=> " << n.prediction << " else " << n.right << std::endl;
-// 		} else {
-// 			std::cout << "[" << i << "] - if x[" << n.feature << "] <= " << n.threshold  << "=> " << n.left << " else " << n.right << std::endl;
-// 		}
-// 		++i;
-// 	}
-// }
-
-std::vector<std::vector<data_t>> random_data(unsigned int N, unsigned int d) {
-	auto gen = std::bind(std::uniform_real_distribution<>(0,1),std::default_random_engine());
-	std::vector<data_t> tmp(N*d);
-	std::generate(tmp.begin(), tmp.end(), gen);
-
-	std::vector<std::vector<data_t>> X(N);
-	for (unsigned int i = 0; i < N; ++i) {
-		X[i] = std::vector<data_t>(&tmp[i*d],&tmp[i*d] + d); 
-	}
-	return X;
-}
-
-std::vector<unsigned int> random_targets(unsigned int N) {
-	std::vector<unsigned int> Y(N);
-	auto gen = std::bind(std::uniform_int_distribution<>(0,1),std::default_random_engine());
-	std::generate(Y.begin(), Y.end(), gen);
-	return Y;
-}
-
-internal_t accuracy_score(std::vector<std::vector<internal_t>> const &proba, std::vector<unsigned int> const &Y) {
-
-	internal_t accuracy = 0;
-	for (unsigned int i = 0; i < proba.size(); ++i) {
-		auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
-		if (max_idx == Y[i]) {
-			accuracy++;
-		}
-	}
-	return accuracy / proba.size() * 100.0;
-}
+#endif
 
 int main() {
-	// auto X = random_data(1 << 15, 128);
-	// auto Y = random_targets(1 << 15);
-
-    std::vector<unsigned int> batch_idx(X.size());
-    std::iota(std::begin(batch_idx), std::end(batch_idx), 0); 
+	// auto X = random_data(1 << 14, 32);
+	// auto Y = random_targets(1 << 14);
 
 	auto n_classes = 2;
 	auto max_depth = 15; 
@@ -419,21 +421,19 @@ int main() {
 
 	auto normalize_weights = true;
 	auto burnin_steps = 5;
-	auto loss = LOSS::from_string("mse");
 	auto ensemble_regularizer = ENSEMBLE_REGULARIZER::from_string("hard-L0");
 	auto l_ensemble_reg = 32;
 	auto tree_regularizer = TREE_REGULARIZER::from_string("none");
 	auto l_tree_reg = 0;
 	auto epochs = 20;
-	auto batch_size = 64;
+	auto batch_size = (unsigned int)X.size() / 8;
 
-	MAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> dest(
+	MAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> dest(
 		n_classes,
 		max_depth,
 		seed,
 		burnin_steps,
 		max_features,
-		loss,
 		step_size,
 		l_ensemble_reg,
 		epochs,
@@ -453,12 +453,11 @@ int main() {
 	std::cout << "Accuracy is: " << accuracy_score(dest.predict_proba(X), Y) << std::endl;
 	std::cout << "=== Testing MA RF done ===" << std::endl << std::endl;
 
-	GAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> gaest(
+	GAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> gaest(
 		n_classes,
 		max_depth,
 		seed,
 		max_features,
-		loss,
 		step_size,
 		l_ensemble_reg,
 		8,
@@ -477,17 +476,15 @@ int main() {
     std::cout << "Size is " << gaest.num_bytes() << " bytes" << std::endl; 
     std::cout << "Number of nodes was " << gaest.num_nodes() << std::endl; 
 	std::cout << "Accuracy is: " << accuracy_score(gaest.predict_proba(X), Y) << std::endl;
-	std::cout << "=== Testing Distributed RF done ===" << std::endl << std::endl;
+	std::cout << "=== Testing GA Shrubs done ===" << std::endl << std::endl;
 
-
-	OnlineShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> oest(
+	OnlineShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> oest(
 		n_classes,
 		max_depth,
 		seed,
 		normalize_weights,
 		burnin_steps,
 		max_features,
-		loss,
 		step_size,
 		ensemble_regularizer,
 		l_ensemble_reg,
@@ -496,6 +493,8 @@ int main() {
 	);
 
 	start = std::chrono::steady_clock::now();
+	LOSS::Loss<LOSS::TYPE::MSE> mse_loss;
+
     for (unsigned int i = 0; i < epochs; ++i) {
         unsigned int cnt = 0;
         internal_t loss_epoch = 0;
@@ -504,7 +503,7 @@ int main() {
 
         unsigned int batch_cnt = 0;
         while(cnt < X.size()) {
-			auto cur_batch_size = std::min(static_cast<int>(X.size() - cnt), batch_size);
+			auto cur_batch_size = std::min(static_cast<int>(X.size() - cnt), static_cast<int>(batch_size));
 			if (cur_batch_size <= 0) break;
 
 			auto batch = sample_data(X, Y, cur_batch_size, false, cnt);
@@ -516,12 +515,7 @@ int main() {
 			accuracy_epoch += accuracy_score(proba, target);
 
             oest.next(data, target);
-			std::vector<std::vector<data_t>> losses;
-			if (loss == LOSS::TYPE::CROSS_ENTROPY) {
-				losses = LOSS::cross_entropy(proba, target);
-			} else {
-				losses = LOSS::mse(proba, target);
-			}
+			std::vector<std::vector<data_t>> losses = mse_loss.loss(proba, target);
 			internal_t loss = mean_all_dim(losses);
 
             nonzero_epoch += oest.num_trees();

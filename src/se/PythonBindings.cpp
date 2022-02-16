@@ -28,16 +28,25 @@ public:
         const std::string regularizer = "none",
         internal_t l_reg = 0
     ) { 
-        if (tree_init_mode == "random" && optimizer == "sgd") {
-            model = new OnlineShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::RANDOM>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
-        } else if (tree_init_mode == "random" && optimizer == "adam") {
-            model = new OnlineShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::RANDOM>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
-        } else if (tree_init_mode == "train" && optimizer == "sgd") {
-            model = new OnlineShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::TRAIN>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
-        } else if (tree_init_mode == "train" && optimizer == "adam") {
-            model = new OnlineShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::TRAIN>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, LOSS::from_string(loss), step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
+
+        if (tree_init_mode == "random" && optimizer == "sgd" && loss == "mse") {
+            model = new OnlineShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::RANDOM>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
+        } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "mse") {
+            model = new OnlineShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::RANDOM>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
+        } else if (tree_init_mode == "train" && optimizer == "sgd" && loss == "mse") {
+            model = new OnlineShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::TRAIN>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
+        } else if (tree_init_mode == "train" && optimizer == "adam" && loss == "mse") {
+            model = new OnlineShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::TRAIN>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
+        } else if (tree_init_mode == "random" && optimizer == "sgd" && loss == "cross-entropy") {
+            model = new OnlineShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::RANDOM>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
+        } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "cross-entropy") {
+            model = new OnlineShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::RANDOM>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
+        } else if (tree_init_mode == "train" && optimizer == "sgd" && loss == "cross-entropy") {
+            model = new OnlineShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::TRAIN>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
+        } else if (tree_init_mode == "train" && optimizer == "adam" && loss == "cross-entropy") {
+            model = new OnlineShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::TRAIN>( n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::from_string("none"), 0.0 );
         } else {
-            throw std::runtime_error("Currently only the two tree_init_mode {random, train} and the two optimizer modes {adam, sgd} are supported for Shrubes, but you provided a combination of " + tree_init_mode + " and " + optimizer);
+            throw std::runtime_error("Currently only the two tree_init_mode {random, train} and the two optimizer modes {adam, sgd} and the two losses {mse, cross-entropy} are supported for OnlineShrubEnsemble, but you provided a combination of " + tree_init_mode + " and " + optimizer + " and " + loss);
         }
     }
 
@@ -121,14 +130,22 @@ public:
         unsigned int init_batch_size = 0,
         bool bootstrap = true
     ) { 
-        if (tree_init_mode == "random" && optimizer == "sgd") {
-            model = new GAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::RANDOM>( n_classes, max_depth, seed,  max_features, LOSS::from_string(loss), step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
-        } else if (tree_init_mode == "random" && optimizer == "adam") {
-            model = new GAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::RANDOM>( n_classes, max_depth, seed,  max_features, LOSS::from_string(loss), step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
-        } else if (tree_init_mode == "train" && optimizer == "sgd") {
-            model = new GAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::TRAIN>( n_classes, max_depth, seed,  max_features, LOSS::from_string(loss), step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
-        } else if (tree_init_mode == "train" && optimizer == "adam") {
-            model = new GAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::TRAIN>( n_classes, max_depth, seed,  max_features, LOSS::from_string(loss), step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
+        if (tree_init_mode == "random" && optimizer == "sgd" && loss == "mse") {
+            model = new GAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::RANDOM>( n_classes, max_depth, seed,  max_features, step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
+        } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "mse") {
+            model = new GAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::RANDOM>( n_classes, max_depth, seed,  max_features, step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
+        } else if (tree_init_mode == "train" && optimizer == "sgd" && loss == "mse") {
+            model = new GAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::TRAIN>( n_classes, max_depth, seed,  max_features, step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
+        } else if (tree_init_mode == "train" && optimizer == "adam" && loss == "mse") {
+            model = new GAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::TRAIN>( n_classes, max_depth, seed,  max_features, step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
+        } else if (tree_init_mode == "random" && optimizer == "sgd" && loss == "cross-entropy") {
+            model = new GAShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::RANDOM>( n_classes, max_depth, seed,  max_features, step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
+        } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "cross-entropy") {
+            model = new GAShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::RANDOM>( n_classes, max_depth, seed,  max_features, step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
+        } else if (tree_init_mode == "train" && optimizer == "sgd" && loss == "cross-entropy") {
+            model = new GAShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::TRAIN>( n_classes, max_depth, seed,  max_features, step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
+        } else if (tree_init_mode == "train" && optimizer == "adam" && loss == "cross-entropy") {
+            model = new GAShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::TRAIN>( n_classes, max_depth, seed,  max_features, step_size, n_trees, n_batches, n_rounds, init_batch_size, bootstrap );
         } else {
             throw std::runtime_error("Currently only the two tree_init_mode {random, train} and the two optimizer modes {adam, sgd} are supported for Shrubes, but you provided a combination of " + tree_init_mode + " and " + optimizer);
         }
@@ -220,14 +237,22 @@ public:
         unsigned int batch_size = 0,
         bool bootstrap = true
     ) { 
-        if (tree_init_mode == "random" && optimizer == "sgd") {
-            model = new MAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::RANDOM>( n_classes, max_depth, seed, burnin_steps, max_features, LOSS::from_string(loss), step_size, n_trees, n_rounds, batch_size, bootstrap );
-        } else if (tree_init_mode == "random" && optimizer == "adam") {
-            model = new MAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::RANDOM>( n_classes, max_depth, seed, burnin_steps, max_features, LOSS::from_string(loss), step_size, n_trees, n_rounds, batch_size, bootstrap );
-        } else if (tree_init_mode == "train" && optimizer == "sgd") {
-            model = new MAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::TRAIN>( n_classes, max_depth, seed, burnin_steps, max_features, LOSS::from_string(loss), step_size, n_trees, n_rounds, batch_size, bootstrap );
-        } else if (tree_init_mode == "train" && optimizer == "adam") {
-            model = new MAShrubEnsemble<OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::TRAIN>( n_classes, max_depth, seed, burnin_steps, max_features, LOSS::from_string(loss), step_size, n_trees, n_rounds, batch_size, bootstrap );
+        if (tree_init_mode == "random" && optimizer == "sgd" && loss == "mse") {
+            model = new MAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::RANDOM>( n_classes, max_depth, seed, burnin_steps, max_features, step_size, n_trees, n_rounds, batch_size, bootstrap );
+        } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "mse") {
+            model = new MAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::RANDOM>( n_classes, max_depth, seed, burnin_steps, max_features, step_size, n_trees, n_rounds, batch_size, bootstrap );
+        } else if (tree_init_mode == "train" && optimizer == "sgd" && loss == "mse") {
+            model = new MAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::TRAIN>( n_classes, max_depth, seed, burnin_steps, max_features, step_size, n_trees, n_rounds, batch_size, bootstrap );
+        } else if (tree_init_mode == "train" && optimizer == "adam" && loss == "mse") {
+            model = new MAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::TRAIN>( n_classes, max_depth, seed, burnin_steps, max_features, step_size, n_trees, n_rounds, batch_size, bootstrap );
+        } else if (tree_init_mode == "random" && optimizer == "sgd" && loss == "cross-entropy") {
+            model = new MAShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::RANDOM>( n_classes, max_depth, seed, burnin_steps, max_features, step_size, n_trees, n_rounds, batch_size, bootstrap );
+        } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "cross-entropy") {
+            model = new MAShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::RANDOM>( n_classes, max_depth, seed, burnin_steps, max_features, step_size, n_trees, n_rounds, batch_size, bootstrap );
+        } else if (tree_init_mode == "train" && optimizer == "sgd" && loss == "cross-entropy") {
+            model = new MAShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::SGD,TREE_INIT::TRAIN>( n_classes, max_depth, seed, burnin_steps, max_features, step_size, n_trees, n_rounds, batch_size, bootstrap );
+        } else if (tree_init_mode == "train" && optimizer == "adam" && loss == "cross-entropy") {
+            model = new MAShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::ADAM,TREE_INIT::TRAIN>( n_classes, max_depth, seed, burnin_steps, max_features, step_size, n_trees, n_rounds, batch_size, bootstrap );
         } else {
             throw std::runtime_error("Currently only the two tree_init_mode {random, train} and the two optimizer modes {adam, sgd} are supported for Shrubes, but you provided a combination of " + tree_init_mode + " and " + optimizer);
         }

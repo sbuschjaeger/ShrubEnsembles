@@ -131,7 +131,7 @@ auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned 
  * @note   
  * @retval None
  */
-template <OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, TREE_INIT tree_init>
+template <LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, TREE_INIT tree_init>
 class ShrubEnsemble {
 
 private:
@@ -149,8 +149,9 @@ private:
     OPTIMIZER::Optimizer<opt, OPTIMIZER::STEP_SIZE_TYPE::CONSTANT> optimizer;
     internal_t const step_size;
 
-    std::function< std::vector<std::vector<internal_t>>(std::vector<std::vector<internal_t>> const &, std::vector<unsigned int> const &) > loss;
-    std::function< std::vector<std::vector<internal_t>>(std::vector<std::vector<internal_t>> const &, std::vector<unsigned int> const &) > loss_deriv;
+    LOSS::Loss<loss_type> loss;
+    // std::function< std::vector<std::vector<internal_t>>(std::vector<std::vector<internal_t>> const &, std::vector<unsigned int> const &) > loss;
+    // std::function< std::vector<std::vector<internal_t>>(std::vector<std::vector<internal_t>> const &, std::vector<unsigned int> const &) > loss_deriv;
 
     std::function< std::vector<internal_t>(std::vector<internal_t> const &, data_t scale) > ensemble_regularizer;
     data_t const l_ensemble_reg;
@@ -184,7 +185,7 @@ public:
         bool normalize_weights = true,
         unsigned int burnin_steps = 0,
         unsigned int max_features = 0,
-        LOSS::TYPE loss = LOSS::TYPE::MSE,
+        // LOSS::TYPE loss = LOSS::TYPE::MSE,
         internal_t step_size = 1e-2,
         ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::NO,
         internal_t l_ensemble_reg = 0.0,
@@ -199,8 +200,9 @@ public:
         max_features(max_features),
         optimizer(step_size),
         step_size(step_size),
-        loss(LOSS::from_enum(loss)), 
-        loss_deriv(LOSS::deriv_from_enum(loss)), 
+        loss(),
+        // loss(LOSS::from_enum(loss)), 
+        // loss_deriv(LOSS::deriv_from_enum(loss)), 
         ensemble_regularizer(ENSEMBLE_REGULARIZER::from_enum(ensemble_regularizer)), 
         l_ensemble_reg(l_ensemble_reg),
         tree_regularizer(TREE_REGULARIZER::from_enum<tree_init, tree_opt>(tree_regularizer)),
@@ -256,7 +258,7 @@ public:
         // Make sure to advance the random seed "properly"
         seed += n_trees;
 
-        // Do the training in parllel
+        // Do the training in parallel
         #pragma omp parallel for
         for (unsigned int i = 0; i < n_trees; ++i){
             auto s = sample_data(X, Y, batch_size, boostrap, seed + i);
@@ -267,7 +269,7 @@ public:
     }
 
     void next_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size) {
-        std::vector<ShrubEnsemble<opt, tree_opt, tree_init>> ses(_trees.size(), *this);
+        std::vector<ShrubEnsemble<loss_type, opt, tree_opt, tree_init>> ses(_trees.size(), *this);
 
         #pragma omp parallel for
         for (unsigned int k = 0; k < n_parallel; ++k){
@@ -309,6 +311,7 @@ public:
 
     void next_gd(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_batches) {
         if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+            // Put all gradients in all_grad which is populated in parallel by n_batches threads
             std::vector<std::vector<std::vector<internal_t>>> all_grad(n_batches);
 
             if (X.size() < n_batches) {
@@ -316,55 +319,57 @@ public:
             }
             unsigned int b_size = X.size() / n_batches;
 
+            // Compute the gradients in n_batches and store the aggregated gradients in all_grad for each batch
+            // After that we average the gradients in all_grad and perform the GD update. 
             #pragma omp parallel for
             for (unsigned int b = 0; b < n_batches; ++b) {
                 unsigned int actual_size = b_size;
+
                 // The last thread works on all remaining data items if they are unevenly distributed.
                 if (b == n_batches - 1) {
                     actual_size = X.size() - b_size * b;
                 } 
-                auto Xb = std::vector<std::vector<data_t>>(actual_size);
-                auto Yb = std::vector<unsigned int>(actual_size);
 
-                for (unsigned int j = 0; j < actual_size; ++j) {
-                    Xb[j] = X[b*b_size + j];
-                    Yb[j] = Y[b*b_size + j];
+                // Apply each tree and store the leaf index for each example in the current batch in idx. 
+                // Compute the ensembles output and store it in output
+                std::vector<std::vector<unsigned int>> idx(_trees.size(), std::vector<unsigned int>(actual_size));
+                std::vector<std::vector<internal_t>> output(actual_size, std::vector<internal_t> (n_classes, 0));
+                for (unsigned int i = 0; i < _trees.size(); ++i) {
+                    // idx[i].reserve(actual_size);
+                    for (unsigned int j = 0; j < actual_size; ++j) {
+                        auto const & x = X[b*b_size + j];
+                        auto lidx = _trees[i].leaf_index(x);
+                        // idx[i][j].push_back(lidx);
+
+                        idx[i][j] = lidx;
+                        for (unsigned int k = 0; k < n_classes; ++k) {
+                            output[j][k] += _weights[i] * _trees[i].leafs[lidx + k];
+                        }
+                    }
                 }
+
+                // Make sure we have enough space to access the gradients for the current batch 
                 all_grad[b] = std::vector<std::vector<internal_t>>(_trees.size());
+                std::vector<internal_t> loss_deriv(n_classes);
 
-                std::vector<std::vector<unsigned int>> idx(_trees.size());
                 for (unsigned int i = 0; i < _trees.size(); ++i) {
-                    idx[i].reserve(Xb.size());
-                    for (auto const & x : Xb) {
-                        idx[i].push_back(_trees[i].leaf_index(x));
-                    }
-                }
-                std::vector<std::vector<std::vector<internal_t>>> all_proba(_trees.size());
-                for (unsigned int i = 0; i < _trees.size(); ++i) {
-                    all_proba[i] = std::vector<std::vector<internal_t>>(Xb.size());
-                    for (unsigned int j = 0; j < Xb.size(); ++j) {
-                        internal_t const * const node_preds = &_trees[i].leafs[idx[i][j]]; 
-                        all_proba[i][j].assign(node_preds, node_preds + n_classes);
-                    }
-                }
-
-                // Compte the output and derivate of the ensmeble loss 
-                std::vector<std::vector<internal_t>> output = weighted_sum_first_dim(all_proba, _weights);
-                std::vector<std::vector<internal_t>> losses_deriv = loss_deriv(output, Yb);
-                // data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
-
-                for (unsigned int i = 0; i < _weights.size(); ++i) {
                     // Compute gradient for current tree
                     all_grad[b][i] = std::vector<internal_t>(_trees[i].leafs.size(), 0);
-                    for (unsigned int k = 0; k < Xb.size(); ++k) {
+                    for (unsigned int k = 0; k < actual_size; ++k) {
+                        // No need to reset loss_deriv because it will be copied anyway
+                        loss.deriv(&output[k][0], &loss_deriv[0], Y[k], n_classes);
+
                         auto lidx = idx[i][k];
                         for (unsigned int j = 0; j < n_classes; ++j) {
-                            all_grad[b][i][lidx+j] += losses_deriv[k][j] * _weights[i] * 1.0 / Xb.size() * 1.0 / n_classes;
+                            all_grad[b][i][lidx+j] += loss_deriv[j] * _weights[i] * 1.0 / actual_size * 1.0 / n_classes;
                         }
+                        // TODO use transform here?
                     }
                 }
             }
 
+            // All aggregated gradients are now stored in all_grad
+            // Now perform the update for each tree. 
             #pragma omp parallel for
             for (unsigned int j = 0; j < _trees.size(); ++j) {
                 std::vector<internal_t> t_grad(_trees[j].leafs.size(), 0); 
@@ -393,53 +398,60 @@ public:
         }
     }
 
-
     void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         // The structure of the trees does not change with the optimization and hence we can 
         // pre-compute the leaf indices for each tree / sample and store them. This mitigates the
         // somewhat "costly" iteration of the trees in each round but gives direct access to the
         // leaf nodes
-        std::vector<std::vector<unsigned int>> idx(_trees.size());
+        std::vector<std::vector<unsigned int>> idx(_trees.size(), std::vector<unsigned int>(X.size()));
         
         #pragma omp parallel for
         for (unsigned int i = 0; i < _trees.size(); ++i) {
-            idx[i].reserve(X.size());
-            for (auto const & x : X) {
-                idx[i].push_back(_trees[i].leaf_index(x));
+            for (unsigned int j = 0; j < X.size(); ++j) {
+                idx[i][j] = _trees[i].leaf_index(X[j]);
             }
         }
 
-        // Prepare all_proba vector that holds all predictions of all trees on all samples
-        std::vector<std::vector<std::vector<internal_t>>> all_proba(_trees.size());
-        for(unsigned int i = 0; i < all_proba.size(); ++i) {
-            all_proba[i] = std::vector<std::vector<internal_t>>(X.size());
-        }
-
+        // Store the current predictions in the output vector. 
+        std::vector<std::vector<internal_t>> output(X.size(), std::vector<internal_t> (n_classes, 0));
         for (unsigned int s = 0; s < burnin_steps + 1; ++s) {
-            // Compute the predictions for each tree / sample with the pre-computed indices.
             
+            // Reset the output vector because we "add into" it in the for loop below
+            // Compute the predictions for each tree / sample with the pre-computed indices.
+            // This can be done a bit more efficient if we would update the output vector after the gradient step
+            // instead of recomputing the entire predictions from scratch. But this is more readable and 
+            // maintainable
+            for(auto & o : output) {
+                std::fill(o.begin(), o.end(), static_cast<internal_t>(0));
+            }
+
             #pragma omp parallel for
             for (unsigned int i = 0; i < _trees.size(); ++i) {
                 for (unsigned int j = 0; j < X.size(); ++j) {
-                    internal_t const * const node_preds = &_trees[i].leafs[idx[i][j]]; 
-                    all_proba[i][j].assign(node_preds, node_preds + n_classes);
+                    auto lidx = idx[i][j];
+
+                    for (unsigned int k = 0; k < n_classes; ++k) {
+                        output[j][k] += _weights[i] * _trees[i].leafs[lidx + k];
+                    }
                 }
             }
 
-            // Compte the output and derivate of the ensmeble loss 
-            std::vector<std::vector<internal_t>> output = weighted_sum_first_dim(all_proba, _weights);
-            std::vector<std::vector<internal_t>> losses_deriv = loss_deriv(output, Y);
-            // data_t reg_loss = mean_all_dim(losses); //+ lambda * reg(w_tensor);
-
             if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+                
                 #pragma omp parallel for
                 for (unsigned int i = 0; i < _weights.size(); ++i) {
-                    // Compute gradient for current tree
+                    std::vector<internal_t> loss_deriv(n_classes, 0);
                     std::vector<internal_t> grad(_trees[i].leafs.size(), 0);
+
+                    // Compute gradient for current tree
                     for (unsigned int k = 0; k < X.size(); ++k) {
+                        
+                        // No need to reset loss_deriv because it will be copied anyway
+                        loss.deriv(&output[k][0], &loss_deriv[0], Y[k], n_classes);
+
                         auto lidx = idx[i][k];
                         for (unsigned int j = 0; j < n_classes; ++j) {
-                            grad[lidx+j] += losses_deriv[k][j] * _weights[i] * 1.0 / X.size() * 1.0 / n_classes;
+                            grad[lidx+j] += loss_deriv[j] * _weights[i] * 1.0 / X.size() * 1.0 / n_classes;
                         }
                     }
                     // Update current tree
@@ -452,22 +464,25 @@ public:
                 std::vector<internal_t> grad(_weights.size(), 0);
 
                 #pragma omp parallel for
-                for (unsigned int i = 0; i < all_proba.size(); ++i) {
+                for (unsigned int i = 0; i < _trees.size(); ++i) {
+                    std::vector<internal_t> loss_deriv(n_classes, 0);
                     internal_t dir = 0;
-                    for (unsigned int j = 0; j < all_proba[i].size(); ++j) {
-                        for (unsigned int k = 0; k < all_proba[i][j].size(); ++k) {
-                            dir += all_proba[i][j][k] * losses_deriv[j][k];
-                        }
-                    }
-                    dir /= (X.size() * n_classes);
 
-                    // Add regularization if necessary
+                    // Compute tree regularization if necessary
                     if (l_tree_reg > 0) {
-                        for (unsigned int i = 0; i < _trees.size(); ++i) {
-                            dir += l_tree_reg * tree_regularizer(_trees[i]);
+                        dir += l_tree_reg * tree_regularizer(_trees[i]);
+                    }
+
+                    // Compute gradient for tree i
+                    for (unsigned int j = 0; j < X.size(); ++j) {
+                        loss.deriv(&output[j][0], &loss_deriv[0], Y[j], n_classes);
+
+                        auto lidx = idx[i][j];
+                        for (unsigned int k = 0; k < n_classes; ++k) {
+                            dir += _trees[i].leafs[lidx + k] * loss_deriv[k];
                         }
                     }
-                    grad[i] = dir;
+                    grad[i] = dir / (X.size() * n_classes);
                 }
 
                 // Perform SGD step for weights and apply prox operator afterwards
@@ -505,8 +520,8 @@ public:
         }
     }
 
-    std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
-        std::vector<std::vector<data_t>> output; 
+    std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
+        std::vector<std::vector<internal_t>> output; 
         if (_trees.size() == 0) {
             output.resize(X.size());
             for (unsigned int i = 0; i < X.size(); ++i) {

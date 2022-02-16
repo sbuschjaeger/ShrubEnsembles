@@ -12,6 +12,7 @@
 
 #include "Datatypes.h"
 #include "Optimizer.h"
+#include "Losses.h"
 
 enum TREE_INIT {TRAIN, RANDOM};
 
@@ -59,7 +60,7 @@ public:
 template <TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
 class Tree : public TreeInterface {
 
-template <OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, TREE_INIT friend_tree_init>
+template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, TREE_INIT friend_tree_init>
 friend class ShrubEnsemble;
 
 private:
