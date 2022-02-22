@@ -101,6 +101,7 @@ public:
     unsigned int num_nodes() const {
         return ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::num_nodes();
     }
+    
 };
 
 #endif

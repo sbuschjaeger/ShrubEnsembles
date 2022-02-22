@@ -453,6 +453,7 @@ int main() {
 	std::cout << "Accuracy is: " << accuracy_score(dest.predict_proba(X), Y) << std::endl;
 	std::cout << "=== Testing MA RF done ===" << std::endl << std::endl;
 
+
 	GAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> gaest(
 		n_classes,
 		max_depth,

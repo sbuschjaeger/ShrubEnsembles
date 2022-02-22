@@ -111,6 +111,28 @@ auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned 
     return std::make_tuple(bX, bY);
 }
 
+std::vector<unsigned int> sample_indices(unsigned int n_data, unsigned int batch_size, bool bootstrap, std::minstd_rand &gen) {
+    if (batch_size >= n_data || batch_size == 0) {
+        batch_size = n_data;
+    }
+    std::vector<unsigned int> idx(batch_size);
+    if (bootstrap) {
+        std::uniform_int_distribution<> dist(0, n_data - 1); 
+        for (unsigned int i = 0; i < batch_size; ++i) {
+            idx[i] = dist(gen);
+        }
+    } else {
+        std::vector<unsigned int> _idx(n_data);
+        std::iota(std::begin(_idx), std::end(_idx), 0);
+        std::shuffle(_idx.begin(), _idx.end(), gen);
+
+        for (unsigned int i = 0; i < batch_size; ++i) {
+            idx[i] = _idx[i];
+        }
+    }
+    return idx;
+}
+
 /**
  * @brief  Samples `batch_size' data points from X and Y. If bootstrap is true, then sampling is performed with replacement. Otherwhise no replacement is used. This functions returns a tuple in which the first entry is the sampled data of type std::vector<std::vector<data_t>> and second entry is the sampled label of type  std::vector<unsigned int>
  * @note   
@@ -124,6 +146,11 @@ auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned 
 auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, unsigned long seed = 12345L) {
     std::minstd_rand gen(seed);
     return sample_data(X,Y,batch_size,bootstrap,gen);
+}
+
+std::vector<unsigned int> sample_indices(unsigned int n_data, unsigned int batch_size, bool bootstrap, unsigned long seed = 12345L) {
+    std::minstd_rand gen(seed);
+    return sample_indices(n_data,batch_size,bootstrap,gen);
 }
 
 /**
@@ -154,7 +181,7 @@ private:
     // std::function< std::vector<std::vector<internal_t>>(std::vector<std::vector<internal_t>> const &, std::vector<unsigned int> const &) > loss_deriv;
 
     std::function< std::vector<internal_t>(std::vector<internal_t> const &, data_t scale) > ensemble_regularizer;
-    data_t const l_ensemble_reg;
+    internal_t const l_ensemble_reg;
     
     std::function< internal_t(Tree<tree_init, tree_opt> const &) > tree_regularizer;
     internal_t const l_tree_reg;
@@ -261,8 +288,11 @@ public:
         // Do the training in parallel
         #pragma omp parallel for
         for (unsigned int i = 0; i < n_trees; ++i){
-            auto s = sample_data(X, Y, batch_size, boostrap, seed + i);
-            _trees[i].fit(std::get<0>(s), std::get<1>(s));
+            auto idx = sample_indices(X.size(), batch_size, boostrap, seed + i);
+            //auto s = sample_data(X, Y, batch_size, boostrap, seed + i);
+            // _trees[i].fit(std::get<0>(s), std::get<1>(s));
+            _trees[i].fit(X,Y,idx);
+
         }
         // Make sure to advance the random seed "properly"
         seed += n_trees;
@@ -273,8 +303,9 @@ public:
 
         #pragma omp parallel for
         for (unsigned int k = 0; k < n_parallel; ++k){
-            auto s = sample_data(X, Y, batch_size, boostrap, seed+k);
-            ses[k].update_trees(std::get<0>(s), std::get<1>(s));
+            auto idx = sample_indices(X.size(), batch_size, boostrap, seed + k);
+            // auto s = sample_data(X, Y, batch_size, boostrap, seed+k);
+            ses[k].update_trees(X,Y,idx);
         }
         seed += n_parallel;
 
@@ -389,8 +420,9 @@ public:
         init_trees(X, Y, n_trees, bootstrap, batch_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
-            auto batch = sample_data(X,Y,batch_size,bootstrap,seed++);
+            //auto batch = sample_data(X,Y,batch_size,bootstrap,seed++);
 
+            // TODO add sampling here? 
             next_gd(X,Y,n_batches);
             if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 // TODO also skip if ensemble_regularizer is NO
@@ -400,21 +432,29 @@ public:
     }
 
     void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+        std::vector<unsigned int> idx(X.size());
+        // TODO idx is not required here and takes some space. Can be optimized away
+        std::iota(std::begin(idx), std::end(idx), 0);
+        this->update_trees(X,Y,idx); 
+    }
+
+    void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> &data_idx) {
         // The structure of the trees does not change with the optimization and hence we can 
         // pre-compute the leaf indices for each tree / sample and store them. This mitigates the
         // somewhat "costly" iteration of the trees in each round but gives direct access to the
         // leaf nodes
-        std::vector<std::vector<unsigned int>> idx(_trees.size(), std::vector<unsigned int>(X.size()));
+        unsigned int n_data = data_idx.size();
+        std::vector<std::vector<unsigned int>> leaf_idx(_trees.size(), std::vector<unsigned int>(n_data));
         
         #pragma omp parallel for
         for (unsigned int i = 0; i < _trees.size(); ++i) {
-            for (unsigned int j = 0; j < X.size(); ++j) {
-                idx[i][j] = _trees[i].leaf_index(X[j]);
+            for (auto const j : data_idx) {
+                leaf_idx[i][j] = _trees[i].leaf_index(X[j]);
             }
         }
 
         // Store the current predictions in the output vector. 
-        std::vector<std::vector<internal_t>> output(X.size(), std::vector<internal_t> (n_classes, 0));
+        std::vector<std::vector<internal_t>> output(n_data, std::vector<internal_t> (n_classes, 0));
         for (unsigned int s = 0; s < burnin_steps + 1; ++s) {
             
             // Reset the output vector because we "add into" it in the for loop below
@@ -428,8 +468,8 @@ public:
 
             #pragma omp parallel for
             for (unsigned int i = 0; i < _trees.size(); ++i) {
-                for (unsigned int j = 0; j < X.size(); ++j) {
-                    auto lidx = idx[i][j];
+                for (unsigned int j = 0; j < n_data; ++j) {
+                    auto lidx = leaf_idx[i][j];
 
                     for (unsigned int k = 0; k < n_classes; ++k) {
                         output[j][k] += _weights[i] * _trees[i].leafs[lidx + k];
@@ -445,14 +485,14 @@ public:
                     std::vector<internal_t> grad(_trees[i].leafs.size(), 0);
 
                     // Compute gradient for current tree
-                    for (unsigned int k = 0; k < X.size(); ++k) {
+                    for (unsigned int k = 0; k < n_data; ++k) {
                         
                         // No need to reset loss_deriv because it will be copied anyway
-                        loss.deriv(&output[k][0], &loss_deriv[0], Y[k], n_classes);
+                        loss.deriv(&output[k][0], &loss_deriv[0], Y[data_idx[k]], n_classes);
 
-                        auto lidx = idx[i][k];
+                        auto lidx = leaf_idx[i][k];
                         for (unsigned int j = 0; j < n_classes; ++j) {
-                            grad[lidx+j] += loss_deriv[j] * _weights[i] * 1.0 / X.size() * 1.0 / n_classes;
+                            grad[lidx+j] += loss_deriv[j] * _weights[i] * 1.0 / n_data * 1.0 / n_classes;
                         }
                     }
                     // Update current tree
@@ -475,15 +515,15 @@ public:
                     }
 
                     // Compute gradient for tree i
-                    for (unsigned int j = 0; j < X.size(); ++j) {
-                        loss.deriv(&output[j][0], &loss_deriv[0], Y[j], n_classes);
+                    for (unsigned int j = 0; j < n_data; ++j) {
+                        loss.deriv(&output[j][0], &loss_deriv[0], Y[data_idx[j]], n_classes);
 
-                        auto lidx = idx[i][j];
+                        auto lidx = leaf_idx[i][j];
                         for (unsigned int k = 0; k < n_classes; ++k) {
                             dir += _trees[i].leafs[lidx + k] * loss_deriv[k];
                         }
                     }
-                    grad[i] = dir / (X.size() * n_classes);
+                    grad[i] = dir / (n_data * n_classes);
                 }
 
                 // Perform SGD step for weights and apply prox operator afterwards
@@ -553,6 +593,7 @@ public:
     std::vector<internal_t> weights() const {
         return _weights;
     }
+
 };
 
 #endif

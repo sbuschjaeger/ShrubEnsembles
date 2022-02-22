@@ -16,6 +16,14 @@
 
 enum TREE_INIT {TRAIN, RANDOM};
 
+auto tree_init_from_string(std::string const & tree_init_string) {
+    if (tree_init_string == "train") {
+        return TREE_INIT::TRAIN;
+    } else {
+        return TREE_INIT::RANDOM;
+    }
+}
+
 class Node {
 public:
     data_t threshold;
@@ -392,6 +400,12 @@ public:
     }
 
     void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+        std::vector<unsigned int> idx(X.size());
+        std::iota(std::begin(idx), std::end(idx), 0);
+        this->fit(X,Y,idx);
+    }
+
+    void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx) {
         /**
          *  For my future self I tried to make the code somewhat understandable while begin reasonably fast / optimized. 
          *  For training the tree we follow the "regular" top-down approach in which we expand each node by two child nodes. The current set of 
@@ -417,8 +431,7 @@ public:
 
         std::queue<TreeExpansion> to_expand; 
         TreeExpansion root;
-        root.idx.resize(X.size());
-        std::iota(root.idx.begin(), root.idx.end(), 0);
+        root.idx = std::move(idx);
         root.parent = -1;
         root.left = false;
         root.depth = 0;
