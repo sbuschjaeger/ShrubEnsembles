@@ -328,11 +328,11 @@ public:
         }
     }
 
-    void fit_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds) {
+    void fit_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds) {
         init_trees(X, Y, n_trees, bootstrap, batch_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
-            next_distributed(X,Y,n_trees,bootstrap,batch_size);
+            next_distributed(X,Y,n_parallel,bootstrap,batch_size);
             if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 // TODO also skip if ensemble_regularizer is NO
                 prune();
@@ -420,7 +420,7 @@ public:
         init_trees(X, Y, n_trees, bootstrap, batch_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
-            //auto batch = sample_data(X,Y,batch_size,bootstrap,seed++);
+            // auto batch = sample_data(X,Y,batch_size,bootstrap,seed++);
 
             // TODO add sampling here? 
             next_gd(X,Y,n_batches);
@@ -594,6 +594,13 @@ public:
         return _weights;
     }
 
+    void set_weights(std::vector<internal_t> const & new_weights) {
+        _weights = new_weights;
+    }
+
+    void set_trees(std::vector<Tree<tree_init, tree_opt>> const & new_trees) {
+        _trees = new_weights;
+    }
 };
 
 #endif

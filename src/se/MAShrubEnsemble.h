@@ -56,6 +56,7 @@ public:
         unsigned int max_features = 0,
         internal_t step_size = 1e-2,
         unsigned int n_trees = 32, 
+        unsigned int n_parallel = 8,
         unsigned int n_rounds = 5,
         unsigned int batch_size = 0,
         bool bootstrap = true
@@ -69,13 +70,12 @@ public:
             step_size), n_trees(n_trees), n_rounds(n_rounds), batch_size(batch_size), bootstrap(bootstrap)  {}
 
     void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
-        ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::fit_distributed(X,Y,n_trees,bootstrap,batch_size,n_rounds);
+        ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::fit_distributed(X,Y,n_trees,n_parallel,bootstrap,batch_size,n_rounds);
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
-        ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::next_distributed(X,Y,n_trees,bootstrap,batch_size);
+        ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::next_distributed(X,Y,n_parallel,bootstrap,batch_size);
     }
-
 
     void init(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::init_trees(X,Y,n_trees,bootstrap,batch_size);
@@ -87,6 +87,14 @@ public:
     
     std::vector<internal_t> weights() const {
         return ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::weights();
+    }
+
+    void set_weights(std::vector<internal_t> consr & new_weights) {
+        ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::set_weights(new_weights);
+    }
+
+    void set_trees(std::vector<Tree<tree_init, tree_opt>> const & new_trees) {
+        ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::set_trees(new_trees);
     }
 
     unsigned int num_trees()const {
