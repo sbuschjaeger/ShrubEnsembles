@@ -39,7 +39,7 @@ public:
 };
 
 /**
- * @brief  The main reason why this interface exists, is because it makes class instansiation a little easier for the Pythonbindings. See Python.cpp for details.
+ * @brief  The main reason why this interface exists, is because it makes class instansiation a little easier for the Pythonbindings. 
  * @note   
  * @retval None
  */
