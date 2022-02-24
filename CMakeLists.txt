@@ -24,7 +24,4 @@ include_directories("src/se")
 add_executable(debug tests/debug.cpp)
 target_include_directories(debug PUBLIC)
 
-add_executable(debug_serialization tests/debug_serialization.cpp)
-target_include_directories(debug PUBLIC)
-
-pybind11_add_module(CShrubEnsembleBindings src/se/PythonBindings.cpp)
+pybind11_add_module(CShrubEnsembles src/se/PythonBindings.cpp)

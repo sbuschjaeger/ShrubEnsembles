@@ -93,7 +93,7 @@ public:
         ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::set_weights(new_weights);
     }
 
-    void set_trees(std::vector<Tree<tree_init, tree_opt>> const & new_trees) {
+    void set_trees(std::vector<DecisionTree<tree_init, tree_opt>> const & new_trees) {
         ShrubEnsemble<loss_type, OPTIMIZER::OPTIMIZER_TYPE::NONE, tree_opt, tree_init>::set_trees(new_trees);
     }
 

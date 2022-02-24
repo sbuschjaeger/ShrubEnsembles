@@ -9,19 +9,15 @@
 #include <optional>
 #include <string_view>
 #include <memory>
+#include <stdexcept>
 
 #include "Datatypes.h"
 #include "Optimizer.h"
 #include "Losses.h"
+#include "DecisionTree.h"
 
-enum TREE_INIT {TRAIN, RANDOM};
-
-auto tree_init_from_string(std::string const & tree_init_string) {
-    if (tree_init_string == "train") {
-        return TREE_INIT::TRAIN;
-    } else {
-        return TREE_INIT::RANDOM;
-    }
+namespace DT {
+    enum TREE_INIT {TRAIN, RANDOM};
 }
 
 class Node {
@@ -37,8 +33,6 @@ public:
     Node() = default;
     Node(Node &&) = default;
 
-    //Node( const Node& node ) : preds( new int( *a.up_ ) ) {}
-
     unsigned int num_bytes() const {
         return sizeof(*this);
     }
@@ -49,26 +43,28 @@ public:
  * @note   
  * @retval None
  */
-class TreeInterface {
+class Tree {
 public:
 
     virtual void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
 
-    //virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad) = 0;
-    
     virtual std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
 
     virtual unsigned int num_bytes() const = 0;
 
     virtual unsigned int num_nodes() const = 0;
 
-    virtual ~TreeInterface() { }
+    virtual void set_nodes(std::vector<Node> &nodes) = 0;
+
+    virtual void set_leafs(std::vector<internal_t> &leafs) = 0;
+
+    virtual ~Tree() { }
 };
 
-template <TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
-class Tree : public TreeInterface {
+template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
+class DecisionTree : public Tree {
 
-template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, TREE_INIT friend_tree_init>
+template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, DT::TREE_INIT friend_tree_init>
 friend class ShrubEnsemble;
 
 private:
@@ -80,8 +76,6 @@ private:
     unsigned long seed;
 
     OPTIMIZER::Optimizer<tree_opt,OPTIMIZER::STEP_SIZE_TYPE::CONSTANT> optimizer;
-
-    //unsigned int n_leafs;
 
     inline unsigned int leaf_index(std::vector<data_t> const &x) const {
         unsigned int idx = 0;
@@ -358,7 +352,7 @@ private:
 
 public:
 
-    Tree(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed, internal_t step_size) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),optimizer(step_size) {}
+    DecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed, internal_t step_size) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),optimizer(step_size) {}
 
     unsigned int num_bytes() const {
         unsigned int node_size = 0;
@@ -369,20 +363,6 @@ public:
 
         return sizeof(*this) + node_size + sizeof(internal_t) * leafs.size() + optimizer.num_bytes();
     }
-
-    // void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad) {
-    //     if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
-    //         std::vector<internal_t> grad(leafs.size(), 0);
-    //         for (unsigned int i = 0; i < X.size(); ++i) {
-    //             auto idx = leaf_index(X[i]);
-    //             for (unsigned int j = 0; j < n_classes; ++j) {
-    //                 grad[idx+j] += tree_grad[i][j];
-    //             }
-    //         }
-            
-    //         optimizer.step(leafs, grad);
-    //     }
-    // }
 
     std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
         std::vector<std::vector<data_t>> preds(X.size());
@@ -473,7 +453,7 @@ public:
             
                 // Compute a suitable split
                 std::optional<std::pair<data_t, unsigned int>> split;
-                if constexpr (tree_init == TRAIN) {
+                if constexpr (tree_init == DT::TREE_INIT::TRAIN) {
                     split = best_split(X, Y, exp.idx, n_classes, max_features, gen);
                 } else {
                     split = random_split(X, Y, exp.idx, gen);
@@ -533,6 +513,100 @@ public:
         }
     }
 
+    void set_nodes(std::vector<Node> &new_nodes) {
+        nodes = std::move(nodes);
+        optimizer.reset();
+    }
+
+    void set_leafs(std::vector<internal_t> &new_leafs) {
+        leafs = std::move(leafs);
+        optimizer.reset();
+    }
+};
+
+class DecisionTreeClassifier {
+private:
+	Tree * tree = nullptr;
+
+public:
+
+    DecisionTreeClassifier(
+        unsigned int max_depth, 
+        unsigned int n_classes, 
+        unsigned int max_features,
+        unsigned long seed, 
+        internal_t step_size,
+        const std::string tree_init_mode, 
+        const std::string tree_optimizer
+    ) { 
+
+        // Yeha this is ugly and there is probably clever way to do this with C++17/20, but this was quicker to code and it gets the job done.
+        // Also, lets be real here: There is only a limited chance more init/next modes are added without much refactoring of the whole project
+        if (tree_init_mode == "random" && tree_optimizer == "sgd") {
+            tree = new DecisionTree<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::SGD>(n_classes,max_depth,max_features,seed,step_size);
+        } else if (tree_init_mode == "random" && tree_optimizer == "adam") {
+            tree = new DecisionTree<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::ADAM>(n_classes,max_depth,max_features,seed,step_size);
+        } else if (tree_init_mode == "random" && tree_optimizer == "none") {
+            tree = new DecisionTree<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::NONE>(n_classes,max_depth,max_features,seed,step_size);
+        } else if (tree_init_mode == "train" && tree_optimizer == "sgd") {
+            tree = new DecisionTree<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::SGD>(n_classes,max_depth,max_features,seed,step_size);
+        } else if (tree_init_mode == "train" && tree_optimizer == "adam") {
+            tree = new DecisionTree<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::ADAM>(n_classes,max_depth,max_features,seed,step_size);
+        } else if (tree_init_mode == "train" && tree_optimizer == "none") {
+            tree = new DecisionTree<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::NONE>(n_classes,max_depth,max_features,seed,step_size);
+        } else {
+            throw std::runtime_error("Currently only the two tree_init_mode {random, train} and the three  optimizers {none,sgd,adam} are supported for trees, but you provided a combination of " + tree_init_mode + " and " + tree_optimizer);
+        }
+    }
+
+    void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+        if (tree != nullptr) {
+            tree->fit(X, Y);
+        }
+    }
+
+    std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
+        if (tree != nullptr) {
+            return tree->predict_proba(X);
+        } else {
+            // TODO Add defaults here? 
+            return std::vector<std::vector<data_t>>();
+        }
+    }
+    
+    ~DecisionTreeClassifier() {
+        if (tree != nullptr) {
+            delete tree;
+        }
+    }
+
+    unsigned int num_bytes() const {
+        if (tree != nullptr) {
+            return tree->num_bytes();
+        } else {
+            return 0;
+        }
+    }
+
+    unsigned int num_nodes() const {
+        if (tree != nullptr) {
+            return tree->num_nodes();
+        } else {
+            return 0;
+        }
+    }
+
+    void set_nodes(std::vector<Node> &nodes) {
+        if (tree != nullptr) {
+            tree->set_nodes(nodes);
+        } 
+    }
+
+    void set_leafs(std::vector<internal_t> &leafs) {
+        if (tree != nullptr) {
+            tree->set_leafs(leafs);
+        } 
+    }
 };
 
 #endif

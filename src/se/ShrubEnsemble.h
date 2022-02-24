@@ -7,7 +7,7 @@
 #include <algorithm>
 
 #include "Datatypes.h"
-#include "Tree.h"
+#include "DecisionTree.h"
 #include "Losses.h"
 #include "EnsembleRegularizer.h"
 #include "TreeRegularizer.h"
@@ -153,16 +153,53 @@ std::vector<unsigned int> sample_indices(unsigned int n_data, unsigned int batch
     return sample_indices(n_data,batch_size,bootstrap,gen);
 }
 
+class TreeEnsemble {
+public:
+    virtual void next_ma(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size, unsigned int burnin_steps) = 0;
+
+    virtual void fit_ma(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) = 0;
+
+    virtual void next_ga(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_batches) = 0;
+
+    virtual void fit_ga(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_batches) = 0;
+
+    //virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
+
+    //virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> &data_idx) = 0;
+    
+    virtual void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool boostrap, unsigned int batch_size) = 0;
+    
+    virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_steps) = 0;
+
+    virtual unsigned int num_nodes() const = 0;
+
+    virtual unsigned int num_trees() const = 0;
+
+    virtual unsigned int num_bytes() const = 0;
+
+    virtual std::vector<internal_t> weights() const = 0;
+    
+    virtual void set_weights(std::vector<internal_t> & new_weights) = 0;
+    
+    virtual void set_leafs(std::vector<std::vector<internal_t>> & new_leafs) = 0;
+
+    virtual void set_nodes(std::vector<std::vector<Node>> & new_nodes) = 0;
+
+    virtual std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
+
+    virtual ~TreeEnsemble() { }
+};
+
 /**
  * @brief  
  * @note   
  * @retval None
  */
-template <LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, TREE_INIT tree_init>
-class ShrubEnsemble {
+template <LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, DT::TREE_INIT tree_init>
+class ShrubEnsemble : public TreeEnsemble {
 
 private:
-    std::vector< Tree<tree_init, tree_opt> > _trees;
+    std::vector< DecisionTree<tree_init, tree_opt> > _trees;
     std::vector<internal_t> _weights;
 
     unsigned int const n_classes;
@@ -170,7 +207,6 @@ private:
     unsigned long seed;
 
     bool const normalize_weights;
-    unsigned int const burnin_steps;
     unsigned int const max_features;
 
     OPTIMIZER::Optimizer<opt, OPTIMIZER::STEP_SIZE_TYPE::CONSTANT> optimizer;
@@ -183,7 +219,7 @@ private:
     std::function< std::vector<internal_t>(std::vector<internal_t> const &, data_t scale) > ensemble_regularizer;
     internal_t const l_ensemble_reg;
     
-    std::function< internal_t(Tree<tree_init, tree_opt> const &) > tree_regularizer;
+    std::function< internal_t(DecisionTree<tree_init, tree_opt> const &) > tree_regularizer;
     internal_t const l_tree_reg;
 
 public:
@@ -195,7 +231,6 @@ public:
      * @param  max_depth: The maximum depth of the decision trees. If max_depth = 0 then trees are trained until leaf nodes are pure. Defaults to 5. 
      * @param  seed: The random seed used for all randomizations. Defaults to 12345. 
      * @param  normalize_weights: If true then the weights are normalized so that the sum to 1. Otherwise unnormalized weights are used. Defaults to true.
-     * @param  burnin_steps: The number of `burn-in' steps performed by the algorithm. The number of burn-in steps are the number of SGD updates the algorithm performs for each call of the next() function. In case of distributed training burn-in refers to the number of SGD updates each worker performs individually before model averaging.  Defaults to 0. 
      * @param  max_features: The maximum number features used to fit the decision trees. If max_features = 0, then all features are used. Defaults to 0.
      * @param  loss: The loss function that is minimized by this algorithm. See LOSS::TYPE for available losses. Defaults to LOSS::TYPE::MSE.
      * @param  step_size: The step-size used for any of the SGD updates. 
@@ -210,7 +245,6 @@ public:
         unsigned int max_depth = 5,
         unsigned long seed = 12345,
         bool normalize_weights = true,
-        unsigned int burnin_steps = 0,
         unsigned int max_features = 0,
         // LOSS::TYPE loss = LOSS::TYPE::MSE,
         internal_t step_size = 1e-2,
@@ -223,7 +257,6 @@ public:
         max_depth(max_depth), 
         seed(seed), 
         normalize_weights(normalize_weights), 
-        burnin_steps(burnin_steps),
         max_features(max_features),
         optimizer(step_size),
         step_size(step_size),
@@ -279,7 +312,7 @@ public:
         // We do this in a single thread so that we can perform the training without any
         // synchroization
         for (unsigned int i = 0; i < n_trees; ++i) {
-            _trees.push_back(Tree<tree_init, tree_opt>(n_classes, max_depth, max_features, seed+i, step_size));
+            _trees.push_back(DecisionTree<tree_init, tree_opt>(n_classes, max_depth, max_features, seed+i, step_size));
             _weights.push_back(1.0 / n_trees);    
         }
         // Make sure to advance the random seed "properly"
@@ -298,14 +331,14 @@ public:
         seed += n_trees;
     }
 
-    void next_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size) {
-        std::vector<ShrubEnsemble<loss_type, opt, tree_opt, tree_init>> ses(_trees.size(), *this);
+    void next_ma(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size, unsigned int burnin_steps) {
+        std::vector<ShrubEnsemble<loss_type, opt, tree_opt, tree_init>> ses(n_parallel, *this);
 
         #pragma omp parallel for
         for (unsigned int k = 0; k < n_parallel; ++k){
             auto idx = sample_indices(X.size(), batch_size, boostrap, seed + k);
             // auto s = sample_data(X, Y, batch_size, boostrap, seed+k);
-            ses[k].update_trees(X,Y,idx);
+            ses[k].update_trees(X,Y,burnin_steps,idx);
         }
         seed += n_parallel;
 
@@ -328,11 +361,11 @@ public:
         }
     }
 
-    void fit_distributed(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds) {
+    void fit_ma(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) {
         init_trees(X, Y, n_trees, bootstrap, batch_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
-            next_distributed(X,Y,n_parallel,bootstrap,batch_size);
+            next_ma(X,Y,n_parallel,bootstrap,batch_size,burnin_steps);
             if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 // TODO also skip if ensemble_regularizer is NO
                 prune();
@@ -340,7 +373,7 @@ public:
         }
     }
 
-    void next_gd(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_batches) {
+    void next_ga(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_batches) {
         if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
             // Put all gradients in all_grad which is populated in parallel by n_batches threads
             std::vector<std::vector<std::vector<internal_t>>> all_grad(n_batches);
@@ -416,14 +449,14 @@ public:
         }
     }
 
-    void fit_gd(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_batches) {
+    void fit_ga(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_batches) {
         init_trees(X, Y, n_trees, bootstrap, batch_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
             // auto batch = sample_data(X,Y,batch_size,bootstrap,seed++);
 
             // TODO add sampling here? 
-            next_gd(X,Y,n_batches);
+            next_ga(X,Y,n_batches);
             if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 // TODO also skip if ensemble_regularizer is NO
                 prune();
@@ -431,14 +464,14 @@ public:
         }
     }
 
-    void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_step = 1) {
         std::vector<unsigned int> idx(X.size());
         // TODO idx is not required here and takes some space. Can be optimized away
         std::iota(std::begin(idx), std::end(idx), 0);
-        this->update_trees(X,Y,idx); 
+        this->update_trees(X,Y,burnin_step,idx); 
     }
 
-    void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> &data_idx) {
+    void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_steps, std::vector<unsigned int> &data_idx) {
         // The structure of the trees does not change with the optimization and hence we can 
         // pre-compute the leaf indices for each tree / sample and store them. This mitigates the
         // somewhat "costly" iteration of the trees in each round but gives direct access to the
@@ -448,8 +481,8 @@ public:
         
         #pragma omp parallel for
         for (unsigned int i = 0; i < _trees.size(); ++i) {
-            for (auto const j : data_idx) {
-                leaf_idx[i][j] = _trees[i].leaf_index(X[j]);
+            for (unsigned int j = 0; j < n_data; ++j) {
+                leaf_idx[i][j] = _trees[i].leaf_index(X[data_idx[j]]);
             }
         }
 
@@ -549,12 +582,12 @@ public:
         }
     }
 
-    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_steps) {
         _weights.push_back(0.0);
-        _trees.push_back(Tree<tree_init, tree_opt>(n_classes,max_depth, max_features, seed++, step_size));
+        _trees.push_back(DecisionTree<tree_init, tree_opt>(n_classes,max_depth, max_features, seed++, step_size));
         _trees.back().fit(X,Y);
         
-        update_trees(X, Y);
+        update_trees(X, Y, burnin_steps);
         if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
             // TODO also skip if ensemble_regularizer is NO
             prune();
@@ -594,13 +627,22 @@ public:
         return _weights;
     }
 
-    void set_weights(std::vector<internal_t> const & new_weights) {
-        _weights = new_weights;
+    void set_weights(std::vector<internal_t> & new_weights) {
+        _weights = std::move(new_weights);
+    }
+    
+    void set_leafs(std::vector<std::vector<internal_t>> & new_leafs) {
+        for (unsigned int i = 0; i < new_leafs.size(); ++i) {
+            _trees[i].set_leafs(new_leafs[i]);
+        }
     }
 
-    void set_trees(std::vector<Tree<tree_init, tree_opt>> const & new_trees) {
-        _trees = new_weights;
+    void set_nodes(std::vector<std::vector<Node>> & new_nodes) {
+        for (unsigned int i = 0; i < new_nodes.size(); ++i) {
+            _trees[i].set_nodes(new_nodes[i]);
+        }
     }
+
 };
 
 #endif

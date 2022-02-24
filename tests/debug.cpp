@@ -6,10 +6,10 @@
 #include <functional>
 
 #include "Losses.h"
-#include "OnlineShrubEnsemble.h"
-#include "MAShrubEnsemble.h"
-#include "GAShrubEnsemble.h"
-
+#include "DecisionTree.h"
+#include "GASE.h"
+#include "MASE.h"
+#include "OSE.h"
 
 void print_progress(unsigned int cur_epoch, unsigned int max_epoch, data_t progress, std::string const & pre_str, unsigned int width = 100, unsigned int precision = 8) {
     //data_t progress = data_t(cur_idx) / data_t(max_idx);
@@ -401,97 +401,65 @@ int main() {
 
 	auto n_classes = 2;
 	auto max_depth = 15; 
-	auto max_features = (int) X[0].size() / 2;
-	auto seed = 1234L;
-	auto step_size = 1e-3;
+	auto max_features = 0;
+	auto seed = 12345L;
+	auto step_size = 1e-2;
 
-	Tree<TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::NONE> tree(n_classes,max_depth,max_features,seed,step_size);
+	DecisionTreeClassifier dt(n_classes,max_depth,max_features,seed,step_size,"train","none");
 
 	auto start = std::chrono::steady_clock::now();
-	tree.fit(X,Y);
+	dt.fit(X,Y);
 	auto end = std::chrono::steady_clock::now();
 	std::chrono::duration<double> runtime_seconds = end-start;
     
 	std::cout << "=== Testing single DT ===" << std::endl;
 	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << tree.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << tree.num_nodes() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(tree.predict_proba(X), Y) << std::endl;
+    std::cout << "Size is " << dt.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << dt.num_nodes() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(dt.predict_proba(X), Y) << std::endl;
 	std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
 
-	auto normalize_weights = true;
+	auto loss = "mse";
+	auto optimizer = "sgd";
+	auto tree_init_mode = "train";
+	auto n_trees = 32;
+	auto n_batches = 16;
+	auto n_rounds = 5;
+	auto init_batch_size = 32;
+	auto bootstrap = true;
+	
+	GASE ga(n_classes, max_depth, seed, max_features, loss, step_size, optimizer, tree_init_mode, n_trees, n_batches, n_rounds, init_batch_size, bootstrap);
+	start = std::chrono::steady_clock::now();
+	ga.fit(X,Y);
+	end = std::chrono::steady_clock::now();
+	runtime_seconds = end-start;
+    
+	std::cout << "=== Testing GASE ===" << std::endl;
+	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    std::cout << "Size is " << ga.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << ga.num_nodes() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(ga.predict_proba(X), Y) << std::endl;
+	std::cout << "=== Testing GASE done ===" << std::endl << std::endl;
+
 	auto burnin_steps = 5;
-	auto ensemble_regularizer = ENSEMBLE_REGULARIZER::from_string("hard-L0");
-	auto l_ensemble_reg = 32;
-	auto tree_regularizer = TREE_REGULARIZER::from_string("none");
-	auto l_tree_reg = 0;
-	auto epochs = 20;
-	auto batch_size = (unsigned int)X.size() / 8;
-
-	MAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> dest(
-		n_classes,
-		max_depth,
-		seed,
-		burnin_steps,
-		max_features,
-		step_size,
-		l_ensemble_reg,
-		epochs,
-		batch_size, 
-		true
-	);
-
+	auto n_parallel = 8;
+	auto batch_size = 1024;
+	MASE ma(n_classes, max_depth, seed, burnin_steps, max_features, loss, step_size, optimizer, tree_init_mode, n_trees, n_parallel, n_rounds, batch_size, bootstrap);
 	start = std::chrono::steady_clock::now();
-	dest.fit(X,Y);
+	ma.fit(X,Y);
 	end = std::chrono::steady_clock::now();
 	runtime_seconds = end-start;
     
-	std::cout << "=== Testing MA Shrubs ===" << std::endl;
+	std::cout << "=== Testing MASE ===" << std::endl;
 	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << dest.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << dest.num_nodes() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(dest.predict_proba(X), Y) << std::endl;
-	std::cout << "=== Testing MA RF done ===" << std::endl << std::endl;
-
-
-	GAShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> gaest(
-		n_classes,
-		max_depth,
-		seed,
-		max_features,
-		step_size,
-		l_ensemble_reg,
-		8,
-		epochs,
-		batch_size, 
-		true
-	);
-
-	start = std::chrono::steady_clock::now();
-	gaest.fit(X,Y);
-	end = std::chrono::steady_clock::now();
-	runtime_seconds = end-start;
-    
-	std::cout << "=== Testing GA Shrubs ===" << std::endl;
-	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << gaest.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << gaest.num_nodes() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(gaest.predict_proba(X), Y) << std::endl;
-	std::cout << "=== Testing GA Shrubs done ===" << std::endl << std::endl;
-
-	OnlineShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD, TREE_INIT::TRAIN> oest(
-		n_classes,
-		max_depth,
-		seed,
-		normalize_weights,
-		burnin_steps,
-		max_features,
-		step_size,
-		ensemble_regularizer,
-		l_ensemble_reg,
-		tree_regularizer,
-		l_tree_reg
-	);
+    std::cout << "Size is " << ma.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << ma.num_nodes() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(ma.predict_proba(X), Y) << std::endl;
+	std::cout << "=== Testing MASE done ===" << std::endl << std::endl;
+	
+	auto epochs = 5;
+	auto normalize_weights = true;
+	OSE oest(n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, "mse", step_size, "sgd", "train", "none", 0);
 
 	start = std::chrono::steady_clock::now();
 	LOSS::Loss<LOSS::TYPE::MSE> mse_loss;
@@ -533,10 +501,10 @@ int main() {
     end = std::chrono::steady_clock::now();
 	runtime_seconds = end-start;
     
-	std::cout << "=== Testing Online RF ===" << std::endl;
+	std::cout << "=== Testing OSE ===" << std::endl;
 	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
     std::cout << "Size is " << oest.num_bytes() << " bytes" << std::endl; 
     std::cout << "Number of nodes was " << oest.num_nodes() << std::endl; 
 	std::cout << "Accuracy is: " << accuracy_score(oest.predict_proba(X), Y) << std::endl;
-	std::cout << "=== Testing Online RF done ===" << std::endl << std::endl;
+	std::cout << "=== Testing OSE done ===" << std::endl << std::endl;
 }

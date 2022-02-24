@@ -95,7 +95,7 @@ setup(
     zip_safe=False,
     # add an extension module named 'python_cpp_example' to the package 
     # 'python_cpp_example'
-    ext_modules=[CMakeExtension('se/CShrubEnsembleBindings')],
+    ext_modules=[CMakeExtension('se/CShrubEnsembles')],
     # add custom build_ext command
     cmdclass=dict(build_ext=CMakeBuild),
     #include_package_data=True,

@@ -14,9 +14,8 @@ import sys
 from sklearn.utils.validation import check_X_y
 from sklearn.base import BaseEstimator, ClassifierMixin
 
-# from .COnlineShrubEnsembleBindings import COnlineShrubEnsembleBindings
+from se.CShrubEnsembles import COSE
 
-from .CShrubEnsembleBindings import COnlineShrubEnsembleBindings
 
 # Modified from https://stackoverflow.com/questions/38157972/how-to-implement-mini-batch-gradient-descent-in-python
 def create_mini_batches(inputs, targets, batch_size, shuffle=False, with_replacement=False):
@@ -43,7 +42,7 @@ def create_mini_batches(inputs, targets, batch_size, shuffle=False, with_replace
         yield inputs[excerpt], targets[excerpt]
 
 # TODO Add Regressor
-class OnlineShrubEnsemble(ClassifierMixin, BaseEstimator):
+class OSE(ClassifierMixin, BaseEstimator):
 
     def __init__(self,
         max_depth = 5,
@@ -175,7 +174,7 @@ class OnlineShrubEnsemble(ClassifierMixin, BaseEstimator):
 
     def fit(self, X, y, sample_weight = None):
 
-        self.model = COnlineShrubEnsembleBindings(
+        self.model = COSE(
             len(unique_labels(y)), 
             self.max_depth,
             self.seed,

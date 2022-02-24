@@ -10,11 +10,9 @@ from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 
-# from se.ShrubEnsemble import ShrubEnsemble
-
-from se.OnlineShrubEnsemble import OnlineShrubEnsemble
-from se.MAShrubEnsemble import MAShrubEnsemble
-from se.GAShrubEnsemble import GAShrubEnsemble
+from se.GASE import GASE
+from se.MASE import MASE
+from se.OSE import OSE
 
 '''
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
@@ -371,7 +369,7 @@ for d in [1,2,5]:
     
 
     models["OSE d = {}, T = 32".format(d)] = [
-    	OnlineShrubEnsemble(
+    	OSE(
             max_depth = d,
             seed = 12345,
             normalize_weights = True,
@@ -391,16 +389,17 @@ for d in [1,2,5]:
     ]
 
     models["MASE d = {}, T = 32".format(d)] = [
-    	MAShrubEnsemble(
+    	MASE(
             max_depth = d,
             seed = 12345,
             burnin_steps = 0,
             max_features = 0,
             loss = "mse",
-            step_size = 1e-2,
+            step_size = 1e-3,
             optimizer = "sgd", 
             tree_init_mode = "train", 
-            n_trees = 32, 
+            n_init_trees = 32, 
+            n_parallel = 8,
             n_rounds = 5,
             batch_size = 32, 
             bootstrap = True,
@@ -410,7 +409,7 @@ for d in [1,2,5]:
     ]
 
     models["GASE d = {}, T = 32".format(d)] = [
-    	GAShrubEnsemble(
+    	GASE(
             max_depth = d,
             seed = 12345,
             max_features = 0,
@@ -428,9 +427,9 @@ for d in [1,2,5]:
         ) for _ in range(n_splits)
     ]
 
-    models["DT d = {}, T = 1".format(d)] = [
-    	DecisionTreeClassifier(max_depth = d,random_state=1234) for _ in range(n_splits)
-    ]
+    # models["DT d = {}, T = 1".format(d)] = [
+    # 	DecisionTreeClassifier(max_depth = d,random_state=1234) for _ in range(n_splits)
+    # ]
         
     # models["RF d = {}, T = 6".format(d)] = [
     #     RandomForestClassifier(n_estimators = 6, max_depth = d,max_features=int(np.sqrt(X.shape[1])),random_state=11) for _ in range(n_splits)
