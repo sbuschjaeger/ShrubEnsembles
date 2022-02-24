@@ -173,18 +173,14 @@ public:
 
     virtual unsigned int num_nodes() const = 0;
 
-    virtual unsigned int num_trees() const = 0;
-
     virtual unsigned int num_bytes() const = 0;
 
-    virtual std::vector<internal_t> weights() const = 0;
-    
-    virtual void set_weights(std::vector<internal_t> & new_weights) = 0;
-    
-    virtual void set_leafs(std::vector<std::vector<internal_t>> & new_leafs) = 0;
+    virtual unsigned int num_trees() const = 0;
 
-    virtual void set_nodes(std::vector<std::vector<Node>> & new_nodes) = 0;
+    virtual std::vector<internal_t> & weights() = 0;
 
+    virtual std::vector<Tree*> trees() = 0;
+        
     virtual std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
 
     virtual ~TreeEnsemble() { }
@@ -269,15 +265,6 @@ public:
         l_tree_reg(l_tree_reg)
     {}
 
-    unsigned int num_bytes() const {
-        unsigned int tree_size = 0;
-        for (auto const & t : _trees) {
-            tree_size += t.num_bytes();
-        }
-
-        return tree_size + sizeof(*this) + optimizer.num_bytes();
-    }
-
     /**
      * @brief  Remove all trees including their weight which have a 0 weight. 
      * @note   
@@ -347,17 +334,17 @@ public:
             for (unsigned int k = 0; k < ses.size(); ++k) {
                 if ( k == 0) {
                     _weights[j] = ses[k]._weights[j];
-                    _trees[j].leafs = ses[k]._trees[j].leafs;
+                    _trees[j]._leafs = ses[k]._trees[j]._leafs;
                 } else {
                     _weights[j] += ses[k]._weights[j];
 
-                    for (unsigned int l = 0; l < ses[k]._trees[j].leafs.size(); ++l) {
-                        _trees[j].leafs[l] += ses[k]._trees[j].leafs[l];
+                    for (unsigned int l = 0; l < ses[k]._trees[j]._leafs.size(); ++l) {
+                        _trees[j]._leafs[l] += ses[k]._trees[j]._leafs[l];
                     }
                 }
             }
             _weights[j] /= n_parallel;
-            std::transform(_trees[j].leafs.begin(), _trees[j].leafs.end(), _trees[j].leafs.begin(), [n_parallel](auto& c){return 1.0/n_parallel*c;});
+            std::transform(_trees[j]._leafs.begin(), _trees[j]._leafs.end(), _trees[j]._leafs.begin(), [n_parallel](auto& c){return 1.0/n_parallel*c;});
         }
     }
 
@@ -407,7 +394,7 @@ public:
 
                         idx[i][j] = lidx;
                         for (unsigned int k = 0; k < n_classes; ++k) {
-                            output[j][k] += _weights[i] * _trees[i].leafs[lidx + k];
+                            output[j][k] += _weights[i] * _trees[i]._leafs[lidx + k];
                         }
                     }
                 }
@@ -418,7 +405,7 @@ public:
 
                 for (unsigned int i = 0; i < _trees.size(); ++i) {
                     // Compute gradient for current tree
-                    all_grad[b][i] = std::vector<internal_t>(_trees[i].leafs.size(), 0);
+                    all_grad[b][i] = std::vector<internal_t>(_trees[i]._leafs.size(), 0);
                     for (unsigned int k = 0; k < actual_size; ++k) {
                         // No need to reset loss_deriv because it will be copied anyway
                         auto y = Y[b*b_size + k];
@@ -437,14 +424,14 @@ public:
             // Now perform the update for each tree. 
             #pragma omp parallel for
             for (unsigned int j = 0; j < _trees.size(); ++j) {
-                std::vector<internal_t> t_grad(_trees[j].leafs.size(), 0); 
+                std::vector<internal_t> t_grad(_trees[j]._leafs.size(), 0); 
                 for (unsigned int i = 0; i < n_batches; ++i) {
                     for (unsigned int l = 0; l < t_grad.size(); ++l) {
                         t_grad[l] += all_grad[i][j][l];
                     }
                 }
                 std::transform(t_grad.begin(), t_grad.end(), t_grad.begin(), [n_batches](auto& c){return 1.0/n_batches*c;});
-                _trees[j].optimizer.step(_trees[j].leafs, t_grad);
+                _trees[j].optimizer.step(_trees[j]._leafs, t_grad);
             }
         }
     }
@@ -505,7 +492,7 @@ public:
                     auto lidx = leaf_idx[i][j];
 
                     for (unsigned int k = 0; k < n_classes; ++k) {
-                        output[j][k] += _weights[i] * _trees[i].leafs[lidx + k];
+                        output[j][k] += _weights[i] * _trees[i]._leafs[lidx + k];
                     }
                 }
             }
@@ -515,7 +502,7 @@ public:
                 #pragma omp parallel for
                 for (unsigned int i = 0; i < _weights.size(); ++i) {
                     std::vector<internal_t> loss_deriv(n_classes, 0);
-                    std::vector<internal_t> grad(_trees[i].leafs.size(), 0);
+                    std::vector<internal_t> grad(_trees[i]._leafs.size(), 0);
 
                     // Compute gradient for current tree
                     for (unsigned int k = 0; k < n_data; ++k) {
@@ -529,7 +516,7 @@ public:
                         }
                     }
                     // Update current tree
-                    _trees[i].optimizer.step(_trees[i].leafs, grad);
+                    _trees[i].optimizer.step(_trees[i]._leafs, grad);
                 }
             }
 
@@ -553,7 +540,7 @@ public:
 
                         auto lidx = leaf_idx[i][j];
                         for (unsigned int k = 0; k < n_classes; ++k) {
-                            dir += _trees[i].leafs[lidx + k] * loss_deriv[k];
+                            dir += _trees[i]._leafs[lidx + k] * loss_deriv[k];
                         }
                     }
                     grad[i] = dir / (n_data * n_classes);
@@ -619,28 +606,29 @@ public:
         return n_nodes;
     }
 
+    unsigned int num_bytes() const {
+        unsigned int tree_size = 0;
+        for (auto const & t : _trees) {
+            tree_size += t.num_bytes();
+        }
+
+        return tree_size + sizeof(*this) + optimizer.num_bytes();
+    }
+
     unsigned int num_trees() const {
         return _trees.size();
     }
 
-    std::vector<internal_t> weights() const {
+    std::vector<internal_t> & weights() {
         return _weights;
     }
 
-    void set_weights(std::vector<internal_t> & new_weights) {
-        _weights = std::move(new_weights);
-    }
-    
-    void set_leafs(std::vector<std::vector<internal_t>> & new_leafs) {
-        for (unsigned int i = 0; i < new_leafs.size(); ++i) {
-            _trees[i].set_leafs(new_leafs[i]);
+    std::vector<Tree*> trees() {
+        std::vector<Tree*> tree_ptrs(_trees.size());
+        for (unsigned int i = 0;i < _trees.size(); ++i) {
+            tree_ptrs[i] = &_trees[i];
         }
-    }
-
-    void set_nodes(std::vector<std::vector<Node>> & new_nodes) {
-        for (unsigned int i = 0; i < new_nodes.size(); ++i) {
-            _trees[i].set_nodes(new_nodes[i]);
-        }
+        return tree_ptrs;
     }
 
 };

@@ -31,7 +31,7 @@ public:
 template <TREE_INIT tree_init, TREE_NEXT tree_next, typename internal_t>
 class BalancedTree {
 private:
-    std::vector<Node<internal_t>> nodes;
+    std::vector<Node<internal_t>> _nodes;
     unsigned int start_leaf;
     unsigned int n_nodes;
     unsigned int n_classes;
@@ -41,8 +41,8 @@ private:
         unsigned int idx = 0;
 
         while(idx < start_leaf) {
-            auto const f = nodes[idx].feature;
-            if (x[f] <= nodes[idx].threshold) {
+            auto const f = _nodes[idx].feature;
+            if (x[f] <= _nodes[idx].threshold) {
                 idx = 2*idx + 1;
             } else {
                 idx = 2*idx + 2;
@@ -293,30 +293,30 @@ private:
         std::uniform_int_distribution<> idis(0, X[0].size() - 1);
         std::uniform_real_distribution<> fdis(0,1);
 
-        nodes.resize(n_nodes);
+        _nodes.resize(n_nodes);
         for (unsigned int i = 0; i < n_nodes; ++i) {
             auto tmp = random_node(is_nominal, gen);
-            nodes[i].threshold = std::get<0>(tmp);
-            nodes[i].feature = std::get<1>(tmp);
+            _nodes[i].threshold = std::get<0>(tmp);
+            _nodes[i].feature = std::get<1>(tmp);
 
             if (i >= start_leaf) {
-                nodes[i].preds.resize(n_classes);
-                std::fill(nodes[i].preds.begin(), nodes[i].preds.end(), 0);
+                _nodes[i].preds.resize(n_classes);
+                std::fill(_nodes[i].preds.begin(), _nodes[i].preds.end(), 0);
             } 
         }
 
         for (unsigned int i = 0; i < X.size(); ++i) {
             auto idx = node_index(X[i]);
-            nodes[idx].preds[Y[i]] += 1;
+            _nodes[idx].preds[Y[i]] += 1;
         }
 
         if constexpr (tree_next != INCREMENTAL) {
             for (unsigned int i = start_leaf; i < n_nodes; ++i) {
-                data_t sum = std::accumulate(nodes[i].preds.begin(), nodes[i].preds.end(), 0.0);
+                data_t sum = std::accumulate(_nodes[i].preds.begin(), _nodes[i].preds.end(), 0.0);
                 if (sum > 0) {
-                    std::transform(nodes[i].preds.begin(), nodes[i].preds.end(), nodes[i].preds.begin(), [sum](auto& c){return 1.0/sum*c;});
+                    std::transform(_nodes[i].preds.begin(), _nodes[i].preds.end(), _nodes[i].preds.begin(), [sum](auto& c){return 1.0/sum*c;});
                 } else {
-                    std::fill(nodes[i].preds.begin(), nodes[i].preds.end(), 1.0/n_classes);
+                    std::fill(_nodes[i].preds.begin(), _nodes[i].preds.end(), 1.0/n_classes);
                 }
             }
         }
@@ -328,9 +328,9 @@ private:
         to_expand.push(std::make_pair(X, Y));
 
         // auto split = best_split(n_classes, XVec, YVec);
-        // nodes.push_back(Node(split.first, split.second));
-        nodes.reserve(n_nodes);
-        while(nodes.size() < start_leaf) {
+        // _nodes.push_back(Node(split.first, split.second));
+        _nodes.reserve(n_nodes);
+        while(_nodes.size() < start_leaf) {
             auto data = to_expand.front();
             to_expand.pop();
 
@@ -346,8 +346,8 @@ private:
             // We assume complete trees in this implementation which means that we always have 2 children 
             // and that each path in the tree has max_depth length. Now it might happen that XLeft / XRight is empty. 
             // In this case, best_split returns with t = 1, which means that _all_ data points are routed towards XLeft
-            // and we keep on adding nodes as long as required to built the complete tree
-            nodes.push_back(Node<internal_t>(t, f));
+            // and we keep on adding _nodes as long as required to built the complete tree
+            _nodes.push_back(Node<internal_t>(t, f));
             
             std::vector<std::vector<data_t>> XLeft, XRight;
             std::vector<unsigned int> YLeft, YRight;
@@ -385,7 +385,7 @@ private:
                 }
             }
 
-            nodes.push_back(n);
+            _nodes.push_back(n);
         }
     }
 
@@ -424,11 +424,11 @@ public:
     unsigned int num_bytes() const {
         unsigned int node_size = 0;
         
-        if (nodes.size() > 0) {
-            node_size = nodes[0].num_bytes();
+        if (_nodes.size() > 0) {
+            node_size = _nodes[0].num_bytes();
         } 
 
-        return 3 * sizeof(unsigned int) + node_size * nodes.size() + sizeof(std::vector<Node<internal_t>>) + sizeof(std::mt19937);
+        return 3 * sizeof(unsigned int) + node_size * _nodes.size() + sizeof(std::vector<Node<internal_t>>) + sizeof(std::mt19937);
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<std::vector<data_t>> const &tree_grad, data_t step_size) {
@@ -436,13 +436,13 @@ public:
             for (unsigned int i = 0; i < X.size(); ++i) {
                 auto idx = node_index(X[i]);
                 for (unsigned int j = 0; j < n_classes; ++j) {
-                    nodes[idx].preds[j] = nodes[idx].preds[j] - step_size * tree_grad[i][j];
+                    _nodes[idx].preds[j] = _nodes[idx].preds[j] - step_size * tree_grad[i][j];
                 } 
             }
         } else if constexpr (tree_next == INCREMENTAL) {
             for (unsigned int i = 0; i < X.size(); ++i) {
                 auto idx = node_index(X[i]);
-                nodes[idx].preds[Y[i]]++;
+                _nodes[idx].preds[Y[i]]++;
             }
         } else {
             /* Do nothing */
@@ -452,7 +452,7 @@ public:
     std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
         std::vector<std::vector<data_t>> preds(X.size());
         for (unsigned int i = 0; i < X.size(); ++i) {
-            preds[i] = nodes[node_index(X[i])].preds;
+            preds[i] = _nodes[node_index(X[i])].preds;
         }
         return preds;
     }

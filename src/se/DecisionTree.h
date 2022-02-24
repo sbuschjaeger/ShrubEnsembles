@@ -54,9 +54,9 @@ public:
 
     virtual unsigned int num_nodes() const = 0;
 
-    virtual void set_nodes(std::vector<Node> &nodes) = 0;
-
-    virtual void set_leafs(std::vector<internal_t> &leafs) = 0;
+    virtual std::vector<internal_t> & leafs() = 0;
+    
+    virtual std::vector<Node> & nodes() = 0;
 
     virtual ~Tree() { }
 };
@@ -68,8 +68,8 @@ template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPT
 friend class ShrubEnsemble;
 
 private:
-    std::vector<Node> nodes;
-    std::vector<internal_t> leafs;
+    std::vector<Node> _nodes;
+    std::vector<internal_t> _leafs;
     unsigned int n_classes;
     unsigned int max_depth;
     unsigned int max_features;
@@ -81,14 +81,14 @@ private:
         unsigned int idx = 0;
 
         // On small datasets / batchs there might be no node fitted. In this case we only have leaf nodes
-        if (nodes.size() > 0) {
+        if (_nodes.size() > 0) {
             while(true){
-                auto const & n = nodes[idx];
+                auto const & n = _nodes[idx];
                 if (x[n.feature] <= n.threshold) {
-                    idx = nodes[idx].left;
+                    idx = _nodes[idx].left;
                     if (n.left_is_leaf) break;
                 } else {
-                    idx = nodes[idx].right;
+                    idx = _nodes[idx].right;
                     if (n.right_is_leaf) break;
                 }
             }
@@ -338,16 +338,16 @@ private:
         }
 
         if (pid >= 0) {
-            auto & parent = nodes[pid];
+            auto & parent = _nodes[pid];
             if (is_left) {
                 parent.left_is_leaf = true;
-                parent.left = leafs.size();
+                parent.left = _leafs.size();
             } else {
                 parent.right_is_leaf = true;
-                parent.right = leafs.size();
+                parent.right = _leafs.size();
             }
         }
-        leafs.insert(leafs.end(), preds.begin(), preds.end());
+        _leafs.insert(_leafs.end(), preds.begin(), preds.end());
     }
 
 public:
@@ -357,26 +357,26 @@ public:
     unsigned int num_bytes() const {
         unsigned int node_size = 0;
         
-        for (auto const &n : nodes) {
+        for (auto const &n : _nodes) {
             node_size += n.num_bytes();
         }
 
-        return sizeof(*this) + node_size + sizeof(internal_t) * leafs.size() + optimizer.num_bytes();
+        return sizeof(*this) + node_size + sizeof(internal_t) * _leafs.size() + optimizer.num_bytes();
     }
 
     std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
         std::vector<std::vector<data_t>> preds(X.size());
         for (unsigned int i = 0; i < X.size(); ++i) {
-            //preds[i] = nodes[node_index(X[i])].preds;
-            //data_t const * const node_preds = nodes[node_index(X[i])].preds.get();
-            internal_t const * const node_preds = &leafs[leaf_index(X[i])]; //.preds.get();
+            //preds[i] = _nodes[node_index(X[i])].preds;
+            //data_t const * const node_preds = _nodes[node_index(X[i])].preds.get();
+            internal_t const * const node_preds = &_leafs[leaf_index(X[i])]; //.preds.get();
             preds[i].assign(node_preds, node_preds + n_classes);
         }
         return preds;
     }
 
     unsigned int num_nodes() const {
-        return nodes.size() + int(leafs.size() / n_classes);
+        return _nodes.size() + int(_leafs.size() / n_classes);
     }
 
     void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
@@ -421,7 +421,7 @@ public:
 
         // TODO: Maybe reserve some size in nodes?
         while(to_expand.size() > 0) {
-            unsigned int cur_idx = nodes.size();
+            unsigned int cur_idx = _nodes.size();
             auto exp = std::move(to_expand.front());
             to_expand.pop();
 
@@ -463,21 +463,21 @@ public:
                     // A suitable split as been found
                     // To mitigate costly copy operations of the entire node, we first add it do the vector and then work
                     // on the reference via nodes[cur_idx]
-                    nodes.push_back(Node());
+                    _nodes.push_back(Node());
                     if (exp.parent >= 0) {
                         if (exp.left) {
-                            nodes[exp.parent].left = cur_idx;
-                            nodes[exp.parent].left_is_leaf = false;
+                            _nodes[exp.parent].left = cur_idx;
+                            _nodes[exp.parent].left_is_leaf = false;
                         } else {
-                            nodes[exp.parent].right = cur_idx;
-                            nodes[exp.parent].right_is_leaf = false;
+                            _nodes[exp.parent].right = cur_idx;
+                            _nodes[exp.parent].right_is_leaf = false;
                         }
                     }
 
                     auto t = split.value().first;
                     auto f = split.value().second;
-                    nodes[cur_idx].feature = f;
-                    nodes[cur_idx].threshold = t;
+                    _nodes[cur_idx].feature = f;
+                    _nodes[cur_idx].threshold = t;
 
                     // We do not need to store the predictions in inner nodes. Thus delete them here
                     // If we want to perform post-pruning at some point we should probably keep these statistics
@@ -513,19 +513,17 @@ public:
         }
     }
 
-    void set_nodes(std::vector<Node> &new_nodes) {
-        nodes = std::move(nodes);
-        optimizer.reset();
+    std::vector<internal_t> & leafs() {
+        return _leafs;
     }
-
-    void set_leafs(std::vector<internal_t> &new_leafs) {
-        leafs = std::move(leafs);
-        optimizer.reset();
+    
+    std::vector<Node> & nodes() {
+        return _nodes;
     }
 };
 
 class DecisionTreeClassifier {
-private:
+protected:
 	Tree * tree = nullptr;
 
 public:
@@ -562,6 +560,8 @@ public:
     void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         if (tree != nullptr) {
             tree->fit(X, Y);
+        } else {
+            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
         }
     }
 
@@ -569,8 +569,7 @@ public:
         if (tree != nullptr) {
             return tree->predict_proba(X);
         } else {
-            // TODO Add defaults here? 
-            return std::vector<std::vector<data_t>>();
+            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
         }
     }
     
@@ -584,7 +583,7 @@ public:
         if (tree != nullptr) {
             return tree->num_bytes();
         } else {
-            return 0;
+            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
         }
     }
 
@@ -592,20 +591,24 @@ public:
         if (tree != nullptr) {
             return tree->num_nodes();
         } else {
-            return 0;
+            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
         }
     }
 
-    void set_nodes(std::vector<Node> &nodes) {
+    std::vector<internal_t> & leafs() {
         if (tree != nullptr) {
-            tree->set_nodes(nodes);
-        } 
+            return tree->leafs();
+        } else {
+            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
+        }
     }
-
-    void set_leafs(std::vector<internal_t> &leafs) {
+    
+    std::vector<Node> & nodes() {
         if (tree != nullptr) {
-            tree->set_leafs(leafs);
-        } 
+            return tree->nodes();
+        } else {
+            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
+        }
     }
 };
 
