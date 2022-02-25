@@ -163,9 +163,9 @@ public:
 
     virtual void fit_ga(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_batches) = 0;
 
-    //virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
+    virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_step = 1) = 0;
 
-    //virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> &data_idx) = 0;
+    virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y,  unsigned int burnin_step, std::vector<unsigned int> &data_idx) = 0;
     
     virtual void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool boostrap, unsigned int batch_size) = 0;
     
@@ -177,10 +177,14 @@ public:
 
     virtual unsigned int num_trees() const = 0;
 
-    virtual std::vector<internal_t> & weights() = 0;
+    // virtual std::vector<internal_t> & weights() = 0;
 
-    virtual std::vector<Tree*> trees() = 0;
+    // virtual std::vector<Tree*> trees() = 0;
         
+    virtual void load(std::vector<std::vector<internal_t>> & new_nodes, std::vector<std::vector<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) = 0;
+
+    virtual std::tuple<std::vector<std::vector<internal_t>>, std::vector<std::vector<internal_t>>, std::vector<internal_t>> store() const = 0;
+
     virtual std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
 
     virtual ~TreeEnsemble() { }
@@ -598,6 +602,30 @@ public:
         return output;
     }
 
+    void load(std::vector<std::vector<internal_t>> & new_nodes, std::vector<std::vector<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) {
+        
+        _trees.clear();
+        _weights = new_weights;
+
+        for (unsigned int i = 0; i < new_weights.size(); ++i) {
+            _trees.push_back(DecisionTree<tree_init, tree_opt>(n_classes, max_depth, max_features, seed+i, step_size));
+            _trees.back().load(new_nodes[i], new_leafs[i]);
+        }
+    }
+
+    std::tuple<std::vector<std::vector<internal_t>>, std::vector<std::vector<internal_t>>, std::vector<internal_t>> store() const {
+        std::vector<std::vector<internal_t>> all_leafs(_trees.size());
+        std::vector<std::vector<internal_t>> all_nodes(_trees.size());
+
+        for (unsigned int i = 0;i < _trees.size(); ++i) {
+            auto tmp = _trees[i].store();
+            all_nodes[i] = std::get<0>(tmp);
+            all_leafs[i] = std::get<1>(tmp);
+        }
+
+        return std::make_tuple(all_nodes, all_leafs, _weights); 
+    }
+
     unsigned int num_nodes() const {
         unsigned int n_nodes = 0;
         for (auto const & t : _trees) {
@@ -619,17 +647,21 @@ public:
         return _trees.size();
     }
 
-    std::vector<internal_t> & weights() {
-        return _weights;
-    }
+    // std::vector<internal_t> & weights() {
+    //     return _weights;
+    // }
 
-    std::vector<Tree*> trees() {
-        std::vector<Tree*> tree_ptrs(_trees.size());
-        for (unsigned int i = 0;i < _trees.size(); ++i) {
-            tree_ptrs[i] = &_trees[i];
-        }
-        return tree_ptrs;
-    }
+    // std::vector<internal_t> & trees() {
+    //     return _trees;
+    // }
+
+    // std::vector<Tree*> trees() {
+    //     std::vector<Tree*> tree_ptrs(_trees.size());
+    //     for (unsigned int i = 0;i < _trees.size(); ++i) {
+    //         tree_ptrs[i] = &_trees[i];
+    //     }
+    //     return tree_ptrs;
+    // }
 
 };
 

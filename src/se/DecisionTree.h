@@ -54,9 +54,13 @@ public:
 
     virtual unsigned int num_nodes() const = 0;
 
-    virtual std::vector<internal_t> & leafs() = 0;
+    virtual void load(std::vector<internal_t> & new_nodes, std::vector<internal_t> & new_leafs) = 0;
+
+    virtual std::tuple<std::vector<internal_t>, std::vector<internal_t>> store() const = 0;
+
+    // virtual std::vector<internal_t> & leafs() = 0;
     
-    virtual std::vector<Node> & nodes() = 0;
+    // virtual std::vector<Node> & nodes() = 0;
 
     virtual ~Tree() { }
 };
@@ -513,13 +517,45 @@ public:
         }
     }
 
-    std::vector<internal_t> & leafs() {
-        return _leafs;
+    void load(std::vector<internal_t> & new_nodes, std::vector<internal_t> & new_leafs) {
+        _leafs = std::move(new_leafs);
+        std::vector<Node> t_nodes;
+
+        for (unsigned int j = 0; j < new_nodes.size(); j += 6) {
+            Node n;
+            n.threshold = static_cast<data_t>(new_nodes[j]);
+            n.feature = static_cast<unsigned int>(new_nodes[j+1]);
+            n.left = static_cast<unsigned int>(new_nodes[j+2]);
+            n.right = static_cast<unsigned int>(new_nodes[j+3]);
+            n.left_is_leaf = new_nodes[j+4] == 0.0 ? false : true;
+            n.right_is_leaf = new_nodes[j+5] == 0.0 ? false : true;
+            t_nodes.push_back(n);
+        }
+        _nodes = std::move(t_nodes);
     }
+
+    std::tuple<std::vector<internal_t>, std::vector<internal_t>> store() const {
+        std::vector<internal_t> primitive_nodes;
+
+        for (auto const &n : _nodes) {
+            primitive_nodes.push_back(static_cast<internal_t>(n.threshold));
+            primitive_nodes.push_back(static_cast<internal_t>(n.feature));
+            primitive_nodes.push_back(static_cast<internal_t>(n.left));
+            primitive_nodes.push_back(static_cast<internal_t>(n.right));
+            primitive_nodes.push_back(static_cast<internal_t>(n.left_is_leaf));
+            primitive_nodes.push_back(static_cast<internal_t>(n.right_is_leaf));
+        }
+
+        return std::make_tuple(primitive_nodes, _leafs);
+    }
+
+    // std::vector<internal_t> & leafs() {
+    //     return _leafs;
+    // }
     
-    std::vector<Node> & nodes() {
-        return _nodes;
-    }
+    // std::vector<Node> & nodes() {
+    //     return _nodes;
+    // }
 };
 
 class DecisionTreeClassifier {
@@ -595,21 +631,37 @@ public:
         }
     }
 
-    std::vector<internal_t> & leafs() {
+    void load(std::vector<internal_t> & new_nodes, std::vector<internal_t> & new_leafs) {
         if (tree != nullptr) {
-            return tree->leafs();
+            return tree->load(new_nodes,new_leafs);
+        } else {
+            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
+        }
+    }
+
+    std::tuple<std::vector<internal_t>, std::vector<internal_t>> store() const {
+        if (tree != nullptr) {
+            return tree->store();
         } else {
             throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
         }
     }
     
-    std::vector<Node> & nodes() {
-        if (tree != nullptr) {
-            return tree->nodes();
-        } else {
-            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-        }
-    }
+    // std::vector<internal_t> & leafs() {
+    //     if (tree != nullptr) {
+    //         return tree->leafs();
+    //     } else {
+    //         throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
+    //     }
+    // }
+    
+    // std::vector<Node> & nodes() {
+    //     if (tree != nullptr) {
+    //         return tree->nodes();
+    //     } else {
+    //         throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
+    //     }
+    // }
 };
 
 #endif
