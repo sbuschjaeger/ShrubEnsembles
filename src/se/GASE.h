@@ -15,11 +15,11 @@ protected:
 
     TreeEnsemble * model = nullptr;
 
-    unsigned int n_rounds;
-    unsigned int n_worker;
-    unsigned int n_trees;
-    unsigned int init_batch_size;
-    bool bootstrap; 
+    unsigned int const n_rounds;
+    unsigned int const n_worker;
+    unsigned int const n_trees;
+    unsigned int const init_batch_size;
+    bool const bootstrap; 
 
 public:
 

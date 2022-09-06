@@ -193,9 +193,9 @@ public:
 
     virtual void fit_ga(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_batches) = 0;
 
-    virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_step = 1) = 0;
+    virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_step = 1, std::optional<unsigned int> const batch_size = std::nullopt, std::optional<bool> bootstrap = std::nullopt,std::optional<unsigned long> seed = std::nullopt) = 0;
 
-    virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y,  unsigned int burnin_step, std::vector<unsigned int> &data_idx) = 0;
+    // virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y,  unsigned int burnin_step, std::vector<unsigned int> &data_idx) = 0;
     
     virtual void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool boostrap, unsigned int batch_size) = 0;
     

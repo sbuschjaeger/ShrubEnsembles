@@ -26,7 +26,7 @@ class GASE(ClassifierMixin, BaseEstimator):
         n_trees = 32, 
         n_rounds = 5,
         #init_batch_size = 32,
-        n_workers = 32,
+        n_worker = 32,
         bootstrap = True,
         verbose = False,
         out_path = None,
@@ -71,7 +71,7 @@ class GASE(ClassifierMixin, BaseEstimator):
         self.tree_init_mode = tree_init_mode
         self.n_trees = n_trees
         #self.init_batch_size = init_batch_size
-        self.n_workers = n_workers
+        self.n_worker = n_worker
         self.n_rounds = n_rounds
         self.verbose = verbose
         self.out_path = out_path
@@ -158,9 +158,9 @@ class GASE(ClassifierMixin, BaseEstimator):
             self.optimizer,
             self.tree_init_mode, 
             self.n_trees,
-            self.n_workers,
+            self.n_worker,
             self.n_rounds,
-            X.shape[0] // self.n_workers, #TODO Use self.init_batch_size ?
+            X.shape[0] // self.n_worker, #TODO Use self.init_batch_size ?
             self.bootstrap
         )
 
@@ -181,6 +181,7 @@ class GASE(ClassifierMixin, BaseEstimator):
                 for r in range(self.n_rounds):
                     if self.batch_size is None:
                         self.model.next(X,y)
+                        Xs, Ys = X,y
                     else:
                         Nsample = self.batch_size
                         indices = np.arange(X.shape[0])

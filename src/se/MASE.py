@@ -208,6 +208,7 @@ class MASE(ClassifierMixin, BaseEstimator):
 
                     if self.batch_size is None:
                         self.model.next(X,y)
+                        Xs, Ys = X,y
                     else:
                         Nsample = self.batch_size
                         indices = np.arange(X.shape[0])

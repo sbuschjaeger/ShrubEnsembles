@@ -128,7 +128,7 @@ public:
         if (model != nullptr) {
             model->load(new_nodes, new_leafs, new_weights);
         } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
     }
 
@@ -136,26 +136,9 @@ public:
         if (model != nullptr) {
             return model->store();
         } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
     }
-
-    void load(std::vector<std::vector<internal_t>> & new_nodes, std::vector<std::vector<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) {
-        if (model != nullptr) {
-            model->load(new_nodes, new_leafs, new_weights);
-        } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
-        }
-    }
-
-    std::tuple<std::vector<std::vector<internal_t>>, std::vector<std::vector<internal_t>>, std::vector<internal_t>> store() const {
-        if (model != nullptr) {
-            return model->store();
-        } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
-        }
-    }
-
 };
 
 #endif
