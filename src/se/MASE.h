@@ -20,7 +20,7 @@ protected:
     unsigned int batch_size;
     bool bootstrap; 
     unsigned int burnin_steps;
-    unsigned int n_parallel;
+    unsigned int n_worker;
 
 public:
 
@@ -32,14 +32,14 @@ public:
         unsigned int max_features = 0,
         const std::string loss = "mse",
         internal_t step_size = 1e-2,
-        const std::string optimizer = "mse",
+        const std::string optimizer = "sgd",
         const std::string tree_init_mode = "train",
         unsigned int n_trees = 32, 
-        unsigned int n_parallel = 8, 
+        unsigned int n_worker = 8, 
         unsigned int n_rounds = 5,
         unsigned int batch_size = 0,
         bool bootstrap = true
-    ) : n_trees(n_trees), n_rounds(n_rounds), batch_size(batch_size), bootstrap(bootstrap), burnin_steps(burnin_steps), n_parallel(n_parallel) { 
+    ) : n_trees(n_trees), n_rounds(n_rounds), batch_size(batch_size), bootstrap(bootstrap), burnin_steps(burnin_steps), n_worker(n_worker) { 
        
         if (tree_init_mode == "random" && optimizer == "sgd" && loss == "mse") {
             model = new ShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::NONE, OPTIMIZER::OPTIMIZER_TYPE::SGD,DT::TREE_INIT::RANDOM>( n_classes, max_depth, seed,  false, max_features, step_size, ENSEMBLE_REGULARIZER::TYPE::NO, 0, TREE_REGULARIZER::TYPE::NO, 0 );
@@ -64,17 +64,17 @@ public:
 
     void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
-            model->fit_ma(X,Y,n_trees,bootstrap,batch_size,n_rounds,n_parallel,burnin_steps);
+            model->fit_ma(X,Y,n_trees,bootstrap,batch_size,n_rounds,n_worker,burnin_steps);
         } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
-            model->next_ma(X,Y,n_parallel,bootstrap, batch_size, burnin_steps);
+            model->next_ma(X,Y,n_worker,bootstrap, batch_size, burnin_steps);
         } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
     }
 
@@ -82,7 +82,7 @@ public:
         if (model != nullptr) {
             model->init_trees(X,Y,n_trees,bootstrap,batch_size);
         } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
     }
 
@@ -90,7 +90,7 @@ public:
         if (model != nullptr) {
             return model->predict_proba(X);
         } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
     }
 
@@ -98,7 +98,7 @@ public:
         if (model != nullptr) {
             return model->num_nodes();
         } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
     }
 
@@ -106,7 +106,7 @@ public:
         if (model != nullptr) {
             return model->num_bytes();
         } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
     }
 
@@ -114,7 +114,7 @@ public:
         if (model != nullptr) {
             return model->num_trees();
         } else {
-            throw std::runtime_error("The internal object pointer in MASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
     }
 };

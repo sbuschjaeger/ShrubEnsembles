@@ -52,22 +52,31 @@ class MASE(ClassifierMixin, BaseEstimator):
         step_size = 1e-2,
         optimizer = "sgd",
         tree_init_mode = "train",
-        n_init_trees = 32, 
+        n_trees = 32, 
         n_rounds = 5,
-        n_parallel = 5,
-        batch_size = 0,
+        n_worker = 5,
+        batch_size_per_worker = 0,
         bootstrap = True,
         verbose = False,
-        out_path = None
+        out_path = None,
+        sample_engine = "python",
+        batch_size = None
     ):
 
         # TODO set n_jobs for openmp?
-        # TODO USe sample during evaluation if verbose = true? 
         assert loss in ["mse","cross-entropy","hinge2"], "Currently only {{mse, cross-entropy, hinge2}} loss is supported"
 
         assert max_depth >= 0, "max_depth must be >= 0. Use max_depth = 0 if you want to train unlimited trees. You supplied: {}".format(max_depth)
 
         assert max_features >= 0, "max_features must be >= 0. Use max_features = 0 if you want to evaluated all splits. You supplied: {}".format(max_features)
+
+        assert sample_engine in ["python", "c++"], "Currently only {{python, c++}} can be used as the sample_egine"
+
+        if sample_engine == "c++" and batch_size is not None:
+            print("WARNING: You supplied sample_engine = `c++', but set batch_size != None. The c++ sample engine does not support batch_sizes and will always use the entire dataset to perform SGD!")
+
+        if sample_engine == "python":
+            assert batch_size is None or batch_size > 0, "You supplied sample_engine=`python`. In this case choose batch_size > 0 or batch_size = None (which uses the entire dataset)."
 
         # assert n_rounds > 0, "Epochs should be at least 1, but you gave {}".format(n_rounds)
 
@@ -90,13 +99,15 @@ class MASE(ClassifierMixin, BaseEstimator):
         self.step_size = step_size
         self.optimizer = optimizer
         self.tree_init_mode = tree_init_mode
-        self.n_init_trees = n_init_trees
-        self.batch_size = batch_size
+        self.n_trees = n_trees
+        self.batch_size_per_worker = batch_size_per_worker
         self.n_rounds = n_rounds
-        self.n_parallel = n_parallel
+        self.n_worker = n_worker
         self.verbose = verbose
         self.out_path = out_path
         self.bootstrap = bootstrap 
+        self.sample_engine = sample_engine
+        self.batch_size = batch_size
 
         self.model = None
 
@@ -161,8 +172,8 @@ class MASE(ClassifierMixin, BaseEstimator):
         self.n_classes_ = len(self.classes_)
         self.n_outputs_ = self.n_classes_
         
-        if self.batch_size > X.shape[0]:
-            self.batch_size = X.shape[0]
+        if self.batch_size_per_worker > X.shape[0]:
+            self.batch_size_per_worker = X.shape[0]
 
         self.X_ = X
         self.y_ = y
@@ -176,53 +187,68 @@ class MASE(ClassifierMixin, BaseEstimator):
             self.step_size,
             self.optimizer,
             self.tree_init_mode, 
-            self.n_init_trees,
-            self.n_parallel,
+            self.n_trees,
+            self.n_worker,
             self.n_rounds,
-            self.batch_size,
+            self.batch_size_per_worker,
             self.bootstrap
         )
 
-        if not self.verbose:
+        if self.sample_engine == "c++":
             self.model.fit(X,y)
         else: 
-            self.model.init(X,y)
+            if self.batch_size is None:
+                self.model.init(X,y)
+            else:
+                Nsample = self.batch_size
+                indices = np.arange(X.shape[0])
+                np.random.shuffle(indices)
+                Xs, Ys = X[indices[0:Nsample]], y[indices[0:Nsample]]
+                self.model.init(Xs,Ys)
 
             with tqdm(total=self.n_rounds, ncols=150, disable = not self.verbose) as pbar:
 
                 for r in range(self.n_rounds):
-                    self.model.next(X,y)
 
-                    # TODO do this on a sample?
-                    output = self.predict_proba(X)
-
-                    # Compute the appropriate loss. 
-                    if self.loss == "mse":
-                        target_one_hot = np.array( [ [1.0 if yi == i else 0.0 for i in range(self.n_classes_)] for yi in y] )
-                        loss = (output - target_one_hot) * (output - target_one_hot)
-                    elif self.loss == "cross-entropy":
-                        target_one_hot = np.array( [ [1.0 if yi == i else 0.0 for i in range(self.n_classes_)] for yi in y] )
-                        p = softmax(output, axis=1)
-                        loss = -target_one_hot*np.log(p + 1e-7)
-                    elif self.loss == "hinge2":
-                        target_one_hot = np.array( [ [1.0 if yi == i else -1.0 for i in range(self.n_classes_)] for yi in y] )
-                        zeros = np.zeros_like(target_one_hot)
-                        loss = np.maximum(1.0 - target_one_hot * output, zeros)**2
+                    if self.batch_size is None:
+                        self.model.next(X,y)
                     else:
-                        raise "Currently only the losses {{cross-entropy, mse, hinge2}} are supported, but you provided: {}".format(self.loss)
-
-                    loss = np.mean(loss) 
-                    accuracy = (y == output.argmax(axis=1)).sum() / X.shape[0]
-                    pbar.update(1)
+                        Nsample = self.batch_size
+                        indices = np.arange(X.shape[0])
+                        np.random.shuffle(indices)
+                        Xs, Ys = X[indices[0:Nsample]], y[indices[0:Nsample]]
+                        self.model.next(Xs,Ys)
                     
-                    desc = '[{}/{}] loss {:2.4f} acc {:2.4f}'.format(
-                        r, 
-                        self.n_rounds-1, 
-                        loss,
-                        accuracy
-                    )
-                    pbar.set_description(desc)
-                
-                if self.out_path is not None:
-                    metrics = {"accuracy":accuracy,"loss":loss}
-                    pickle.dump(metrics, gzip.open(os.path.join(self.out_path, "round_{}.pk.gz".format(r)), "wb"))
+                    if self.verbose or self.out_path is not None:
+                        output = self.predict_proba(Xs)
+
+                        # Compute the appropriate loss. 
+                        if self.loss == "mse":
+                            target_one_hot = np.array( [ [1.0 if yi == i else 0.0 for i in range(self.n_classes_)] for yi in Ys] )
+                            loss = (output - target_one_hot) * (output - target_one_hot)
+                        elif self.loss == "cross-entropy":
+                            target_one_hot = np.array( [ [1.0 if yi == i else 0.0 for i in range(self.n_classes_)] for yi in Ys] )
+                            p = softmax(output, axis=1)
+                            loss = -target_one_hot*np.log(p + 1e-7)
+                        elif self.loss == "hinge2":
+                            target_one_hot = np.array( [ [1.0 if yi == i else -1.0 for i in range(self.n_classes_)] for yi in Ys] )
+                            zeros = np.zeros_like(target_one_hot)
+                            loss = np.maximum(1.0 - target_one_hot * output, zeros)**2
+                        else:
+                            raise "Currently only the losses {{cross-entropy, mse, hinge2}} are supported, but you provided: {}".format(self.loss)
+
+                        loss = np.mean(loss) 
+                        accuracy = (Ys == output.argmax(axis=1)).sum() / Xs.shape[0]
+                        pbar.update(1)
+                        
+                        desc = '[{}/{}] loss {:2.4f} acc {:2.4f}'.format(
+                            r, 
+                            self.n_rounds-1, 
+                            loss,
+                            accuracy
+                        )
+                        pbar.set_description(desc)
+                    
+                    if self.out_path is not None:
+                        metrics = {"accuracy":accuracy,"loss":loss}
+                        pickle.dump(metrics, gzip.open(os.path.join(self.out_path, "round_{}.pk.gz".format(r)), "wb"))

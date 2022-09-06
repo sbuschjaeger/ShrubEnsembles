@@ -16,7 +16,7 @@ protected:
     TreeEnsemble * model = nullptr;
 
     unsigned int n_rounds;
-    unsigned int n_batches;
+    unsigned int n_worker;
     unsigned int n_trees;
     unsigned int init_batch_size;
     bool bootstrap; 
@@ -33,11 +33,11 @@ public:
         const std::string optimizer = "mse",
         const std::string tree_init_mode = "train",
         unsigned int n_trees = 32, 
-        unsigned int n_batches = 5,
+        unsigned int n_worker = 5,
         unsigned int n_rounds = 5,
         unsigned int init_batch_size = 0,
         bool bootstrap = true
-    ) : n_rounds(n_rounds), n_batches(n_batches), n_trees(n_trees), init_batch_size(init_batch_size), bootstrap(bootstrap) { 
+    ) : n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), bootstrap(bootstrap) { 
         if (tree_init_mode == "random" && optimizer == "sgd" && loss == "mse") {
             model = new ShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::NONE, OPTIMIZER::OPTIMIZER_TYPE::SGD,DT::TREE_INIT::RANDOM>(n_classes, max_depth, seed, false,max_features, step_size,ENSEMBLE_REGULARIZER::TYPE::NO,0,TREE_REGULARIZER::TYPE::NO, 0);
         } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "mse") {
@@ -61,17 +61,17 @@ public:
     
     void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
-            return model->fit_ga(X,Y,n_trees,bootstrap,init_batch_size,n_rounds,n_batches);
+            return model->fit_ga(X,Y,n_trees,bootstrap,init_batch_size,n_rounds,n_worker);
         } else {
-            throw std::runtime_error("The internal object pointer in GASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in GASE was null. This should not happen!");
         }
     }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
-            return model->next_ga(X,Y,n_batches);
+            return model->next_ga(X,Y,n_worker);
         } else {
-            throw std::runtime_error("The internal object pointer in GASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in GASE was null. This should not happen!");
         }
     }
 
@@ -79,7 +79,7 @@ public:
         if (model != nullptr) {
             return model->init_trees(X,Y,n_trees,bootstrap,init_batch_size);
         } else {
-            throw std::runtime_error("The internal object pointer in GASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in GASE was null. This should not happen!");
         }
     }
 
@@ -87,7 +87,7 @@ public:
         if (model != nullptr) {
             return model->predict_proba(X);
         } else {
-            throw std::runtime_error("The internal object pointer in GASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in GASE was null. This should not happen!");
         }
     }
     
@@ -95,7 +95,7 @@ public:
         if (model != nullptr) {
             return model->num_nodes();
         } else {
-            throw std::runtime_error("The internal object pointer in GASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in GASE was null. This should not happen!");
         }
     }
 
@@ -103,7 +103,7 @@ public:
         if (model != nullptr) {
             return model->num_bytes();
         } else {
-            throw std::runtime_error("The internal object pointer in GASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in GASE was null. This should not happen!");
         }
     }
 
@@ -111,7 +111,7 @@ public:
         if (model != nullptr) {
             return model->trees().size();
         } else {
-            throw std::runtime_error("The internal object pointer in GASE was null. This should now happen!");
+            throw std::runtime_error("The internal object pointer in GASE was null. This should not happen!");
         }
     }
     

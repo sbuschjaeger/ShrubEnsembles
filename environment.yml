@@ -16,5 +16,10 @@ dependencies:
   - cmake
   - gcc_linux-64
   - gxx_linux-64
-  # - pip:
+  - doxygen
+  - pip:
+    - karma-sphinx-theme
+    - sphinx_rtd_theme
+    - breathe
+    - exhale
   #   - -e file:.

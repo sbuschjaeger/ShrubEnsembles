@@ -216,10 +216,13 @@ class OSE(ClassifierMixin, BaseEstimator):
                     data, target = batch 
                     
                     output = self.predict_proba(data)
+                    #print(data)
+                    #print(target)
 
                     # Update Model                    
                     start_time = time.time()
                     self.model.next(data,target)
+                    #self.model.next(data.tolist(),target.tolist())
                     batch_time = time.time() - start_time
                     
                     # Compute the appropriate loss. 
