@@ -1,15 +1,12 @@
 import numpy as np
-import numbers
 import random
 from scipy.special import softmax
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.multiclass import unique_labels
 import time
 import os
 from tqdm import tqdm
 import gzip
 import pickle
-import sys
 
 from sklearn.utils.validation import check_X_y
 from sklearn.base import BaseEstimator, ClassifierMixin

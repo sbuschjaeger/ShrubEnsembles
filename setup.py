@@ -98,6 +98,13 @@ setup(
     ext_modules=[CMakeExtension('se/CShrubEnsembles')],
     # add custom build_ext command
     cmdclass=dict(build_ext=CMakeBuild),
+    install_requires = [
+        "numpy",
+        "scikit-learn",
+        "scipy",
+        "setuptools",
+        "tqdm"
+    ]
     #include_package_data=True,
     #py_modules=[splitext(basename(path))[0] for path in glob('src/*.py')],
 )
