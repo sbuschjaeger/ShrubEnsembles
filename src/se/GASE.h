@@ -59,6 +59,12 @@ public:
         }
     }
     
+    ~GASE() {
+        if (model != nullptr) {
+            delete model;
+        }
+    }
+
     void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
             return model->fit_ga(X,Y,n_trees,bootstrap,init_batch_size,n_rounds,n_worker);

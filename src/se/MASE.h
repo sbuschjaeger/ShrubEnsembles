@@ -64,6 +64,12 @@ public:
         }
     }
 
+    ~MASE() {
+        if (model != nullptr) {
+            delete model;
+        }
+    }
+
     void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
             model->fit_ma(X,Y,n_trees,bootstrap,batch_size,n_rounds,n_worker,burnin_steps);

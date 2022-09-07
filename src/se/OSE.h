@@ -55,6 +55,11 @@ public:
         }
     }
 
+    ~OSE() {
+        if (model != nullptr) {
+            delete model;
+        }
+    }
 
     void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
