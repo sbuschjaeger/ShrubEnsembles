@@ -5,6 +5,7 @@
 #include <pybind11/functional.h>
 
 #include "DecisionTree.h"
+#include "DecisionTreeV2.h"
 #include "GASE.h"
 #include "MASE.h"
 #include "OSE.h"
@@ -345,6 +346,21 @@ py::class_<DecisionTreeClassifier>(m, "CDecisionTreeClassifier")
     .def ("load", &DecisionTreeClassifier::load, py::arg("new_nodes"), py::arg("new_leafs"))
     .def ("store", &DecisionTreeClassifier::store)
     .def ("predict_proba", &DecisionTreeClassifier::predict_proba, py::arg("X")
+    // .def ("update_leafs", &DecisionTreeClassifier::update_leafs, py::arg("new_leafs"))
+    // .def ("leafs", &DecisionTreeClassifier::leafs)
+    // .def ("update_nodes", &DecisionTreeClassifier::update_nodes, py::arg("new_nodes"))
+    // .def ("nodes", &PyDecisionTreeClassifier::nodes
+);
+
+py::class_<DecisionTreeClassifierV2>(m, "CDecisionTreeClassifierOpt")
+    .def(py::init<unsigned int, unsigned int, unsigned int, unsigned long, internal_t, std::string, std::string>(), py::arg("max_depth"), py::arg("n_classes"), py::arg("max_features"), py::arg("seed"), py::arg("step_size"), py::arg("tree_init_mode"), py::arg("tree_update_mode"))
+    //.def ("next", &TreeAdaptor::next, py::arg("X"), py::arg("Y"), py::arg("tree_grad"))
+    .def ("fit", &DecisionTreeClassifierV2::fit, py::arg("X"), py::arg("Y"))
+    .def ("num_bytes", &DecisionTreeClassifierV2::num_bytes)
+    .def ("num_nodes", &DecisionTreeClassifierV2::num_nodes)
+    .def ("load", &DecisionTreeClassifierV2::load, py::arg("new_nodes"), py::arg("new_leafs"))
+    .def ("store", &DecisionTreeClassifierV2::store)
+    .def ("predict_proba", &DecisionTreeClassifierV2::predict_proba, py::arg("X")
     // .def ("update_leafs", &DecisionTreeClassifier::update_leafs, py::arg("new_leafs"))
     // .def ("leafs", &DecisionTreeClassifier::leafs)
     // .def ("update_nodes", &DecisionTreeClassifier::update_nodes, py::arg("new_nodes"))

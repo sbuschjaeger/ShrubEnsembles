@@ -1,5 +1,5 @@
-#ifndef TREE_H
-#define TREE_H
+#ifndef TREE_V2_H
+#define TREE_V2_H
 
 #include <vector>
 #include <math.h>
@@ -16,57 +16,57 @@
 #include "Losses.h"
 #include "DecisionTree.h"
 
-namespace DT {
-    enum TREE_INIT {TRAIN, RANDOM};
-}
+// namespace DT {
+//     enum TREE_INIT {TRAIN, RANDOM};
+// }
 
-class Node {
-public:
-    data_t threshold;
-    unsigned int feature;
-    unsigned int left, right;
-    bool left_is_leaf, right_is_leaf;
+// class Node {
+// public:
+//     data_t threshold;
+//     unsigned int feature;
+//     unsigned int left, right;
+//     bool left_is_leaf, right_is_leaf;
 
-    // I want to make sure that these objects are only moved and never copied. I expect the code below to not 
-    // use any copy c'tors, but for safe measures we delete the copy constructor entirely.
-    Node(const Node&) = default; //delete;
-    Node() = default;
-    Node(Node &&) = default;
+//     // I want to make sure that these objects are only moved and never copied. I expect the code below to not 
+//     // use any copy c'tors, but for safe measures we delete the copy constructor entirely.
+//     Node(const Node&) = default; //delete;
+//     Node() = default;
+//     Node(Node &&) = default;
 
-    unsigned int num_bytes() const {
-        return sizeof(*this);
-    }
-};
+//     unsigned int num_bytes() const {
+//         return sizeof(*this);
+//     }
+// };
 
-/**
- * @brief  The main reason why this interface exists, is because it makes class instansiation a little easier for the Pythonbindings. 
- * @note   
- * @retval None
- */
-class Tree {
-public:
+// /**
+//  * @brief  The main reason why this interface exists, is because it makes class instansiation a little easier for the Pythonbindings. 
+//  * @note   
+//  * @retval None
+//  */
+// class Tree {
+// public:
 
-    virtual void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
+//     virtual void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) = 0;
 
-    virtual std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
+//     virtual std::vector<std::vector<data_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
 
-    virtual unsigned int num_bytes() const = 0;
+//     virtual unsigned int num_bytes() const = 0;
 
-    virtual unsigned int num_nodes() const = 0;
+//     virtual unsigned int num_nodes() const = 0;
 
-    virtual void load(std::vector<internal_t> & new_nodes, std::vector<internal_t> & new_leafs) = 0;
+//     virtual void load(std::vector<internal_t> & new_nodes, std::vector<internal_t> & new_leafs) = 0;
 
-    virtual std::tuple<std::vector<internal_t>, std::vector<internal_t>> store() const = 0;
+//     virtual std::tuple<std::vector<internal_t>, std::vector<internal_t>> store() const = 0;
 
-    // virtual std::vector<internal_t> & leafs() = 0;
+//     // virtual std::vector<internal_t> & leafs() = 0;
     
-    // virtual std::vector<Node> & nodes() = 0;
+//     // virtual std::vector<Node> & nodes() = 0;
 
-    virtual ~Tree() { }
-};
+//     virtual ~Tree() { }
+// };
 
 template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
-class DecisionTree : public Tree {
+class DecisionTreeV2 : public Tree {
 
 template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, DT::TREE_INIT friend_tree_init>
 friend class ShrubEnsemble;
@@ -109,7 +109,7 @@ private:
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> random_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> const & idx, std::mt19937 &gen) {
+    static std::optional<std::pair<data_t, unsigned int>> random_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> const & idx, std::mt19937 &gen, std::vector<bool> & feature_is_const) {
         // At-least 2 points are required for splitting.
         // Technically this check is unncessary since we stop tree construction once there is only one label in the data which is always the case 
         // if we have 0 or 1 examples. For safea measure we keep this check alive however.
@@ -125,6 +125,9 @@ private:
         std::shuffle(features.begin(), features.end(), gen);
  
         for (auto const & f: features) {
+            if (feature_is_const[f]) {
+                continue;
+            }
             // We need to find the next smallest and next biggest value of the data to ensure that left/right will receive at-least 
             // one example. This is a brute force implementation in O(N)
             auto ifirst = idx[0];
@@ -214,7 +217,7 @@ private:
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx, long n_classes, unsigned int max_features, std::mt19937 &gen) {
+    static std::optional<std::pair<data_t, unsigned int>> best_split(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx, long n_classes, unsigned int max_features, std::mt19937 &gen, std::vector<bool> & feature_is_const) {
         // At-least 2 points are required for splitting.
         // Technically this check is unncessary since we stop tree construction once there is only one label in the data which is always the case 
         // if we have 0 or 1 examples. For safea measure we keep this check alive however.
@@ -243,8 +246,21 @@ private:
         std::vector<unsigned int> left_cnts(n_classes);
         std::vector<unsigned int> right_cnts(n_classes);
 
+        struct Sample {
+            data_t xf;
+            unsigned int label;
+        };
+
+        std::vector<Sample> XTmp(n_data);
+
+        // std::vector<data_t> XTmp(n_data);
+        // std::vector<unsigned int> YTmp(n_data);
+
         unsigned int fcnt = 0;
         for (auto i: features) {
+            if (feature_is_const[i]) {
+                continue;
+            }
             // In order to compute the best spliting threshold for the current feature we need to evaluate every possible split value.
             // These can be up to n_data - 1 points and for each threshold we need to evaluate if they belong to the left or right child. 
             // The naive implementation thus require O(n_data^2) runtime. We use a slightly more optimized version which requires O(n_data * log n_data). 
@@ -253,7 +269,26 @@ private:
 
             // The data is always accessed indirectly via the idx array sinc this array contains all the indices of the data used 
             // for building the current node. Thus, sort this index wrt. to the current feature.
-            std::sort(idx.begin(), idx.end(), [&X, i](unsigned int i1, unsigned int i2){return X[i1][i] < X[i2][i];});
+
+            // std::sort(XTmp.begin(), XTmp.end());
+            unsigned int k = 0;
+            for (auto j : idx) {
+                XTmp[k].xf = X[j][i];
+                XTmp[k].label = Y[j];
+                ++k;
+            }            
+
+            std::sort(XTmp.begin(), XTmp.end(), [](const Sample & a, const Sample & b) -> bool { 
+                return a.xf < b.xf; }
+            );
+
+            // std::sort(idx.begin(), idx.end(), [&X, i](unsigned int i1, unsigned int i2){return X[i1][i] < X[i2][i];});
+            // unsigned int k = 0;
+            // for(auto j : idx) {
+            //     XTmp[k] = X[j][i];
+            //     YTmp[k] = Y[j];
+            //     k++;
+            // }
 
             // Re-set class statistics
             std::fill(left_cnts.begin(), left_cnts.end(), 0);
@@ -263,26 +298,37 @@ private:
             unsigned int begin = 0; 
             data_t best_threshold;
 
-            unsigned int jfirst = idx[0];
+            // unsigned int jfirst = idx[0];
             for (unsigned int j = 0; j < n_data; ++j) {
-                auto jidx = idx[j]; 
-            
-                if (X[jidx][i] == X[jfirst][i]) {
-                    left_cnts[Y[jidx]] += 1;
+                if (XTmp[j].xf == XTmp[0].xf) {
+                    left_cnts[XTmp[j].label] += 1;
                 } else {
                     if (first) {
-                        best_threshold = X[jfirst][i] / 2.0 + X[jidx][i] / 2.0;
+                        best_threshold = XTmp[0].xf / 2.0 + XTmp[j].xf / 2.0;
                         //best_threshold = 0.5 * (f_values[0].first + f_values[j].first); 
                         first = false;
                         begin = j;
                     }
-                    right_cnts[Y[jidx]] += 1;
+                    right_cnts[XTmp[j].label] += 1;
                 }
+                // auto jidx = idx[j]; 
+                // if (X[jidx][i] == X[jfirst][i]) {
+                //     left_cnts[Y[jidx]] += 1;
+                // } else {
+                //     if (first) {
+                //         best_threshold = X[jfirst][i] / 2.0 + X[jidx][i] / 2.0;
+                //         //best_threshold = 0.5 * (f_values[0].first + f_values[j].first); 
+                //         first = false;
+                //         begin = j;
+                //     }
+                //     right_cnts[Y[jidx]] += 1;
+                // }
             }
-            
+
             if (first) {
                 // We never choose a threshold which means that X[idx[0]][i] = X[idx[1]][i] = ... = X[idx[end]][i]. 
                 // This will not give us a good split, so ignore this feature
+                feature_is_const[i] = true;
                 continue;
             }
             // Compute the corresponding gini score 
@@ -292,18 +338,17 @@ private:
             unsigned int j = begin;
 
             while(j < n_data) {
-                auto lidx = idx[j]; 
-
+                auto lj = j;
                 do {
-                    left_cnts[Y[idx[j]]] += 1;
-                    right_cnts[Y[idx[j]]] -= 1;
+                    left_cnts[XTmp[j].label] += 1;
+                    right_cnts[XTmp[j].label] -= 1;
                     ++j;
-                } while(j < n_data && X[idx[j]][i] == X[lidx][i]);
+                } while(j < n_data && XTmp[j].xf == XTmp[lj].xf);
                 
                 if (j >= n_data) break;
  
                 data_t cur_gini = gini(left_cnts, right_cnts);
-                data_t threshold = X[lidx][i] / 2.0 + X[idx[j]][i] / 2.0;
+                data_t threshold = XTmp[lj].xf / 2.0 + XTmp[j].xf / 2.0;
                 if (cur_gini < best_gini) {
                     best_gini = cur_gini;
                     best_threshold = threshold;
@@ -356,7 +401,7 @@ private:
 
 public:
 
-    DecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed, internal_t step_size) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),optimizer(step_size) {}
+    DecisionTreeV2(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed, internal_t step_size) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),optimizer(step_size) {}
 
     unsigned int num_bytes() const {
         unsigned int node_size = 0;
@@ -369,15 +414,59 @@ public:
     }
 
     std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
-        std::vector<std::vector<data_t>> preds(X.size());
+        std::vector<std::vector<data_t>> preds(X.size(), std::vector<data_t> (n_classes, 0));
+        //std::vector<std::vector<data_t>> XMean(n_second, std::vector<data_t> (n_third, 0));
+
         for (unsigned int i = 0; i < X.size(); ++i) {
             //preds[i] = _nodes[node_index(X[i])].preds;
             //data_t const * const node_preds = _nodes[node_index(X[i])].preds.get();
             internal_t const * const node_preds = &_leafs[leaf_index(X[i])]; //.preds.get();
-            preds[i].assign(node_preds, node_preds + n_classes);
+            std::copy(node_preds, node_preds+n_classes, preds[i].begin());
+            //preds[i].assign(node_preds, node_preds + n_classes);
         }
         return preds;
     }
+
+    // std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
+    //     // TODO CHECK AUF _nodes.size() > 0
+    //     std::vector<unsigned int> leaf_index(X.size(), 0);
+    //     std::vector<bool> to_predict(X.size(), true);
+
+    //     // std::vector<bool> leaf_found(X.size(), false);
+    //     // unsigned int leaf_found = 0;
+
+    //     bool all_preds_done = false;
+    //     while(!all_preds_done) {
+    //         all_preds_done = true;
+    //         for (unsigned int i = 0; i < X.size(); ++i) {
+    //             if (to_predict[i]) {
+    //                 auto const & n = _nodes[leaf_index[i]];
+    //                 if (X[i][n.feature] <= n.threshold) {
+    //                     leaf_index[i] = _nodes[leaf_index[i]].left;
+    //                     if (n.left_is_leaf) {
+    //                         to_predict[i] = false;
+    //                     } else {
+    //                         all_preds_done = false;
+    //                     }
+    //                 } else {
+    //                     leaf_index[i] = _nodes[leaf_index[i]].right;
+    //                     if (n.right_is_leaf) {
+    //                         to_predict[i] = false;
+    //                     } else {
+    //                         all_preds_done = false;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     std::vector<std::vector<data_t>> preds(X.size());
+    //     for (unsigned int i = 0; i < X.size(); ++i) {
+    //         internal_t const * const node_preds = &_leafs[leaf_index[i]]; //.preds.get();
+    //         preds[i].assign(node_preds, node_preds + n_classes);
+    //     }
+    //     return preds;
+    // }
 
     unsigned int num_nodes() const {
         return _nodes.size() + int(_leafs.size() / n_classes);
@@ -386,10 +475,13 @@ public:
     void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
         std::vector<unsigned int> idx(X.size());
         std::iota(std::begin(idx), std::end(idx), 0);
-        this->fit(X,Y,idx);
+
+        std::vector<bool> feature_is_const(X[0].size(), false);
+
+        this->fit(X,Y,idx,feature_is_const);
     }
 
-    void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx) {
+    void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx, std::vector<bool> & feature_is_const) {
         /**
          *  For my future self I tried to make the code somewhat understandable while begin reasonably fast / optimized. 
          *  For training the tree we follow the "regular" top-down approach in which we expand each node by two child nodes. The current set of 
@@ -401,6 +493,7 @@ public:
          * */
         struct TreeExpansion {
             std::vector<unsigned int> idx;
+            std::vector<bool> feature_is_const;
             int parent;
             bool left;
             unsigned int depth;
@@ -413,12 +506,17 @@ public:
         };
         if (max_features == 0) max_features = X[0].size();
 
+        //std::cout << "Moving a vector of size " << feature_is_const.size() << std::endl;
+
         std::queue<TreeExpansion> to_expand; 
         TreeExpansion root;
         root.idx = std::move(idx);
         root.parent = -1;
         root.left = false;
         root.depth = 0;
+        root.feature_is_const = std::move(feature_is_const);
+        //std::cout << "Checking a vector of size " << root.feature_is_const.size() << std::endl;
+
         to_expand.push(std::move(root));
 
         std::mt19937 gen(seed);
@@ -458,9 +556,9 @@ public:
                 // Compute a suitable split
                 std::optional<std::pair<data_t, unsigned int>> split;
                 if constexpr (tree_init == DT::TREE_INIT::TRAIN) {
-                    split = best_split(X, Y, exp.idx, n_classes, max_features, gen);
+                    split = best_split(X, Y, exp.idx, n_classes, max_features, gen, exp.feature_is_const);
                 } else {
-                    split = random_split(X, Y, exp.idx, gen);
+                    split = random_split(X, Y, exp.idx, gen, exp.feature_is_const);
                 }
 
                 if (split.has_value()) {
@@ -491,11 +589,13 @@ public:
                     exp_left.parent = cur_idx;
                     exp_left.left = true;
                     exp_left.depth = exp.depth + 1;
+                    exp_left.feature_is_const = exp.feature_is_const;
 
                     TreeExpansion exp_right;
                     exp_right.parent = cur_idx;
                     exp_right.left = false;
                     exp_right.depth = exp.depth + 1;
+                    exp_right.feature_is_const = exp.feature_is_const;
 
                     // Split the data and expand the tree construction
                     for (auto i : exp.idx) {
@@ -558,13 +658,13 @@ public:
     // }
 };
 
-class DecisionTreeClassifier {
+class DecisionTreeClassifierV2 {
 protected:
 	Tree * tree = nullptr;
 
 public:
 
-    DecisionTreeClassifier(
+    DecisionTreeClassifierV2(
         unsigned int max_depth, 
         unsigned int n_classes, 
         unsigned int max_features,
@@ -577,17 +677,17 @@ public:
         // Yeha this is ugly and there is probably clever way to do this with C++17/20, but this was quicker to code and it gets the job done.
         // Also, lets be real here: There is only a limited chance more init/next modes are added without much refactoring of the whole project
         if (tree_init_mode == "random" && tree_optimizer == "sgd") {
-            tree = new DecisionTree<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::SGD>(n_classes,max_depth,max_features,seed,step_size);
+            tree = new DecisionTreeV2<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::SGD>(n_classes,max_depth,max_features,seed,step_size);
         } else if (tree_init_mode == "random" && tree_optimizer == "adam") {
-            tree = new DecisionTree<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::ADAM>(n_classes,max_depth,max_features,seed,step_size);
+            tree = new DecisionTreeV2<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::ADAM>(n_classes,max_depth,max_features,seed,step_size);
         } else if (tree_init_mode == "random" && tree_optimizer == "none") {
-            tree = new DecisionTree<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::NONE>(n_classes,max_depth,max_features,seed,step_size);
+            tree = new DecisionTreeV2<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::NONE>(n_classes,max_depth,max_features,seed,step_size);
         } else if (tree_init_mode == "train" && tree_optimizer == "sgd") {
-            tree = new DecisionTree<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::SGD>(n_classes,max_depth,max_features,seed,step_size);
+            tree = new DecisionTreeV2<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::SGD>(n_classes,max_depth,max_features,seed,step_size);
         } else if (tree_init_mode == "train" && tree_optimizer == "adam") {
-            tree = new DecisionTree<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::ADAM>(n_classes,max_depth,max_features,seed,step_size);
+            tree = new DecisionTreeV2<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::ADAM>(n_classes,max_depth,max_features,seed,step_size);
         } else if (tree_init_mode == "train" && tree_optimizer == "none") {
-            tree = new DecisionTree<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::NONE>(n_classes,max_depth,max_features,seed,step_size);
+            tree = new DecisionTreeV2<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::NONE>(n_classes,max_depth,max_features,seed,step_size);
         } else {
             throw std::runtime_error("Currently only the two tree_init_mode {random, train} and the three  optimizers {none,sgd,adam} are supported for trees, but you provided a combination of " + tree_init_mode + " and " + tree_optimizer);
         }
@@ -609,7 +709,7 @@ public:
         }
     }
     
-    ~DecisionTreeClassifier() {
+    ~DecisionTreeClassifierV2() {
         if (tree != nullptr) {
             delete tree;
         }

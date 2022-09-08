@@ -104,15 +104,18 @@ struct Optimizer<OPTIMIZER_TYPE::ADAM,step_size_type> {
 
     void step(std::vector<internal_t> &weight, std::vector<internal_t> const &grad) {
         data_t step_size;
+
         if constexpr(step_size_type == STEP_SIZE_TYPE::ADAPTIVE) {
             step_size = 1.0 / (weight.size() + 1);
         } else {
             step_size = this->step_size;
         }
 
-        if (t == 1) {
+        // TODO Also check v / weight?
+        if (m.size() != grad.size()) {
             m = std::vector<internal_t>(grad.size(), 0);
             v = std::vector<internal_t>(grad.size(), 0);
+            t = 1;
         }
 
         for (unsigned int i = 0; i < grad.size(); ++i) {

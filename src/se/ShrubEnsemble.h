@@ -550,9 +550,8 @@ public:
                     }
                 }
             }
-
+        
             if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
-                
                 #pragma omp parallel for
                 for (unsigned int i = 0; i < _weights.size(); ++i) {
                     std::vector<internal_t> loss_deriv(n_classes, 0);
@@ -565,7 +564,7 @@ public:
                         loss.deriv(&output[k][0], &loss_deriv[0], Y[idx[k]], n_classes);
 
                         //auto lidx = leaf_idx[i][k];
-                        auto lidx = _trees[i].leaf_index(X[k]);
+                        auto lidx = _trees[i].leaf_index(X[idx[k]]);
                         for (unsigned int j = 0; j < n_classes; ++j) {
                             grad[lidx+j] += loss_deriv[j] * _weights[i] * 1.0 / n_batch_size * 1.0 / n_classes;
                         }
@@ -574,7 +573,7 @@ public:
                     _trees[i].optimizer.step(_trees[i]._leafs, grad);
                 }
             }
-
+        
             if constexpr(opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 // Compute gradient for the weights
                 std::vector<internal_t> grad(_weights.size(), 0);
@@ -594,7 +593,7 @@ public:
                         loss.deriv(&output[j][0], &loss_deriv[0], Y[idx[j]], n_classes);
 
                         //auto lidx = leaf_idx[i][j];
-                        auto lidx = _trees[i].leaf_index(X[j]);
+                        auto lidx = _trees[i].leaf_index(X[idx[j]]);
                         for (unsigned int k = 0; k < n_classes; ++k) {
                             dir += _trees[i]._leafs[lidx + k] * loss_deriv[k];
                         }
@@ -632,7 +631,6 @@ public:
         
         update_trees(X, Y, burnin_steps, std::nullopt, std::nullopt, seed);
         if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
-            // TODO also skip if ensemble_regularizer is NO
             prune();
         }
     }
