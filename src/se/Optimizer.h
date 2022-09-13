@@ -1,9 +1,8 @@
-#ifndef OPTIMIZER_H
-#define OPTIMIZER_H
+#pragma once
+
 #include <string>
 
 namespace OPTIMIZER {
-
 
 enum OPTIMIZER_TYPE {NONE, SGD, ADAM};
 
@@ -130,5 +129,3 @@ struct Optimizer<OPTIMIZER_TYPE::ADAM,step_size_type> {
 };
 
 }
-
-#endif

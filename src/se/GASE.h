@@ -1,5 +1,4 @@
-#ifndef GASE_H
-#define GASE_H
+#pragma once
 
 #include <vector>
 
@@ -65,7 +64,7 @@ public:
         }
     }
 
-    void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void fit(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
             return model->fit_ga(X,Y,n_trees,bootstrap,init_batch_size,n_rounds,n_worker);
         } else {
@@ -73,7 +72,7 @@ public:
         }
     }
 
-    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void next(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
             return model->next_ga(X,Y,n_worker);
         } else {
@@ -81,7 +80,7 @@ public:
         }
     }
 
-    void init(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void init(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y) {
         if (model != nullptr) {
             return model->init_trees(X,Y,n_trees,bootstrap,init_batch_size);
         } else {
@@ -89,7 +88,7 @@ public:
         }
     }
 
-    std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
+    matrix2d<internal_t> predict_proba(matrix2d<data_t> const &X) {
         if (model != nullptr) {
             return model->predict_proba(X);
         } else {
@@ -138,5 +137,3 @@ public:
     }
     
 };
-
-#endif

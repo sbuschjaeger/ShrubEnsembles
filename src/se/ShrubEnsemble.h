@@ -1,5 +1,4 @@
-#ifndef SHRUB_ENSEMBLE_H
-#define SHRUB_ENSEMBLE_H
+#pragma once
 
 #include <vector>
 #include <math.h>
@@ -20,10 +19,10 @@
  * @param  s: The scaling factor
  * @retval None, the operation changes X in-place
  */
-void scale(std::vector<std::vector<data_t>> &X, data_t s) {
-    for (unsigned int j = 0; j < X.size(); ++j) {
-        for (unsigned int k = 0; k < X[j].size(); ++k) {
-            X[j][k] *= s;
+void scale(matrix2d<data_t> &X, data_t s) {
+    for (unsigned int j = 0; j < X.rows; ++j) {
+        for (unsigned int k = 0; k < X.cols; ++k) {
+            X(j,k) *= s;
         }
     }
 }
@@ -35,14 +34,14 @@ void scale(std::vector<std::vector<data_t>> &X, data_t s) {
  * @retval The mean of all matrix entries. 
  */
 template<typename T>
-T mean_all_dim(std::vector<std::vector<T>> &X) {
-    unsigned int n_first = X.size();
-    unsigned int n_second = X[0].size();
+T mean_all_dim(matrix2d<data_t> &X) {
+    unsigned int n_first = X.rows;
+    unsigned int n_second = X.cols;
     T mean = 0;
 
     for (unsigned int j = 0; j < n_first; ++j) {
         for (unsigned int k = 0; k < n_second; ++k) {
-            mean += X[j][k];
+            mean += X(j,k);
         }
     }
 
@@ -54,19 +53,21 @@ T mean_all_dim(std::vector<std::vector<T>> &X) {
  * @note   
  * @param  &X: A (N,M,K) tensor
  * @param  &weights: A (N,) vector
- * @retval A (M,K) matrix stored as std::vector<std::vector<data_t>>
+ * @retval A (M,K) matrix stored as matrix<data_t>
  */
-std::vector<std::vector<data_t>> weighted_sum_first_dim(std::vector<std::vector<std::vector<data_t>>> &X, std::vector<data_t> const &weights) {
-    unsigned int n_first = X.size();
-    unsigned int n_second = X[0].size();
-    unsigned int n_third = X[0][0].size();
+matrix2d<data_t> weighted_sum_first_dim(matrix3d<data_t> const &X, std::vector<data_t> const &weights) {
+    // unsigned int n_first = X.size();
+    // unsigned int n_second = X[0].size();
+    // unsigned int n_third = X[0][0].size();
 
-    std::vector<std::vector<data_t>> XMean(n_second, std::vector<data_t> (n_third, 0));
+    matrix2d<data_t> XMean(X.ny, X.nz); //std::vector<data_t> (n_third, 0));
+    std::fill(XMean.begin(), XMean.end(), 0);
 
-    for (unsigned int i = 0; i < n_first; ++i) {
-        for (unsigned int j = 0; j < n_second; ++j) {
-            for (unsigned int k = 0; k < n_third; ++k) {
-                XMean[j][k] += X[i][j][k] * weights[i];
+    for (unsigned int i = 0; i < X.nx; ++i) {
+        for (unsigned int j = 0; j < X.ny; ++j) {
+            for (unsigned int k = 0; k < X.nz; ++k) {
+                // XMean[j][k] += X[i][j][k] * weights[i];
+                XMean(j,k) += X(i,j,k) * weights[i];
             }
         }
     }
@@ -75,42 +76,42 @@ std::vector<std::vector<data_t>> weighted_sum_first_dim(std::vector<std::vector<
 }
 
 /**
- * @brief  Samples `batch_size' data points from X and Y. If bootstrap is true, then sampling is performed with replacement. Otherwhise no replacement is used. This functions returns a tuple in which the first entry is the sampled data of type std::vector<std::vector<data_t>> and second entry is the sampled label of type  std::vector<unsigned int>
+ * @brief  Samples `batch_size' data points from X and Y. If bootstrap is true, then sampling is performed with replacement. Otherwhise no replacement is used. This functions returns a tuple in which the first entry is the sampled data of type matrix<data_t> and second entry is the sampled label of type  std::vector<unsigned int>
  * @note   
  * @param  &X: The (N,d) data matrix
  * @param  &Y: The (N,) label vector
  * @param  batch_size: The batch size
  * @param  bootstrap: If true, samples with replacement. If false, no replacement is used
  * @param  &gen: The random generator used for sampling
- * @retval A tuple in which the first entry is a (batch_size, d) matrix (stored as std::vector<std::vector<data_t>>) and the second entry is a (batch_size) vector (stored as std::vector<unsigned int>)
+ * @retval A tuple in which the first entry is a (batch_size, d) matrix (stored as matrix<data_t>) and the second entry is a (batch_size) vector (stored as std::vector<unsigned int>)
  */
-auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, std::minstd_rand &gen) {
-    if (batch_size >= X.size() || batch_size == 0) {
-        batch_size = X.size();
-    }
+// auto sample_data(matrix<data_t>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, std::minstd_rand &gen) {
+//     if (batch_size >= X.rows || batch_size == 0) {
+//         batch_size = X.rows;
+//     }
 
-    std::vector<std::vector<data_t>> bX(batch_size);
-    std::vector<unsigned int> bY(batch_size);
+//     matrix<data_t> bX(batch_size);
+//     std::vector<unsigned int> bY(batch_size);
 
-    if (bootstrap) {
-        std::uniform_int_distribution<> dist(0, X.size()-1); 
-        for (unsigned int i = 0; i < batch_size; ++i) {
-            auto idx = dist(gen);
-            bX[i] = X[idx];
-            bY[i] = Y[idx];
-        }
-    } else {
-        std::vector<unsigned int> idx(X.size());
-        std::iota(std::begin(idx), std::end(idx), 0);
-        std::shuffle(idx.begin(), idx.end(), gen);
-        for (unsigned int i = 0; i < batch_size; ++i) {
-            bX[i] = X[idx[i]];
-            bY[i] = Y[idx[i]];
-        }
-    }
+//     if (bootstrap) {
+//         std::uniform_int_distribution<> dist(0, X.size()-1); 
+//         for (unsigned int i = 0; i < batch_size; ++i) {
+//             auto idx = dist(gen);
+//             bX[i] = X[idx];
+//             bY[i] = Y[idx];
+//         }
+//     } else {
+//         std::vector<unsigned int> idx(X.size());
+//         std::iota(std::begin(idx), std::end(idx), 0);
+//         std::shuffle(idx.begin(), idx.end(), gen);
+//         for (unsigned int i = 0; i < batch_size; ++i) {
+//             bX[i] = X[idx[i]];
+//             bY[i] = Y[idx[i]];
+//         }
+//     }
 
-    return std::make_tuple(bX, bY);
-}
+//     return std::make_tuple(bX, bY);
+// }
 
 std::vector<unsigned int> sample_indices(unsigned int n_data, unsigned int batch_size, bool bootstrap, std::minstd_rand &gen) {
     if (batch_size >= n_data || batch_size == 0) {
@@ -158,19 +159,19 @@ std::vector<unsigned int> sample_indices(std::vector<unsigned int> const &idx, u
 }
 
 /**
- * @brief  Samples `batch_size' data points from X and Y. If bootstrap is true, then sampling is performed with replacement. Otherwhise no replacement is used. This functions returns a tuple in which the first entry is the sampled data of type std::vector<std::vector<data_t>> and second entry is the sampled label of type  std::vector<unsigned int>
+ * @brief  Samples `batch_size' data points from X and Y. If bootstrap is true, then sampling is performed with replacement. Otherwhise no replacement is used. This functions returns a tuple in which the first entry is the sampled data of type matrix<data_t> and second entry is the sampled label of type  std::vector<unsigned int>
  * @note   
  * @param  &X: The (N,d) data matrix
  * @param  &Y: The (N,) label vector
  * @param  batch_size: The batch size
  * @param  bootstrap: If true, samples with replacement. If false, no replacement is used
  * @param  seed: The random generator seed used for seeding a std::minstd_rand random generator. Defaults to 12345L.
- * @retval A tuple in which the first entry is a (batch_size, d) matrix (stored as std::vector<std::vector<data_t>>) and the second entry is a (batch_size) vector (stored as std::vector<unsigned int>)
+ * @retval A tuple in which the first entry is a (batch_size, d) matrix (stored as matrix<data_t>) and the second entry is a (batch_size) vector (stored as std::vector<unsigned int>)
  */
-auto sample_data(std::vector<std::vector<data_t>>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, unsigned long seed = 12345L) {
-    std::minstd_rand gen(seed);
-    return sample_data(X,Y,batch_size,bootstrap,gen);
-}
+// auto sample_data(matrix<data_t>const &X, std::vector<unsigned int>const &Y, unsigned int batch_size, bool bootstrap, unsigned long seed = 12345L) {
+//     std::minstd_rand gen(seed);
+//     return sample_data(X,Y,batch_size,bootstrap,gen);
+// }
 
 std::vector<unsigned int> sample_indices(unsigned int n_data, unsigned int batch_size, bool bootstrap, unsigned long seed = 12345L) {
     std::minstd_rand gen(seed);
@@ -185,21 +186,21 @@ std::vector<unsigned int> sample_indices(std::vector<unsigned int> const &idx, u
 
 class TreeEnsemble {
 public:
-    virtual void next_ma(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size, unsigned int burnin_steps) = 0;
+    virtual void next_ma(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size, unsigned int burnin_steps) = 0;
 
-    virtual void fit_ma(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) = 0;
+    virtual void fit_ma(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) = 0;
 
-    virtual void next_ga(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_batches) = 0;
+    virtual void next_ga(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int n_batches) = 0;
 
-    virtual void fit_ga(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_batches) = 0;
+    virtual void fit_ga(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_batches) = 0;
 
-    virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_step = 1, std::optional<unsigned int> const batch_size = std::nullopt, std::optional<bool> bootstrap = std::nullopt,std::optional<unsigned long> seed = std::nullopt) = 0;
+    virtual void update_trees(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_step = 1, std::optional<unsigned int> const batch_size = std::nullopt, std::optional<bool> bootstrap = std::nullopt,std::optional<unsigned long> seed = std::nullopt) = 0;
 
-    // virtual void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y,  unsigned int burnin_step, std::vector<unsigned int> &data_idx) = 0;
+    // virtual void update_trees(matrix<data_t> const &X, std::vector<unsigned int> const &Y,  unsigned int burnin_step, std::vector<unsigned int> &data_idx) = 0;
     
-    virtual void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool boostrap, unsigned int batch_size) = 0;
+    virtual void init_trees(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool boostrap, unsigned int batch_size) = 0;
     
-    virtual void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_steps) = 0;
+    virtual void next(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_steps) = 0;
 
     virtual unsigned int num_nodes() const = 0;
 
@@ -215,7 +216,7 @@ public:
 
     virtual std::tuple<std::vector<std::vector<internal_t>>, std::vector<std::vector<internal_t>>, std::vector<internal_t>> store() const = 0;
 
-    virtual std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) = 0;
+    virtual matrix2d<internal_t> predict_proba(matrix2d<data_t> const &X) = 0;
 
     virtual ~TreeEnsemble() { }
 };
@@ -327,7 +328,7 @@ public:
         }
     }
 
-    void init_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool boostrap, unsigned int batch_size) {
+    void init_trees(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool boostrap, unsigned int batch_size) {
         
         // Create the tree objects and initialize their weight. 
         // We do this in a single thread so that we can perform the training without any
@@ -342,7 +343,7 @@ public:
         // Do the training in parallel
         #pragma omp parallel for
         for (unsigned int i = 0; i < n_trees; ++i){
-            auto idx = sample_indices(X.size(), batch_size, boostrap, seed + i);
+            auto idx = sample_indices(X.rows, batch_size, boostrap, seed + i);
             //auto s = sample_data(X, Y, batch_size, boostrap, seed + i);
             // _trees[i].fit(std::get<0>(s), std::get<1>(s));
             _trees[i].fit(X,Y,idx);
@@ -352,7 +353,7 @@ public:
         seed += n_trees;
     }
 
-    void next_ma(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size, unsigned int burnin_steps) {
+    void next_ma(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size, unsigned int burnin_steps) {
         std::vector<ShrubEnsemble<loss_type, opt, tree_opt, tree_init>> ses(n_parallel, *this);
 
         #pragma omp parallel for
@@ -382,7 +383,7 @@ public:
         }
     }
 
-    void fit_ma(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) {
+    void fit_ma(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) {
         init_trees(X, Y, n_trees, bootstrap, batch_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
@@ -394,15 +395,15 @@ public:
         }
     }
 
-    void next_ga(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_worker) {
+    void next_ga(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int n_worker) {
         if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
             // Put all gradients in all_grad which is populated in parallel by n_worker threads
             std::vector<std::vector<std::vector<internal_t>>> all_grad(n_worker);
 
-            if (X.size() < n_worker) {
-                n_worker = X.size();
+            if (X.rows < n_worker) {
+                n_worker = X.rows;
             }
-            unsigned int b_size = X.size() / n_worker;
+            unsigned int b_size = X.rows / n_worker;
 
             // Compute the gradients in n_worker and store the aggregated gradients in all_grad for each batch
             // After that we average the gradients in all_grad and perform the GD update. 
@@ -412,7 +413,7 @@ public:
 
                 // The last thread works on all remaining data items if they are unevenly distributed.
                 if (b == n_worker - 1) {
-                    actual_size = X.size() - b_size * b;
+                    actual_size = X.rows - b_size * b;
                 } 
 
                 // Apply each tree and store the leaf index for each example in the current batch in idx. 
@@ -422,7 +423,7 @@ public:
                 for (unsigned int i = 0; i < _trees.size(); ++i) {
                     // idx[i].reserve(actual_size);
                     for (unsigned int j = 0; j < actual_size; ++j) {
-                        auto const & x = X[b*b_size + j];
+                        auto const & x = X(b*b_size + j);
                         auto lidx = _trees[i].leaf_index(x);
                         // idx[i][j].push_back(lidx);
 
@@ -470,7 +471,7 @@ public:
         }
     }
 
-    void fit_ga(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_worker) {
+    void fit_ga(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_worker) {
         init_trees(X, Y, n_trees, bootstrap, batch_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
@@ -485,20 +486,20 @@ public:
         }
     }
 
-    // void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_step = 1, std::optional<unsigned int> const batch_size = std::nullopt, std::optional<bool> bootstrap = std::nullopt) {
+    // void update_trees(matrix<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_step = 1, std::optional<unsigned int> const batch_size = std::nullopt, std::optional<bool> bootstrap = std::nullopt) {
     //     //std::vector<unsigned int> idx(X.size());
     //     // TODO idx is not required here and takes some space. Can be optimized away
     //     //std::iota(std::begin(idx), std::end(idx), 0);
     //     this->update_trees(X,Y,burnin_step,batch_size,bootstrap); 
     // }
 
-    void update_trees(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_steps, std::optional<unsigned int> const batch_size = std::nullopt, std::optional<bool> bootstrap = std::nullopt,std::optional<unsigned long> seed = std::nullopt) {
+    void update_trees(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_steps, std::optional<unsigned int> const batch_size = std::nullopt, std::optional<bool> bootstrap = std::nullopt,std::optional<unsigned long> seed = std::nullopt) {
         // The structure of the trees does not change with the optimization and hence we can 
         // pre-compute the leaf indices for each tree / sample and store them. This mitigates the
         // somewhat "costly" iteration of the trees in each round but gives direct access to the
         // leaf nodes
 
-        unsigned int n_batch_size = X.size();
+        unsigned int n_batch_size = X.rows;
         if (batch_size.has_value() && batch_size.value() > 0) {
             n_batch_size = batch_size.value();
         }
@@ -528,7 +529,7 @@ public:
         std::vector<std::vector<internal_t>> output(n_batch_size, std::vector<internal_t> (n_classes, 0));
         for (unsigned int s = 0; s < burnin_steps + 1; ++s) {
             //auto idx = sample_indices(data_idx, n_batch_size, do_boostrap);
-            auto idx = sample_indices(X.size(), n_batch_size, do_boostrap, gen);
+            auto idx = sample_indices(X.rows, n_batch_size, do_boostrap, gen);
 
             // Reset the output vector because we "add into" it in the for loop below
             // Compute the predictions for each tree / sample with the pre-computed indices.
@@ -543,7 +544,7 @@ public:
             for (unsigned int i = 0; i < _trees.size(); ++i) {
                 for (unsigned int j = 0; j < n_batch_size; ++j) {
                     //auto lidx = leaf_idx[i][j];
-                    auto lidx = _trees[i].leaf_index(X[idx[j]]);
+                    auto lidx = _trees[i].leaf_index(X(idx[j]));
 
                     for (unsigned int k = 0; k < n_classes; ++k) {
                         output[j][k] += _weights[i] * _trees[i]._leafs[lidx + k];
@@ -564,7 +565,7 @@ public:
                         loss.deriv(&output[k][0], &loss_deriv[0], Y[idx[k]], n_classes);
 
                         //auto lidx = leaf_idx[i][k];
-                        auto lidx = _trees[i].leaf_index(X[idx[k]]);
+                        auto lidx = _trees[i].leaf_index(X(idx[k]));
                         for (unsigned int j = 0; j < n_classes; ++j) {
                             grad[lidx+j] += loss_deriv[j] * _weights[i] * 1.0 / n_batch_size * 1.0 / n_classes;
                         }
@@ -593,7 +594,7 @@ public:
                         loss.deriv(&output[j][0], &loss_deriv[0], Y[idx[j]], n_classes);
 
                         //auto lidx = leaf_idx[i][j];
-                        auto lidx = _trees[i].leaf_index(X[idx[j]]);
+                        auto lidx = _trees[i].leaf_index(X(idx[j]));
                         for (unsigned int k = 0; k < n_classes; ++k) {
                             dir += _trees[i]._leafs[lidx + k] * loss_deriv[k];
                         }
@@ -624,7 +625,7 @@ public:
         }
     }
 
-    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_steps) {
+    void next(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, unsigned int burnin_steps) {
         _weights.push_back(0.0);
         _trees.push_back(DecisionTree<tree_init, tree_opt>(n_classes,max_depth, max_features, seed++, step_size));
         _trees.back().fit(X,Y);
@@ -635,23 +636,32 @@ public:
         }
     }
 
-    std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
-        std::vector<std::vector<internal_t>> output; 
+    matrix2d<internal_t> predict_proba(matrix2d<data_t> const &X) {
         if (_trees.size() == 0) {
-            output.resize(X.size());
-            for (unsigned int i = 0; i < X.size(); ++i) {
-                output[i] = std::vector<internal_t>(n_classes, 1.0/n_classes);
-            }
+            matrix2d<internal_t> output(X.rows, n_classes); 
+            std::fill(output.begin(), output.end(), 1.0/n_classes);
+            return output;
+            // output.resize(X.size());
+            // for (unsigned int i = 0; i < X.size(); ++i) {
+            //     output[i] = std::vector<internal_t>(n_classes, 1.0/n_classes);
+            // }
         } else {
-            std::vector<std::vector<std::vector<internal_t>>> all_proba(_trees.size());
+            matrix3d<internal_t> all_proba(_trees.size(), X.rows, n_classes);
+            //std::vector<std::vector<std::vector<internal_t>>> all_proba(_trees.size());
             for (unsigned int i = 0; i < _trees.size(); ++i) {
-                all_proba[i] = _trees[i].predict_proba(X);
+                // TODO THIS PROBABLY DOES NOT WORK
+                auto tmp = all_proba(i);
+                _trees[i].predict_proba(X, tmp);
+                // auto preds = _trees[i].predict_proba(X);
+                //all_proba[i] = _trees[i].predict_proba(X);
+                //all_proba(i) = _trees[i].predict_proba(X);
             }
-            output = weighted_sum_first_dim(all_proba, _weights);
+            matrix2d<internal_t> output = weighted_sum_first_dim(all_proba, _weights);
+            return output;
         }
-        return output;
     }
 
+    // TODO REPLACE MATRIX2D
     void load(std::vector<std::vector<internal_t>> & new_nodes, std::vector<std::vector<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) {
         
         _trees.clear();
@@ -663,6 +673,7 @@ public:
         }
     }
 
+    // TODO REPLACE MATRIX2D
     std::tuple<std::vector<std::vector<internal_t>>, std::vector<std::vector<internal_t>>, std::vector<internal_t>> store() const {
         std::vector<std::vector<internal_t>> all_leafs(_trees.size());
         std::vector<std::vector<internal_t>> all_nodes(_trees.size());
@@ -714,5 +725,3 @@ public:
     // }
 
 };
-
-#endif

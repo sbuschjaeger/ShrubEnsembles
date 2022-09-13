@@ -13,7 +13,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.tree import DecisionTreeClassifier
 
-from se.CShrubEnsembles import CDecisionTreeClassifier, CDecisionTreeClassifierOpt
+from se.CShrubEnsembles import CDecisionTreeClassifierOpt
+# from se.CShrubEnsembles import CDecisionTreeClassifier, CDecisionTreeClassifierOpt
 
 def download(url, filename, tmpdir = None):
     """Download the file under the given url and store it in the given tmpdir udner the given filename. If tmpdir is None, then `tempfile.gettmpdir()` will be used which is most likely /tmp on Linux systems.
@@ -92,12 +93,12 @@ for N in [1000, 10000, 100000, None]:
 
     print("Starting benchmark on {} training and {} testing".format(X_train.shape, X_test.shape))
 
-    dt1 = CDecisionTreeClassifier(0,n_classes,max_features,seed,step_size,tree_init_mode,tree_update_mode)
-    df.append({
-        "name":"dt1",
-        "N":N,
-        **benchmark(dt1,X_train,y_train,X_test,y_test)
-    })
+    # dt1 = CDecisionTreeClassifier(0,n_classes,max_features,seed,step_size,tree_init_mode,tree_update_mode)
+    # df.append({
+    #     "name":"dt1",
+    #     "N":N,
+    #     **benchmark(dt1,X_train,y_train,X_test,y_test)
+    # })
     
     dt2 = CDecisionTreeClassifierOpt(0,n_classes,max_features,seed,step_size,tree_init_mode,tree_update_mode)
     df.append({

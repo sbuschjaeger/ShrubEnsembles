@@ -1,5 +1,4 @@
-#ifndef TREE_REGULARIZER_H
-#define TREE_REGULARIZER_H
+#pragma once
 
 #include <vector>
 #include <algorithm>
@@ -49,5 +48,3 @@ auto from_string(std::string const & regularizer) {
 }
 
 }
-
-#endif
