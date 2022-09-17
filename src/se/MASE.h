@@ -1,9 +1,9 @@
-#ifndef MASE_H
-#define MASE_H
+#pragma once
 
 #include <vector>
 
 #include "Datatypes.h"
+#include "Matrix.h"
 #include "DecisionTree.h"
 #include "ShrubEnsemble.h"
 #include "EnsembleRegularizer.h"
@@ -70,7 +70,7 @@ public:
         }
     }
 
-    void fit(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
             model->fit_ma(X,Y,n_trees,bootstrap,batch_size,n_rounds,n_worker,burnin_steps);
         } else {
@@ -78,7 +78,7 @@ public:
         }
     }
 
-    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
             if (n_worker == 1) {
                 model->update_trees(X,Y,burnin_steps);
@@ -90,7 +90,7 @@ public:
         }
     }
 
-    void init(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void init(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
             model->init_trees(X,Y,n_trees,bootstrap,batch_size);
         } else {
@@ -98,7 +98,7 @@ public:
         }
     }
 
-    std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
+    matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) {
         if (model != nullptr) {
             return model->predict_proba(X);
         } else {
@@ -130,7 +130,7 @@ public:
         }
     }
 
-    void load(std::vector<std::vector<internal_t>> & new_nodes, std::vector<std::vector<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) {
+    void load(std::vector<matrix1d<internal_t>> & new_nodes, std::vector<matrix1d<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) {
         if (model != nullptr) {
             model->load(new_nodes, new_leafs, new_weights);
         } else {
@@ -138,7 +138,7 @@ public:
         }
     }
 
-    std::tuple<std::vector<std::vector<internal_t>>, std::vector<std::vector<internal_t>>, std::vector<internal_t>> store() const {
+    std::tuple<std::vector<matrix1d<internal_t>>, std::vector<matrix1d<internal_t>>, std::vector<internal_t>> store() const {
         if (model != nullptr) {
             return model->store();
         } else {
@@ -146,5 +146,3 @@ public:
         }
     }
 };
-
-#endif

@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "Matrix.h"
+
 namespace OPTIMIZER {
 
 enum OPTIMIZER_TYPE {NONE, SGD, ADAM};
@@ -41,7 +43,8 @@ struct Optimizer<OPTIMIZER_TYPE::NONE,step_size_type> {
 
     void reset() {}
 
-    void step(std::vector<internal_t> &weight, std::vector<internal_t> const &grad) {}
+    // void step(std::vector<internal_t> &weight, std::vector<internal_t> const &grad) {}
+    void step(matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) {}
 
     unsigned int num_bytes() const {
         return sizeof(*this);
@@ -57,16 +60,16 @@ struct Optimizer<OPTIMIZER_TYPE::SGD,step_size_type> {
 
     void reset() {}
 
-    void step(std::vector<internal_t> &weight, std::vector<internal_t> const &grad) {
+    void step(matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) {
         internal_t step_size;
         if constexpr(step_size_type == STEP_SIZE_TYPE::ADAPTIVE) {
-            step_size = 1.0 / (weight.size() + 1);
+            step_size = 1.0 / (weight.dim + 1);
         } else {
             step_size = this->step_size;
         }
 
-        for (unsigned int i = 0; i < grad.size(); ++i) {
-            weight[i] -= step_size * grad[i]; 
+        for (unsigned int i = 0; i < grad.dim; ++i) {
+            weight(i) -= step_size * grad(i); 
         }
     }
 
@@ -83,6 +86,10 @@ struct Optimizer<OPTIMIZER_TYPE::ADAM,step_size_type> {
 
     std::vector<internal_t> m;
     std::vector<internal_t> v;
+
+    // TODO Use this?
+    // matrix1d<internal_t> m;
+    // matrix1d<internal_t> v;
     unsigned int t;
 
     Optimizer(internal_t step_size, internal_t beta1, internal_t beta2) : step_size(step_size), beta1(beta1), beta2(beta2), t(1) {}
@@ -101,28 +108,34 @@ struct Optimizer<OPTIMIZER_TYPE::ADAM,step_size_type> {
         return sizeof(*this) + m.size() * sizeof(internal_t) + v.size()*sizeof(internal_t);
     }
 
-    void step(std::vector<internal_t> &weight, std::vector<internal_t> const &grad) {
+    void step(matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) {
         data_t step_size;
 
         if constexpr(step_size_type == STEP_SIZE_TYPE::ADAPTIVE) {
-            step_size = 1.0 / (weight.size() + 1);
+            step_size = 1.0 / (weight.dim + 1);
         } else {
             step_size = this->step_size;
         }
 
         // TODO Also check v / weight?
-        if (m.size() != grad.size()) {
-            m = std::vector<internal_t>(grad.size(), 0);
-            v = std::vector<internal_t>(grad.size(), 0);
+        if (m.size() != grad.dim) {
+            // m = matrix1d<internal_t>(grad.dim);
+            // std::fill(m.begin(), m.end(), 0);
+
+            // v = matrix1d<internal_t>(grad.dim);
+            // std::fill(v.begin(), v.end(), 0);
+
+            m = std::vector<internal_t>(grad.dim, 0);
+            v = std::vector<internal_t>(grad.dim, 0);
             t = 1;
         }
 
-        for (unsigned int i = 0; i < grad.size(); ++i) {
-            m[i] = beta1 * m[i] + (1.0 - beta1) * grad[i];
-            v[i] = beta1 * v[i] + (1.0 - beta1) * grad[i] * grad[i];
+        for (unsigned int i = 0; i < grad.dim; ++i) {
+            m[i] = beta1 * m[i] + (1.0 - beta1) * grad(i);
+            v[i] = beta1 * v[i] + (1.0 - beta1) * grad(i) * grad(i);
             internal_t m_cor = m[i] / (1.0 - std::pow(beta1,t));
             internal_t v_cor = v[i] / (1.0 - std::pow(beta2, t));
-            weight[i] += -step_size * m_cor / (std::sqrt(v_cor) + 1e-7);
+            weight(i) += -step_size * m_cor / (std::sqrt(v_cor) + 1e-7);
         }
         t += 1; 
     }

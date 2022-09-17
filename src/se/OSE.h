@@ -1,5 +1,4 @@
-#ifndef OSE_H
-#define OSE_H
+#pragma once
 
 #include <vector>
 
@@ -61,7 +60,7 @@ public:
         }
     }
 
-    void next(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y) {
+    void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
             model->next(X,Y,burnin_steps);
         } else {
@@ -69,7 +68,7 @@ public:
         }
     }
     
-    void init(std::vector<std::vector<data_t>> const &X, std::vector<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size) {
+    void init(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size) {
         if (model != nullptr) {
             model->init_trees(X,Y,n_trees, bootstrap, batch_size);
         } else {
@@ -77,7 +76,7 @@ public:
         }
     }
 
-    std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
+    matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) {
         if (model != nullptr) {
             return model->predict_proba(X);
         } else {
@@ -109,21 +108,21 @@ public:
         }
     }
 
-    void load(std::vector<std::vector<internal_t>> & new_nodes, std::vector<std::vector<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) {
-        if (model != nullptr) {
-            model->load(new_nodes, new_leafs, new_weights);
-        } else {
-            throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
-        }
-    }
+    // // TODO
+    // void load(std::vector<std::vector<internal_t>> & new_nodes, std::vector<std::vector<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) {
+    //     if (model != nullptr) {
+    //         model->load(new_nodes, new_leafs, new_weights);
+    //     } else {
+    //         throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
+    //     }
+    // }
 
-    std::tuple<std::vector<std::vector<internal_t>>, std::vector<std::vector<internal_t>>, std::vector<internal_t>> store() const {
-        if (model != nullptr) {
-            return model->store();
-        } else {
-            throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
-        }
-    }
+    // // TODO
+    // std::tuple<std::vector<std::vector<internal_t>>, std::vector<std::vector<internal_t>>, std::vector<internal_t>> store() const {
+    //     if (model != nullptr) {
+    //         return model->store();
+    //     } else {
+    //         throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
+    //     }
+    // }
 };
-
-#endif

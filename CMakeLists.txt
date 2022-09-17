@@ -21,9 +21,6 @@ add_subdirectory(lib/pybind11)
 
 include_directories("src/se")
 
-add_executable(test_matrix tests/test_matrix.cpp)
-target_include_directories(test_matrix PUBLIC)
-
 # add_executable(debug tests/debug.cpp)
 # target_include_directories(debug PUBLIC)
 

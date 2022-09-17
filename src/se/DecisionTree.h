@@ -46,7 +46,7 @@ public:
 class Tree {
 public:
 
-    virtual void fit(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y) = 0;
+    virtual void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) = 0;
 
     virtual matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) = 0;
 
@@ -54,13 +54,9 @@ public:
 
     virtual unsigned int num_nodes() const = 0;
 
-    virtual void load(std::vector<internal_t> & new_nodes, std::vector<internal_t> & new_leafs) = 0;
+    virtual void load(matrix1d<internal_t> const & new_nodes, matrix1d<internal_t> const & new_leafs) = 0;
 
-    virtual std::tuple<std::vector<internal_t>, std::vector<internal_t>> store() const = 0;
-
-    // virtual std::vector<internal_t> & leafs() = 0;
-    
-    // virtual std::vector<Node> & nodes() = 0;
+    virtual std::tuple<matrix1d<internal_t>, matrix1d<internal_t>> store() const = 0;
 
     virtual ~Tree() { }
 };
@@ -109,7 +105,7 @@ private:
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> random_split(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> const & idx, std::mt19937 &gen, std::vector<bool> & feature_is_const) {
+    static std::optional<std::pair<data_t, unsigned int>> random_split(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::vector<unsigned int> const & idx, std::mt19937 &gen, std::vector<bool> & feature_is_const) {
         // At-least 2 points are required for splitting.
         // Technically this check is unncessary since we stop tree construction once there is only one label in the data which is always the case 
         // if we have 0 or 1 examples. For safea measure we keep this check alive however.
@@ -217,7 +213,7 @@ private:
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    static std::optional<std::pair<data_t, unsigned int>> best_split(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx, long n_classes, unsigned int max_features, std::mt19937 &gen, std::vector<bool> & feature_is_const) {
+    static std::optional<std::pair<data_t, unsigned int>> best_split(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::vector<unsigned int> const &idx, long n_classes, unsigned int max_features, std::mt19937 &gen, std::vector<bool> & feature_is_const) {
         // At-least 2 points are required for splitting.
         // Technically this check is unncessary since we stop tree construction once there is only one label in the data which is always the case 
         // if we have 0 or 1 examples. For safea measure we keep this check alive however.
@@ -253,9 +249,6 @@ private:
 
         std::vector<Sample> XTmp(n_data);
 
-        // std::vector<data_t> XTmp(n_data);
-        // std::vector<unsigned int> YTmp(n_data);
-
         unsigned int fcnt = 0;
         for (auto i: features) {
             if (feature_is_const[i]) {
@@ -274,21 +267,13 @@ private:
             unsigned int k = 0;
             for (auto j : idx) {
                 XTmp[k].xf = X(j,i);
-                XTmp[k].label = Y[j];
+                XTmp[k].label = Y(j);
                 ++k;
             }            
 
             std::sort(XTmp.begin(), XTmp.end(), [](const Sample & a, const Sample & b) -> bool { 
                 return a.xf < b.xf; }
             );
-
-            // std::sort(idx.begin(), idx.end(), [&X, i](unsigned int i1, unsigned int i2){return X[i1][i] < X[i2][i];});
-            // unsigned int k = 0;
-            // for(auto j : idx) {
-            //     XTmp[k] = X[j][i];
-            //     YTmp[k] = Y[j];
-            //     k++;
-            // }
 
             // Re-set class statistics
             std::fill(left_cnts.begin(), left_cnts.end(), 0);
@@ -311,18 +296,6 @@ private:
                     }
                     right_cnts[XTmp[j].label] += 1;
                 }
-                // auto jidx = idx[j]; 
-                // if (X[jidx][i] == X[jfirst][i]) {
-                //     left_cnts[Y[jidx]] += 1;
-                // } else {
-                //     if (first) {
-                //         best_threshold = X[jfirst][i] / 2.0 + X[jidx][i] / 2.0;
-                //         //best_threshold = 0.5 * (f_values[0].first + f_values[j].first); 
-                //         first = false;
-                //         begin = j;
-                //     }
-                //     right_cnts[Y[jidx]] += 1;
-                // }
             }
 
             if (first) {
@@ -415,89 +388,41 @@ public:
 
     void predict_proba(matrix2d<data_t> const &X, matrix2d<data_t> & preds) {
         for (unsigned int i = 0; i < X.rows; ++i) {
-            //preds[i] = _nodes[node_index(X[i])].preds;
-            //data_t const * const node_preds = _nodes[node_index(X[i])].preds.get();
             internal_t const * const node_preds = &_leafs[leaf_index(X(i))]; //.preds.get();
             std::copy(node_preds, node_preds+n_classes, preds(i).begin());
-            //preds[i].assign(node_preds, node_preds + n_classes);
         }
     }
 
     matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) {
         matrix2d<data_t> preds(X.rows, n_classes);
-        //std::vector<std::vector<data_t>> XMean(n_second, std::vector<data_t> (n_third, 0));
 
         for (unsigned int i = 0; i < X.rows; ++i) {
-            //preds[i] = _nodes[node_index(X[i])].preds;
-            //data_t const * const node_preds = _nodes[node_index(X[i])].preds.get();
             internal_t const * const node_preds = &_leafs[leaf_index(X(i))]; //.preds.get();
             std::copy(node_preds, node_preds+n_classes, preds(i).begin());
-            //preds[i].assign(node_preds, node_preds + n_classes);
         }
         return preds;
     }
-
-    // std::vector<std::vector<internal_t>> predict_proba(std::vector<std::vector<data_t>> const &X) {
-    //     // TODO CHECK AUF _nodes.size() > 0
-    //     std::vector<unsigned int> leaf_index(X.size(), 0);
-    //     std::vector<bool> to_predict(X.size(), true);
-
-    //     // std::vector<bool> leaf_found(X.size(), false);
-    //     // unsigned int leaf_found = 0;
-
-    //     bool all_preds_done = false;
-    //     while(!all_preds_done) {
-    //         all_preds_done = true;
-    //         for (unsigned int i = 0; i < X.size(); ++i) {
-    //             if (to_predict[i]) {
-    //                 auto const & n = _nodes[leaf_index[i]];
-    //                 if (X[i][n.feature] <= n.threshold) {
-    //                     leaf_index[i] = _nodes[leaf_index[i]].left;
-    //                     if (n.left_is_leaf) {
-    //                         to_predict[i] = false;
-    //                     } else {
-    //                         all_preds_done = false;
-    //                     }
-    //                 } else {
-    //                     leaf_index[i] = _nodes[leaf_index[i]].right;
-    //                     if (n.right_is_leaf) {
-    //                         to_predict[i] = false;
-    //                     } else {
-    //                         all_preds_done = false;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     std::vector<std::vector<data_t>> preds(X.size());
-    //     for (unsigned int i = 0; i < X.size(); ++i) {
-    //         internal_t const * const node_preds = &_leafs[leaf_index[i]]; //.preds.get();
-    //         preds[i].assign(node_preds, node_preds + n_classes);
-    //     }
-    //     return preds;
-    // }
 
     unsigned int num_nodes() const {
         return _nodes.size() + int(_leafs.size() / n_classes);
     }
 
-    void fit(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y) {
-        std::vector<unsigned int> idx(X.rows);
-        std::iota(std::begin(idx), std::end(idx), 0);
+    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) {
+        matrix1d<unsigned int> idx(X.rows);
+        std::iota(idx.begin(), idx.end(), 0);
 
         std::vector<bool> feature_is_const(X.cols, false);
 
         this->fit(X,Y,idx,feature_is_const);
     }
 
-    void fit(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx) {
+    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, matrix1d<unsigned int> const & idx) {
         std::vector<bool> feature_is_const(X.cols, false);
 
         this->fit(X,Y,idx,feature_is_const);
     }
 
-    void fit(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y, std::vector<unsigned int> & idx, std::vector<bool> & feature_is_const) {
+    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, matrix1d<unsigned int> const & idx, std::vector<bool> & feature_is_const) {
         /**
          *  For my future self I tried to make the code somewhat understandable while begin reasonably fast / optimized. 
          *  For training the tree we follow the "regular" top-down approach in which we expand each node by two child nodes. The current set of 
@@ -526,7 +451,10 @@ public:
 
         std::queue<TreeExpansion> to_expand; 
         TreeExpansion root;
-        root.idx = std::move(idx);
+        // root.idx = std::move(idx);
+        root.idx = std::vector<unsigned int>(idx.dim);
+        std::copy(idx.begin(), idx.end(), root.idx.begin());
+
         root.parent = -1;
         root.left = false;
         root.depth = 0;
@@ -545,15 +473,8 @@ public:
 
             std::vector<internal_t> preds(n_classes, 0.0);
             for (auto i : exp.idx) {
-                preds[Y[i]]++;
+                preds[Y(i)]++;
             }
-            // nodes[cur_idx].preds = std::make_unique<internal_t []>(n_classes);
-
-            // Calculate class statistics and check if its a pure node with one class (= leaf node)
-            // std::fill_n(nodes[cur_idx].preds.get(), n_classes, 0);
-            // for (auto i : exp.idx) {
-            //     nodes[cur_idx].preds.get()[Y[i]]++;
-            // }
 
             bool is_leaf = false;
             for (unsigned int i = 0; i < n_classes; ++i) {
@@ -633,45 +554,44 @@ public:
         }
     }
 
-    void load(std::vector<internal_t> & new_nodes, std::vector<internal_t> & new_leafs) {
-        _leafs = std::move(new_leafs);
-        std::vector<Node> t_nodes;
+    void load(matrix1d<internal_t> const &  new_nodes, matrix1d<internal_t> const & new_leafs) {
+        std::vector<Node> t_nodes(static_cast<unsigned int>(new_nodes.dim / 6));
 
-        for (unsigned int j = 0; j < new_nodes.size(); j += 6) {
+        for (unsigned int j = 0; j < new_nodes.dim; j += 6) {
             Node n;
-            n.threshold = static_cast<data_t>(new_nodes[j]);
-            n.feature = static_cast<unsigned int>(new_nodes[j+1]);
-            n.left = static_cast<unsigned int>(new_nodes[j+2]);
-            n.right = static_cast<unsigned int>(new_nodes[j+3]);
-            n.left_is_leaf = new_nodes[j+4] == 0.0 ? false : true;
-            n.right_is_leaf = new_nodes[j+5] == 0.0 ? false : true;
+            n.threshold = static_cast<data_t>(new_nodes(j));
+            n.feature = static_cast<unsigned int>(new_nodes(j+1));
+            n.left = static_cast<unsigned int>(new_nodes(j+2));
+            n.right = static_cast<unsigned int>(new_nodes(j+3));
+            n.left_is_leaf = new_nodes(j+4) == 0.0 ? false : true;
+            n.right_is_leaf = new_nodes(j+5) == 0.0 ? false : true;
             t_nodes.push_back(n);
         }
         _nodes = std::move(t_nodes);
+
+        std::vector<internal_t> t_leafs(new_leafs.dim);
+        std::copy(new_leafs.begin(), new_leafs.end(), t_leafs.begin());
+        _leafs = std::move(t_leafs);
+        // _leafs = std::move(new_leafs);
     }
 
-    std::tuple<std::vector<internal_t>, std::vector<internal_t>> store() const {
-        std::vector<internal_t> primitive_nodes;
+    std::tuple<matrix1d<internal_t>, matrix1d<internal_t>> store() const {
+        matrix1d<internal_t> primitive_nodes(6 * _nodes.size());
 
+        unsigned int i = 0;
         for (auto const &n : _nodes) {
-            primitive_nodes.push_back(static_cast<internal_t>(n.threshold));
-            primitive_nodes.push_back(static_cast<internal_t>(n.feature));
-            primitive_nodes.push_back(static_cast<internal_t>(n.left));
-            primitive_nodes.push_back(static_cast<internal_t>(n.right));
-            primitive_nodes.push_back(static_cast<internal_t>(n.left_is_leaf));
-            primitive_nodes.push_back(static_cast<internal_t>(n.right_is_leaf));
+            primitive_nodes(i++) = static_cast<internal_t>(n.threshold);
+            primitive_nodes(i++) = static_cast<internal_t>(n.feature);
+            primitive_nodes(i++) = static_cast<internal_t>(n.left);
+            primitive_nodes(i++) = static_cast<internal_t>(n.right);
+            primitive_nodes(i++) = static_cast<internal_t>(n.left_is_leaf);
+            primitive_nodes(i++) = static_cast<internal_t>(n.right_is_leaf);
         }
 
-        return std::make_tuple(primitive_nodes, _leafs);
+        matrix1d<internal_t> t_leafs(_leafs.size());
+        std::copy(_leafs.begin(), _leafs.end(), t_leafs.begin());
+        return std::make_tuple<matrix1d<internal_t>, matrix1d<internal_t>> (std::move(primitive_nodes), std::move(t_leafs));
     }
-
-    // std::vector<internal_t> & leafs() {
-    //     return _leafs;
-    // }
-    
-    // std::vector<Node> & nodes() {
-    //     return _nodes;
-    // }
 };
 
 class DecisionTreeClassifier {
@@ -709,7 +629,7 @@ public:
         }
     }
 
-    void fit(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y) {
+    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) {
         if (tree != nullptr) {
             tree->fit(X, Y);
         } else {
@@ -747,7 +667,7 @@ public:
         }
     }
 
-    void load(std::vector<internal_t> & new_nodes, std::vector<internal_t> & new_leafs) {
+    void load(matrix1d<internal_t> const & new_nodes, matrix1d<internal_t> const & new_leafs) {
         if (tree != nullptr) {
             return tree->load(new_nodes,new_leafs);
         } else {
@@ -755,27 +675,11 @@ public:
         }
     }
 
-    std::tuple<std::vector<internal_t>, std::vector<internal_t>> store() const {
+    std::tuple<matrix1d<internal_t>, matrix1d<internal_t>> store() const {
         if (tree != nullptr) {
             return tree->store();
         } else {
             throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
         }
     }
-    
-    // std::vector<internal_t> & leafs() {
-    //     if (tree != nullptr) {
-    //         return tree->leafs();
-    //     } else {
-    //         throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-    //     }
-    // }
-    
-    // std::vector<Node> & nodes() {
-    //     if (tree != nullptr) {
-    //         return tree->nodes();
-    //     } else {
-    //         throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-    //     }
-    // }
 };

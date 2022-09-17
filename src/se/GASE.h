@@ -64,7 +64,7 @@ public:
         }
     }
 
-    void fit(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y) {
+    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
             return model->fit_ga(X,Y,n_trees,bootstrap,init_batch_size,n_rounds,n_worker);
         } else {
@@ -72,7 +72,7 @@ public:
         }
     }
 
-    void next(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y) {
+    void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
             return model->next_ga(X,Y,n_worker);
         } else {
@@ -80,7 +80,7 @@ public:
         }
     }
 
-    void init(matrix2d<data_t> const &X, std::vector<unsigned int> const &Y) {
+    void init(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
             return model->init_trees(X,Y,n_trees,bootstrap,init_batch_size);
         } else {
@@ -120,7 +120,7 @@ public:
         }
     }
 
-    void load(std::vector<std::vector<internal_t>> & new_nodes, std::vector<std::vector<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) {
+    void load(std::vector<matrix1d<internal_t>> & new_nodes, std::vector<matrix1d<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) {
         if (model != nullptr) {
             model->load(new_nodes, new_leafs, new_weights);
         } else {
@@ -128,7 +128,7 @@ public:
         }
     }
 
-    std::tuple<std::vector<std::vector<internal_t>>, std::vector<std::vector<internal_t>>, std::vector<internal_t>> store() const {
+    std::tuple<std::vector<matrix1d<internal_t>>, std::vector<matrix1d<internal_t>>, std::vector<internal_t>> store() const {
         if (model != nullptr) {
             return model->store();
         } else {
