@@ -80,7 +80,7 @@ class CMakeBuild(build_ext):
         print()  # Add an empty line for cleaner output
 
 setup(
-    name='ShrubEnsemble',
+    name='ShrubEnsembles',
     version='0.1',
     url='https://github.com/sbuschjaeger/ShrubEnsembles',
     author='Sebastian Buschjäger',

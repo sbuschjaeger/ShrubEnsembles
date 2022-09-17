@@ -25,7 +25,7 @@ class GASE(ClassifierMixin, BaseEstimator):
         tree_init_mode = "train",
         n_trees = 32, 
         n_rounds = 5,
-        #init_batch_size = 32,
+        init_batch_size = 32,
         n_worker = 32,
         bootstrap = True,
         verbose = False,
@@ -70,7 +70,7 @@ class GASE(ClassifierMixin, BaseEstimator):
         self.optimizer = optimizer
         self.tree_init_mode = tree_init_mode
         self.n_trees = n_trees
-        #self.init_batch_size = init_batch_size
+        self.init_batch_size = init_batch_size
         self.n_worker = n_worker
         self.n_rounds = n_rounds
         self.verbose = verbose
@@ -142,8 +142,8 @@ class GASE(ClassifierMixin, BaseEstimator):
         self.n_classes_ = len(self.classes_)
         self.n_outputs_ = self.n_classes_
         
-        # if self.init_batch_size > X.shape[0]:
-        #     self.init_batch_size = X.shape[0]
+        if self.init_batch_size > X.shape[0]:
+            self.init_batch_size = X.shape[0]
 
         self.X_ = X
         self.y_ = y
@@ -160,7 +160,7 @@ class GASE(ClassifierMixin, BaseEstimator):
             self.n_trees,
             self.n_worker,
             self.n_rounds,
-            X.shape[0] // self.n_worker, #TODO Use self.init_batch_size ?
+            self.init_batch_size, #X.shape[0] // self.n_worker, #TODO Use self.init_batch_size ?
             self.bootstrap
         )
 
