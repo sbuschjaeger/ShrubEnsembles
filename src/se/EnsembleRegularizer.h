@@ -1,5 +1,4 @@
-#ifndef ENSEMBLE_REGULARIZER_H
-#define ENSEMBLE_REGULARIZER_H
+#pragma once
 
 #include <vector>
 #include <algorithm>
@@ -136,5 +135,3 @@ auto from_string(std::string const & regularizer) {
     }
 }
 }
-
-#endif

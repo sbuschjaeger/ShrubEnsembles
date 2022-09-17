@@ -1,6 +1,3 @@
-#ifndef DATATYPES_H
-#define DATATYPES_H
-
+#pragma once
 typedef double data_t;
 typedef double internal_t; 
-#endif
