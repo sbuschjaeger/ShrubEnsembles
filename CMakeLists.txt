@@ -21,10 +21,10 @@ add_subdirectory(lib/pybind11)
 
 include_directories("src/se")
 
-# add_executable(debug tests/debug.cpp)
-# target_include_directories(debug PUBLIC)
+add_executable(debug tests/debug.cpp)
+target_include_directories(debug PUBLIC)
 
-add_executable(benchmark tests/benchmark_tree.cpp)
-target_include_directories(benchmark PUBLIC)
+# add_executable(benchmark tests/benchmark_tree.cpp)
+# target_include_directories(benchmark PUBLIC)
 
 pybind11_add_module(CShrubEnsembles src/se/PythonBindings.cpp)

@@ -74,7 +74,7 @@ public:
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
-            model->fit_ma(X,Y,n_trees,bootstrap,batch_size,n_rounds,n_worker,burnin_steps);
+            model->fit_ma(X, Y, n_trees, init_tree_size, n_worker, bootstrap,batch_size, n_rounds, burnin_steps);
         } else {
             throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
@@ -94,8 +94,8 @@ public:
 
     void init(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
-            if (init_tree_size == 0 || init_tree_size > X.size()) {
-                model->init_trees(X,Y,n_trees,bootstrap,X.size());
+            if (init_tree_size == 0 || init_tree_size > X.rows) {
+                model->init_trees(X,Y,n_trees,bootstrap,X.rows);
             } else {
                 model->init_trees(X,Y,n_trees,bootstrap,init_tree_size);
             }

@@ -160,7 +160,8 @@ class GASE(ClassifierMixin, BaseEstimator):
             self.n_trees,
             self.n_worker,
             self.n_rounds,
-            self.init_batch_size, #X.shape[0] // self.n_worker, #TODO Use self.init_batch_size ?
+            self.init_batch_size, 
+            self.batch_size,
             self.bootstrap
         )
 
@@ -170,7 +171,7 @@ class GASE(ClassifierMixin, BaseEstimator):
             if self.batch_size is None:
                 self.model.init(X,y)
             else:
-                Nsample = self.batch_size
+                Nsample = self.init_batch_size
                 indices = np.arange(X.shape[0])
                 np.random.shuffle(indices)
                 Xs, Ys = X[indices[0:Nsample]], y[indices[0:Nsample]]

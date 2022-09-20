@@ -5,6 +5,7 @@
 #include <random>
 #include <algorithm>
 #include <optional>
+// #include <iostream>
 
 #include "Datatypes.h"
 #include "DecisionTree.h"
@@ -131,11 +132,11 @@ class TreeEnsemble {
 public:
     virtual void next_ma(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size, unsigned int burnin_steps) = 0;
 
-    virtual void fit_ma(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y, unsigned int n_trees, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) = 0;
+    virtual void fit_ma(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y, unsigned int n_trees, unsigned int init_tree_size, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) = 0;
 
-    virtual void next_ga(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y, unsigned int n_batches) = 0;
+    virtual void next_ga(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y, unsigned int n_worker, unsigned int batch_size) = 0;
 
-    virtual void fit_ga(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_batches) = 0;
+    virtual void fit_ga(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y, unsigned int n_trees, bool bootstrap, unsigned int init_batch_size, unsigned int batch_size, unsigned int n_rounds, unsigned int n_worker) = 0;
 
     virtual void update_trees(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y, unsigned int burnin_step = 1, std::optional<unsigned int> const batch_size = std::nullopt, std::optional<bool> bootstrap = std::nullopt,std::optional<unsigned long> seed = std::nullopt) = 0;
 
@@ -314,8 +315,12 @@ public:
         }
     }
 
-    void fit_ma(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_trees, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) {
-        init_trees(X, Y, n_trees, bootstrap, batch_size);
+    void fit_ma(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_trees, unsigned int init_tree_size, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) {
+        //std::cout << "Fitting now on " << X.rows << " data points with " << X.cols << " dimensions " << std::endl;
+        //std::cout << "Each trees is fitted on " << init_tree_size << " data points" << std::endl;
+        //std::cout << "Fitting for " << n_rounds << " rounds using " << burnin_steps << " burnin_steps and a batch_size of " << batch_size << std::endl;
+
+        init_trees(X, Y, n_trees, bootstrap, init_tree_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
             next_ma(X,Y,n_parallel,bootstrap,batch_size,burnin_steps);
@@ -326,7 +331,7 @@ public:
         }
     }
 
-    void next_ga(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_worker) {
+    void next_ga(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_worker, unsigned int batch_size) {
         if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
             // Put all gradients in all_grad which is populated in parallel by n_worker threads
 
@@ -336,7 +341,16 @@ public:
             if (X.rows < n_worker) {
                 n_worker = X.rows;
             }
-            unsigned int b_size = X.rows / n_worker;
+            
+            std::minstd_rand gen(seed++);
+            std::vector<unsigned int> sample_idx(X.rows);
+            std::iota(sample_idx.begin(), sample_idx.end(), 0);
+            std::shuffle(sample_idx.begin(), sample_idx.end(), gen);
+
+            unsigned int b_size = batch_size; 
+            if (batch_size == 0) {
+                b_size = static_cast<unsigned int>(X.rows / n_worker);
+            }
 
             // Compute the gradients in n_worker and store the aggregated gradients in all_grad for each batch
             // After that we average the gradients in all_grad and perform the GD update. 
@@ -345,7 +359,7 @@ public:
                 unsigned int actual_size = b_size;
 
                 // The last thread works on all remaining data items if they are unevenly distributed.
-                if (b == n_worker - 1) {
+                if (batch_size == 0 && b == n_worker - 1) {
                     actual_size = X.rows - b_size * b;
                 } 
 
@@ -359,7 +373,9 @@ public:
                 for (unsigned int i = 0; i < _trees.size(); ++i) {
                     // idx[i].reserve(actual_size);
                     for (unsigned int j = 0; j < actual_size; ++j) {
-                        auto const & x = X(b*b_size + j);
+                        auto xidx = sample_idx[b*b_size + j];
+                        auto const & x = X(xidx);
+
                         auto lidx = _trees[i].leaf_index(x);
                         // idx[i][j].push_back(lidx);
 
@@ -379,7 +395,8 @@ public:
                     all_grad[b][i] = std::vector<internal_t>(_trees[i]._leafs.size(), 0);
                     for (unsigned int k = 0; k < actual_size; ++k) {
                         // No need to reset loss_deriv because it will be copied anyway
-                        auto y = Y(b*b_size + k);
+                        auto yidx = sample_idx[b*b_size + k];
+                        auto y = Y(yidx);
                         loss.deriv(output(k), loss_deriv, y);
 
                         auto lidx = idx(i,k);
@@ -410,12 +427,12 @@ public:
         }
     }
 
-    void fit_ga(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int n_worker) {
-        init_trees(X, Y, n_trees, bootstrap, batch_size);
+    void fit_ga(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_trees, bool bootstrap, unsigned int init_batch_size, unsigned int batch_size, unsigned int n_rounds, unsigned int n_worker) {
+        init_trees(X, Y, n_trees, bootstrap, init_batch_size);
         
         for (unsigned int i = 0; i < n_rounds; ++i) {
             // TODO add sampling here? 
-            next_ga(X,Y,n_worker);
+            next_ga(X,Y,n_worker,batch_size);
             if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
                 // TODO also skip if ensemble_regularizer is NO
                 prune();
@@ -423,6 +440,7 @@ public:
         }
     }
 
+    // TODO Should be private
     void update_trees(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int burnin_steps, std::optional<unsigned int> const batch_size = std::nullopt, std::optional<bool> bootstrap = std::nullopt,std::optional<unsigned long> seed = std::nullopt) {
         // The structure of the trees does not change with the optimization and hence we can 
         // pre-compute the leaf indices for each tree / sample and store them. This mitigates the
