@@ -238,7 +238,6 @@ public:
 
     ~matrix2d() {
         // Make sure we only delete the underlying data if we actually own it. 
-
         if (!has_ownership) {
             data.release();
         }

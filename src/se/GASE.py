@@ -45,8 +45,8 @@ class GASE(ClassifierMixin, BaseEstimator):
 
         assert sample_engine in ["python", "c++"], "Currently only {{python, c++}} can be used as the sample_egine"
 
-        if sample_engine == "c++" and batch_size is not None:
-            print("WARNING: You supplied sample_engine = `c++', but set batch_size != None. The c++ sample engine does not support batch_sizes and will always use the entire dataset to perform SGD!")
+        # if sample_engine == "c++" and batch_size is not None:
+        #     print("WARNING: You supplied sample_engine = `c++', but set batch_size != None. The c++ sample engine does not support batch_sizes and will always use the entire dataset to perform SGD!")
 
         if sample_engine == "python":
             assert batch_size is None or batch_size > 0, "You supplied sample_engine=`python`. In this case choose batch_size > 0 or batch_size = None (which uses the entire dataset)."

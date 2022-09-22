@@ -5,7 +5,7 @@
 #include <random>
 #include <algorithm>
 #include <optional>
-// #include <iostream>
+#include <iostream>
 
 #include "Datatypes.h"
 #include "DecisionTree.h"
@@ -348,7 +348,7 @@ public:
             std::shuffle(sample_idx.begin(), sample_idx.end(), gen);
 
             unsigned int b_size = batch_size; 
-            if (batch_size == 0) {
+            if (batch_size == 0 || batch_size*n_worker > X.rows) {
                 b_size = static_cast<unsigned int>(X.rows / n_worker);
             }
 
@@ -493,8 +493,8 @@ public:
             }
         
             if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
-                #pragma omp parallel for
                 
+                #pragma omp parallel for
                 for (unsigned int i = 0; i < _weights.size(); ++i) {
                     matrix1d<internal_t> loss_deriv(n_classes);
                     std::fill(loss_deriv.begin(), loss_deriv.end(), 0);
@@ -608,7 +608,7 @@ public:
 
     void load(std::vector<matrix1d<internal_t>> const & new_nodes, std::vector<matrix1d<internal_t>> const & new_leafs, std::vector<internal_t> const & new_weights) {
         _trees.clear();
-        _weights = new_weights;
+        _weights = std::vector<internal_t>(new_weights);
 
         for (unsigned int i = 0; i < new_weights.size(); ++i) {
             _trees.push_back(DecisionTree<tree_init, tree_opt>(n_classes, max_depth, max_features, seed+i, step_size));

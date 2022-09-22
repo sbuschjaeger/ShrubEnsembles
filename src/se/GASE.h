@@ -38,7 +38,7 @@ public:
         unsigned int init_batch_size = 0,
         unsigned int batch_size = 0,
         bool bootstrap = true
-    ) : n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), bootstrap(bootstrap) { 
+    ) : n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), batch_size(batch_size), bootstrap(bootstrap) { 
         if (tree_init_mode == "random" && optimizer == "sgd" && loss == "mse") {
             model = new ShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::NONE, OPTIMIZER::OPTIMIZER_TYPE::SGD,DT::TREE_INIT::RANDOM>(n_classes, max_depth, seed, false,max_features, step_size,ENSEMBLE_REGULARIZER::TYPE::NO,0,TREE_REGULARIZER::TYPE::NO, 0);
         } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "mse") {

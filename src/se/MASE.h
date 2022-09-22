@@ -83,7 +83,7 @@ public:
     void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
             if (n_worker == 1) {
-                model->update_trees(X,Y,burnin_steps);
+                model->update_trees(X, Y, burnin_steps,batch_size, bootstrap);
             } else {
                 model->next_ma(X,Y,n_worker,bootstrap, batch_size, burnin_steps);
             }
