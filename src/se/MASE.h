@@ -23,6 +23,7 @@ protected:
     unsigned int const n_worker;
     std::string const optimizer;
     std::string const tree_init_mode;
+    unsigned int const init_tree_size;
 
 public:
 
@@ -40,8 +41,9 @@ public:
         unsigned int n_worker = 8, 
         unsigned int n_rounds = 5,
         unsigned int batch_size = 0,
-        bool bootstrap = true
-    ) : n_trees(n_trees), n_rounds(n_rounds), batch_size(batch_size), bootstrap(bootstrap), burnin_steps(burnin_steps), n_worker(n_worker), optimizer(optimizer), tree_init_mode(tree_init_mode) { 
+        bool bootstrap = true, 
+        unsigned int init_tree_size = 0
+    ) : n_trees(n_trees), n_rounds(n_rounds), batch_size(batch_size), bootstrap(bootstrap), burnin_steps(burnin_steps), n_worker(n_worker), optimizer(optimizer), tree_init_mode(tree_init_mode), init_tree_size(init_tree_size) { 
        
         if (tree_init_mode == "random" && optimizer == "sgd" && loss == "mse") {
             model = new ShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::NONE, OPTIMIZER::OPTIMIZER_TYPE::SGD,DT::TREE_INIT::RANDOM>( n_classes, max_depth, seed,  false, max_features, step_size, ENSEMBLE_REGULARIZER::TYPE::NO, 0, TREE_REGULARIZER::TYPE::NO, 0 );
@@ -72,7 +74,7 @@ public:
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
-            model->fit_ma(X,Y,n_trees,bootstrap,batch_size,n_rounds,n_worker,burnin_steps);
+            model->fit_ma(X, Y, n_trees, init_tree_size, n_worker, bootstrap,batch_size, n_rounds, burnin_steps);
         } else {
             throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
@@ -81,7 +83,7 @@ public:
     void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
             if (n_worker == 1) {
-                model->update_trees(X,Y,burnin_steps);
+                model->update_trees(X, Y, burnin_steps,batch_size, bootstrap);
             } else {
                 model->next_ma(X,Y,n_worker,bootstrap, batch_size, burnin_steps);
             }
@@ -92,7 +94,11 @@ public:
 
     void init(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
-            model->init_trees(X,Y,n_trees,bootstrap,batch_size);
+            if (init_tree_size == 0 || init_tree_size > X.rows) {
+                model->init_trees(X,Y,n_trees,bootstrap,X.rows);
+            } else {
+                model->init_trees(X,Y,n_trees,bootstrap,init_tree_size);
+            }
         } else {
             throw std::runtime_error("The internal object pointer in MASE was null. This should not happen!");
         }
