@@ -1,5 +1,6 @@
 **/__pycache__/*
 **/ShrubEnsembles.egg-info/*
+**/ShrubEnsemble.egg-info/*
 .vscode
 build
 *.so

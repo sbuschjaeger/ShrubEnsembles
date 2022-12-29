@@ -92,28 +92,30 @@ tree_init_mode = "train"
 tree_update_mode = "none"
 df = []
 
-for N in [500, 1000, 5000]:
-# for N in [1000, 10000, 100000, None]:
-    if N is not None and 2 * N < X.shape[0]:
-        X_train, X_test, y_train, y_test = X[0:N,:], X[N:2*N,:], Y[0:N], Y[N:2*N] 
-    else:
-        X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.33, random_state=42)
+for d in [5, 8, 10]:
+    for N in [500, 1000, 5000, 10000, 50000, 100000]:
+        if N is not None and 2 * N < X.shape[0]:
+            X_train, X_test, y_train, y_test = X[0:N,:], X[N:2*N,:], Y[0:N], Y[N:2*N] 
+        else:
+            X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.33, random_state=42)
 
-    print("Starting benchmark on {} training and {} testing".format(X_train.shape, X_test.shape))
+        print("Starting benchmark on {} training and {} testing data points using max_depth = {}".format(X_train.shape, X_test.shape, d))
 
-    dt = CDecisionTreeClassifier(5,n_classes,max_features,seed,step_size,tree_init_mode,tree_update_mode)
-    df.append({
-        "name":"dt",
-        "N":N,
-        **benchmark(dt,X_train,y_train,X_test,y_test)
-    })
+        dt = CDecisionTreeClassifier(d,n_classes,max_features,seed,step_size,tree_init_mode,tree_update_mode)
+        df.append({
+            "name":"dt",
+            "N":N,
+            "d":d,
+            **benchmark(dt,X_train,y_train,X_test,y_test)
+        })
 
-    sktree = DecisionTreeClassifier(max_depth=5, max_features=max_features, splitter="best")
-    df.append({
-        "name":"sklearn",
-        "N":N,
-        **benchmark(sktree,X_train,y_train,X_test,y_test)
-    })
+        sktree = DecisionTreeClassifier(max_depth=d, max_features=max_features, splitter="best")
+        df.append({
+            "name":"sklearn",
+            "N":N,
+            "d":d,
+            **benchmark(sktree,X_train,y_train,X_test,y_test)
+        })
 
 df = pd.DataFrame(df)
 print(df)
