@@ -555,23 +555,25 @@ public:
     }
 
     void load(matrix1d<internal_t> const &  new_nodes, matrix1d<internal_t> const & new_leafs) {
-        std::vector<Node> t_nodes(static_cast<unsigned int>(new_nodes.dim / 6));
+        _nodes = std::vector<Node>(static_cast<unsigned int>(new_nodes.dim / 6));
 
+        unsigned int nnodes = 0;
         for (unsigned int j = 0; j < new_nodes.dim; j += 6) {
-            Node n;
+            Node &n = _nodes[nnodes];
+            // Node n;
             n.threshold = static_cast<data_t>(new_nodes(j));
             n.feature = static_cast<unsigned int>(new_nodes(j+1));
             n.left = static_cast<unsigned int>(new_nodes(j+2));
             n.right = static_cast<unsigned int>(new_nodes(j+3));
             n.left_is_leaf = new_nodes(j+4) == 0.0 ? false : true;
             n.right_is_leaf = new_nodes(j+5) == 0.0 ? false : true;
-            t_nodes.push_back(n);
+            // t_nodes.push_back(n);
+            nnodes++;
         }
-        _nodes = std::move(t_nodes);
 
-        std::vector<internal_t> t_leafs(new_leafs.dim);
-        std::copy(new_leafs.begin(), new_leafs.end(), t_leafs.begin());
-        _leafs = std::move(t_leafs);
+        _leafs = std::vector<internal_t>(new_leafs.dim);
+        std::copy(new_leafs.begin(), new_leafs.end(), _leafs.begin());
+        // _leafs = std::move(t_leafs);
         // _leafs = std::move(new_leafs);
     }
 

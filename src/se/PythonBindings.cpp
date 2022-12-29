@@ -47,16 +47,15 @@ namespace pybind11 { namespace detail {
       }
 
       //Conversion part 2 (C++ -> Python)
-      static py::handle cast(const matrix2d<data_t>& src, py::return_value_policy policy, py::handle parent)  {
+      static py::handle cast(matrix2d<data_t>&& src, py::return_value_policy policy, py::handle parent)  {
 
         std::vector<size_t> shape {src.rows, src.cols};
         std::vector<size_t> strides { sizeof(data_t) * src.cols, sizeof(data_t) };
 
         py::array a(std::move(shape), std::move(strides), src.data.get() );
-        //src.has_ownership = false;
+        src.has_ownership = false;
         
         return a.release();
-
       }
   };
 
@@ -90,16 +89,15 @@ namespace pybind11 { namespace detail {
       }
 
       //Conversion part 2 (C++ -> Python)
-      static py::handle cast(const matrix1d<unsigned int>& src, py::return_value_policy policy, py::handle parent)  {
+      static py::handle cast(matrix1d<unsigned int>&& src, py::return_value_policy policy, py::handle parent)  {
 
-        std::vector<size_t> shape {src.dim};
-        std::vector<size_t> strides { sizeof(unsigned int) * src.dim, sizeof(unsigned int) };
+        std::vector<size_t> shape { src.dim };
+        std::vector<size_t> strides { sizeof(unsigned int) };
 
         py::array a(std::move(shape), std::move(strides), src.data.get() );
-        //src.has_ownership = false;
+        src.has_ownership = false;
         
         return a.release();
-
       }
   };
 
@@ -133,13 +131,13 @@ namespace pybind11 { namespace detail {
       }
 
       //Conversion part 2 (C++ -> Python)
-      static py::handle cast(const matrix1d<data_t>& src, py::return_value_policy policy, py::handle parent)  {
+      static py::handle cast(matrix1d<data_t>&& src, py::return_value_policy policy, py::handle parent)  {
 
         std::vector<size_t> shape {src.dim};
-        std::vector<size_t> strides { sizeof(data_t) * src.dim, sizeof(data_t) };
+        std::vector<size_t> strides { sizeof(data_t) };
 
         py::array a(std::move(shape), std::move(strides), src.data.get() );
-        //src.has_ownership = false;
+        src.has_ownership = false;
         
         return a.release();
       }
@@ -161,7 +159,7 @@ py::class_<OSE>(m, "COSE")
 );
 
 py::class_<MASE>(m, "CMASE")
-    .def(py::init<unsigned int, unsigned int,unsigned long, unsigned int, unsigned int, std::string, internal_t, std::string, std::string, unsigned int, unsigned int, unsigned int, unsigned int, bool>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("burnin_steps"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("n_trees"), py::arg("n_worker"), py::arg("n_rounds"), py::arg("batch_size"), py::arg("bootstrap"))
+    .def(py::init<unsigned int, unsigned int,unsigned long, unsigned int, unsigned int, std::string, internal_t, std::string, std::string, unsigned int, unsigned int, unsigned int, unsigned int, bool, unsigned int>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("burnin_steps"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("n_trees"), py::arg("n_worker"), py::arg("n_rounds"), py::arg("batch_size"), py::arg("bootstrap"), py::arg("init_tree_size"))
     .def ("init", &MASE::init, py::arg("X"), py::arg("Y"))
     .def ("fit", &MASE::fit, py::arg("X"), py::arg("Y"))
     .def ("next", &MASE::next, py::arg("X"), py::arg("Y"))
@@ -176,7 +174,7 @@ py::class_<MASE>(m, "CMASE")
 );
 
 py::class_<GASE>(m, "CGASE")
-    .def(py::init<unsigned int, unsigned int,unsigned long, unsigned int, std::string, internal_t, std::string, std::string, unsigned int, unsigned int, unsigned int, unsigned int, bool>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("n_trees"), py::arg("n_batchs"), py::arg("n_rounds"),py::arg("init_batch_size"), py::arg("bootstrap"))
+    .def(py::init<unsigned int, unsigned int,unsigned long, unsigned int, std::string, internal_t, std::string, std::string, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, bool>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("n_trees"), py::arg("n_worker"), py::arg("n_rounds"),py::arg("init_batch_size"), py::arg("batch_size"), py::arg("bootstrap"))
     .def ("init", &GASE::init, py::arg("X"), py::arg("Y"))
     .def ("fit", &GASE::fit, py::arg("X"), py::arg("Y"))
     .def ("next", &GASE::next, py::arg("X"), py::arg("Y"))

@@ -18,6 +18,7 @@ protected:
     unsigned int const n_worker;
     unsigned int const n_trees;
     unsigned int const init_batch_size;
+    unsigned int const batch_size;
     bool const bootstrap; 
 
 public:
@@ -35,8 +36,9 @@ public:
         unsigned int n_worker = 5,
         unsigned int n_rounds = 5,
         unsigned int init_batch_size = 0,
+        unsigned int batch_size = 0,
         bool bootstrap = true
-    ) : n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), bootstrap(bootstrap) { 
+    ) : n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), batch_size(batch_size), bootstrap(bootstrap) { 
         if (tree_init_mode == "random" && optimizer == "sgd" && loss == "mse") {
             model = new ShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::NONE, OPTIMIZER::OPTIMIZER_TYPE::SGD,DT::TREE_INIT::RANDOM>(n_classes, max_depth, seed, false,max_features, step_size,ENSEMBLE_REGULARIZER::TYPE::NO,0,TREE_REGULARIZER::TYPE::NO, 0);
         } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "mse") {
@@ -66,7 +68,7 @@ public:
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
-            return model->fit_ga(X,Y,n_trees,bootstrap,init_batch_size,n_rounds,n_worker);
+            return model->fit_ga(X,Y,n_trees,bootstrap,init_batch_size,batch_size,n_rounds,n_worker);
         } else {
             throw std::runtime_error("The internal object pointer in GASE was null. This should not happen!");
         }
@@ -74,7 +76,7 @@ public:
 
     void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         if (model != nullptr) {
-            return model->next_ga(X,Y,n_worker);
+            return model->next_ga(X,Y,n_worker,batch_size);
         } else {
             throw std::runtime_error("The internal object pointer in GASE was null. This should not happen!");
         }

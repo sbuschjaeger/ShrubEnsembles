@@ -56,7 +56,8 @@ class MASE(ClassifierMixin, BaseEstimator):
         verbose = False,
         out_path = None,
         sample_engine = "python",
-        batch_size = None
+        batch_size = None, 
+        init_tree_size = 0
     ):
 
         # TODO set n_jobs for openmp?
@@ -104,6 +105,7 @@ class MASE(ClassifierMixin, BaseEstimator):
         self.bootstrap = bootstrap 
         self.sample_engine = sample_engine
         self.batch_size = batch_size
+        self.init_tree_size = init_tree_size
 
         self.model = None
 
@@ -187,7 +189,8 @@ class MASE(ClassifierMixin, BaseEstimator):
             self.n_worker,
             self.n_rounds,
             self.batch_size_per_worker,
-            self.bootstrap
+            self.bootstrap,
+            self.init_tree_size
         )
 
         if self.sample_engine == "c++":
@@ -199,7 +202,13 @@ class MASE(ClassifierMixin, BaseEstimator):
                 Nsample = self.batch_size
                 indices = np.arange(X.shape[0])
                 np.random.shuffle(indices)
-                Xs, Ys = X[indices[0:Nsample]], y[indices[0:Nsample]]
+                Xs, Ys = X[indices[0:Nsample],:], y[indices[0:Nsample]]
+                #print("Init on {} data points".format(self.batch_size_per_worker))
+                #print(Xs.shape)
+                # print(Ys.shape)
+                #from collections import Counter
+                #print("Labels: ", Ys.shape, " ", Counter(sorted(Ys)) )
+
                 self.model.init(Xs,Ys)
 
             with tqdm(total=self.n_rounds, ncols=150, disable = not self.verbose) as pbar:
@@ -236,13 +245,17 @@ class MASE(ClassifierMixin, BaseEstimator):
 
                         loss = np.mean(loss) 
                         accuracy = (Ys == output.argmax(axis=1)).sum() / Xs.shape[0]
+                        num_nodes = self.model.num_nodes()
+                        num_trees = self.model.num_trees()
                         pbar.update(1)
                         
-                        desc = '[{}/{}] loss {:2.4f} acc {:2.4f}'.format(
+                        desc = '[{}/{}] loss {:2.4f} acc {:2.4f} n_nodes {:2.4f} n_trees {:2.4f}'.format(
                             r, 
                             self.n_rounds-1, 
                             loss,
-                            accuracy
+                            accuracy,
+                            num_nodes,
+                            num_trees
                         )
                         pbar.set_description(desc)
                     

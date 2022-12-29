@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.11 FATAL_ERROR)
 project(CShrubEnsemble LANGUAGES CXX)
 
 SET(CMAKE_CXX_STANDARD 17)
@@ -24,7 +24,7 @@ include_directories("src/se")
 # add_executable(debug tests/debug.cpp)
 # target_include_directories(debug PUBLIC)
 
-add_executable(benchmark tests/benchmark_tree.cpp)
-target_include_directories(benchmark PUBLIC)
+# add_executable(benchmark tests/benchmark_tree.cpp)
+# target_include_directories(benchmark PUBLIC)
 
 pybind11_add_module(CShrubEnsembles src/se/PythonBindings.cpp)

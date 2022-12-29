@@ -55,16 +55,13 @@ void print_vector(std::vector<data_t> const &X) {
 // 	}
 // }
 
-std::vector<std::vector<data_t>> random_data(unsigned int N, unsigned int d) {
+matrix2d<data_t> random_data(unsigned int N, unsigned int d) {
 	auto gen = std::bind(std::uniform_real_distribution<>(0,1),std::default_random_engine());
-	std::vector<data_t> tmp(N*d);
+    matrix2d<data_t> tmp(N, d);
+	//std::generate(tmp._data, tmp._data + N*d, gen);
 	std::generate(tmp.begin(), tmp.end(), gen);
 
-	std::vector<std::vector<data_t>> X(N);
-	for (unsigned int i = 0; i < N; ++i) {
-		X[i] = std::vector<data_t>(&tmp[i*d],&tmp[i*d] + d); 
-	}
-	return X;
+    return tmp;
 }
 
 std::vector<unsigned int> random_targets(unsigned int N) {
@@ -74,16 +71,16 @@ std::vector<unsigned int> random_targets(unsigned int N) {
 	return Y;
 }
 
-internal_t accuracy_score(std::vector<std::vector<internal_t>> const &proba, std::vector<unsigned int> const &Y) {
+internal_t accuracy_score(matrix2d<data_t> const &proba, std::vector<unsigned int> const &Y) {
 
 	internal_t accuracy = 0;
-	for (unsigned int i = 0; i < proba.size(); ++i) {
-		auto max_idx = std::distance(proba[i].begin(), std::max_element(proba[i].begin(), proba[i].end()));
+	for (unsigned int i = 0; i < proba.rows; ++i) {
+		auto max_idx = std::distance(proba(i).begin(), std::max_element(proba(i).begin(), proba(i).end()));
 		if (max_idx == Y[i]) {
 			accuracy++;
 		}
 	}
-	return accuracy / proba.size() * 100.0;
+	return accuracy / proba.rows * 100.0;
 }
 
 #ifdef BENCHMARK
