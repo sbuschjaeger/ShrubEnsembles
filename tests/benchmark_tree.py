@@ -13,7 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.tree import DecisionTreeClassifier
 
-from se.CShrubEnsembles import CDecisionTreeClassifierOpt
+from se.CShrubEnsembles import CDecisionTreeClassifier
 # from se.CShrubEnsembles import CDecisionTreeClassifier, CDecisionTreeClassifierOpt
 
 def download(url, filename, tmpdir = None):
@@ -38,20 +38,27 @@ def download(url, filename, tmpdir = None):
         urllib.request.urlretrieve(url, os.path.join(tmpdir,filename))
     return os.path.join(tmpdir,filename)
 
-def benchmark(model, X_train, y_train, X_test, y_test):
-    start = time.time()
-    model.fit(X_train, y_train)
-    end = time.time()
-    fit_time = end - start
+def benchmark(model, X_train, y_train, X_test, y_test, reps=5):
+    fit_times = []
+    for _ in range(reps):
+        start = time.time()
+        model.fit(X_train, y_train)
+        end = time.time()
+        fit_time = end - start
+        fit_times.append(fit_time)
 
-    start = time.time()
-    preds = np.array(model.predict_proba(X_test))
-    accuracy = accuracy_score(y_test, preds.argmax(axis=1))
-    end = time.time()
-    predict_time = end - start
+    predict_times = []
+    for _ in range(500):
+        start = time.time()
+        preds = np.array(model.predict_proba(X_test))
+        accuracy = accuracy_score(y_test, preds.argmax(axis=1))
+        end = time.time()
+        predict_time = end - start
+        predict_times.append(predict_time)
+
     return {
-        "fit_time":fit_time,
-        "predict_time":predict_time,
+        "fit_time":np.mean(fit_times),
+        "predict_time":np.mean(predict_times),
         "test_accuracy":accuracy
     }
 
@@ -85,7 +92,8 @@ tree_init_mode = "train"
 tree_update_mode = "none"
 df = []
 
-for N in [1000, 10000, 100000, None]:
+for N in [500, 1000, 5000]:
+# for N in [1000, 10000, 100000, None]:
     if N is not None and 2 * N < X.shape[0]:
         X_train, X_test, y_train, y_test = X[0:N,:], X[N:2*N,:], Y[0:N], Y[N:2*N] 
     else:
@@ -93,21 +101,14 @@ for N in [1000, 10000, 100000, None]:
 
     print("Starting benchmark on {} training and {} testing".format(X_train.shape, X_test.shape))
 
-    # dt1 = CDecisionTreeClassifier(0,n_classes,max_features,seed,step_size,tree_init_mode,tree_update_mode)
-    # df.append({
-    #     "name":"dt1",
-    #     "N":N,
-    #     **benchmark(dt1,X_train,y_train,X_test,y_test)
-    # })
-    
-    dt2 = CDecisionTreeClassifierOpt(0,n_classes,max_features,seed,step_size,tree_init_mode,tree_update_mode)
+    dt = CDecisionTreeClassifier(5,n_classes,max_features,seed,step_size,tree_init_mode,tree_update_mode)
     df.append({
-        "name":"dt-opt",
+        "name":"dt",
         "N":N,
-        **benchmark(dt2,X_train,y_train,X_test,y_test)
+        **benchmark(dt,X_train,y_train,X_test,y_test)
     })
 
-    sktree = DecisionTreeClassifier(max_depth=None, max_features=max_features, splitter="best", random_state=seed)
+    sktree = DecisionTreeClassifier(max_depth=5, max_features=max_features, splitter="best")
     df.append({
         "name":"sklearn",
         "N":N,

@@ -142,7 +142,6 @@ namespace pybind11 { namespace detail {
         //src.has_ownership = false;
         
         return a.release();
-
       }
   };
 

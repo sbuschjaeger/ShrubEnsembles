@@ -8,7 +8,7 @@
 #include "Losses.h"
 #include "DecisionTree.h"
 #include "GASE.h"
-// #include "MASE.h"
+#include "MASE.h"
 //#include "ShrubEnsemble.h"
 
 
@@ -67,33 +67,31 @@ matrix2d<data_t> random_data(unsigned int N, unsigned int d) {
     return tmp;
 }
 
-std::vector<unsigned int> random_targets(unsigned int N) {
-	std::vector<unsigned int> Y(N);
+matrix1d<unsigned int> random_targets(unsigned int N) {
+	matrix1d<unsigned int> Y(N);
+	//std::vector<unsigned int> Y(N);
 	auto gen = std::bind(std::uniform_int_distribution<>(0,1),std::default_random_engine());
 	std::generate(Y.begin(), Y.end(), gen);
 	return Y;
 }
 
-internal_t accuracy_score(matrix2d<data_t> const &proba, std::vector<unsigned int> const &Y) {
+internal_t accuracy_score(matrix2d<data_t> const &proba, matrix1d<unsigned int> const &Y) {
 
 	internal_t accuracy = 0;
 	for (unsigned int i = 0; i < proba.rows; ++i) {
 		auto max_idx = std::distance(proba(i).begin(), std::max_element(proba(i).begin(), proba(i).end()));
-		if (max_idx == Y[i]) {
+		if (max_idx == Y(i)) {
 			accuracy++;
 		}
 	}
 	return accuracy / proba.rows * 100.0;
 }
 
-matrix2d<data_t> X = random_data(50000, 54);
-std::vector<unsigned int> Y = random_targets(50000);
+matrix2d<data_t> X = random_data(5000, 54);
+matrix1d<unsigned int> Y = random_targets(5000);
 
 
 int main() {
-	// auto X = random_data(1 << 14, 32);
-	// auto Y = random_targets(1 << 14);
-
 	auto n_classes = 2;
 	auto max_depth = 0; 
 	auto max_features = 0;
@@ -102,27 +100,27 @@ int main() {
 
 	DecisionTreeClassifier dt(max_depth,n_classes,max_features,seed,step_size,"train","none");
 
-    std::cout << "Generated random data with X = " << X.rows << " / " << X.cols << " and Y = " << Y.size() << std::endl;
+    std::cout << "Generated random data with X = " << X.rows << " / " << X.cols << " and Y = " << Y.dim << std::endl;
 
 	auto start = std::chrono::steady_clock::now();
-	// dt.fit(X,Y);
+	dt.fit(X,Y);
 	auto end = std::chrono::steady_clock::now();
 	std::chrono::duration<double> runtime_seconds = end-start;
     
-	// std::cout << "=== Testing single DT ===" << std::endl;
-	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    // std::cout << "Size is " << dt.num_bytes() << " bytes" << std::endl; 
-    // std::cout << "Number of nodes was " << dt.num_nodes() << std::endl; 
-    // //CALLGRIND_START_INSTRUMENTATION;
-    // double acc = accuracy_score(dt.predict_proba(X), Y);
-    // // CALLGRIND_STOP_INSTRUMENTATION;
-    // // CALLGRIND_DUMP_STATS;
-    // // double acc = 0;
-    // // for (unsigned int i = 0; i < 1000; ++i) {
-    // //     acc += accuracy_score(dt.predict_proba(X), Y);
-    // // }
-	// std::cout << "Accuracy is: " << acc << std::endl;
-	// std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
+	std::cout << "=== Testing single DT ===" << std::endl;
+	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    std::cout << "Size is " << dt.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << dt.num_nodes() << std::endl; 
+    //CALLGRIND_START_INSTRUMENTATION;
+    double acc = accuracy_score(dt.predict_proba(X), Y);
+    // CALLGRIND_STOP_INSTRUMENTATION;
+    // CALLGRIND_DUMP_STATS;
+    // double acc = 0;
+    // for (unsigned int i = 0; i < 1000; ++i) {
+    //     acc += accuracy_score(dt.predict_proba(X), Y);
+    // }
+	std::cout << "Accuracy is: " << acc << std::endl;
+	std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
 
     auto loss = "mse";
 	auto optimizer = "sgd";
@@ -145,5 +143,72 @@ int main() {
     std::cout << "Number of nodes was " << ga.num_nodes() << std::endl; 
 	std::cout << "Accuracy is: " << accuracy_score(ga.predict_proba(X), Y) << std::endl;
 	std::cout << "=== Testing GASE done ===" << std::endl << std::endl;
+
+	auto burnin_steps = 5;
+	auto n_parallel = 8;
+	auto batch_size = 1024;
+	MASE ma(n_classes, max_depth, seed, burnin_steps, max_features, loss, step_size, optimizer, tree_init_mode, n_trees, n_parallel, n_rounds, batch_size, bootstrap);
+	start = std::chrono::steady_clock::now();
+	ma.fit(X,Y);
+	end = std::chrono::steady_clock::now();
+	runtime_seconds = end-start;
+    
+	std::cout << "=== Testing MASE ===" << std::endl;
+	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    std::cout << "Size is " << ma.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << ma.num_nodes() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(ma.predict_proba(X), Y) << std::endl;
+	std::cout << "=== Testing MASE done ===" << std::endl << std::endl;
+	
+	// auto epochs = 5;
+	// auto normalize_weights = true;
+	// OSE oest(n_classes, max_depth, seed, normalize_weights, burnin_steps, max_features, "mse", step_size, "sgd", "train", "none", 0);
+
+	// start = std::chrono::steady_clock::now();
+	// LOSS::Loss<LOSS::TYPE::MSE> mse_loss;
+
+    // for (unsigned int i = 0; i < epochs; ++i) {
+    //     unsigned int cnt = 0;
+    //     internal_t loss_epoch = 0;
+    //     unsigned int nonzero_epoch = 0;
+	// 	internal_t accuracy_epoch = 0;
+
+    //     unsigned int batch_cnt = 0;
+    //     while(cnt < X.size()) {
+	// 		auto cur_batch_size = std::min(static_cast<int>(X.size() - cnt), static_cast<int>(batch_size));
+	// 		if (cur_batch_size <= 0) break;
+
+	// 		auto batch = sample_data(X, Y, cur_batch_size, false, cnt);
+    //         auto & data = std::get<0>(batch);
+    //         auto & target = std::get<1>(batch);
+	// 		cnt += cur_batch_size;
+
+	// 		auto proba = oest.predict_proba(data);
+	// 		accuracy_epoch += accuracy_score(proba, target);
+
+    //         oest.next(data, target);
+	// 		std::vector<std::vector<data_t>> losses = mse_loss.loss(proba, target);
+	// 		internal_t loss = mean_all_dim(losses);
+
+    //         nonzero_epoch += oest.num_trees();
+    //         loss_epoch += loss;
+    //         batch_cnt++;
+    //         std::stringstream ss;
+    //         ss << std::setprecision(4) << "loss: " << loss_epoch / batch_cnt << " nonzero: " << int(nonzero_epoch / batch_cnt) << " acc " << (accuracy_epoch / batch_cnt);
+	// 		internal_t progress = internal_t(cnt) / X.size();
+    //         print_progress(i, epochs - 1, progress, ss.str() );
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+    // end = std::chrono::steady_clock::now();
+	// runtime_seconds = end-start;
+    
+	// std::cout << "=== Testing OSE ===" << std::endl;
+	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    // std::cout << "Size is " << oest.num_bytes() << " bytes" << std::endl; 
+    // std::cout << "Number of nodes was " << oest.num_nodes() << std::endl; 
+	// std::cout << "Accuracy is: " << accuracy_score(oest.predict_proba(X), Y) << std::endl;
+	// std::cout << "=== Testing OSE done ===" << std::endl << std::endl;
 }
 	
