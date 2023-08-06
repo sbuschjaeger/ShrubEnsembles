@@ -146,6 +146,14 @@ public:
     T operator()(unsigned int i) const {
         return data.get()[i];
     }
+
+    unsigned int num_bytes() const {
+        if (has_ownership) {
+            return sizeof(*this) + sizeof(T)*dim;
+        } else {
+            return sizeof(*this);
+        }
+    }
 };
 
 template<typename T>
@@ -228,7 +236,7 @@ public:
     matrix2d( matrix2d& a ) = delete;
     matrix2d( const matrix2d& a ) = delete;
     matrix2d& operator=(const matrix2d& other) = delete;
-    matrix2d& operator=(const matrix2d&& other) {
+    matrix2d& operator=(matrix2d&& other) {
         rows = other.rows;
         cols = other.cols;
         data = std::move(other.data);
@@ -309,6 +317,14 @@ public:
      */
     T operator()(unsigned int i, unsigned int j) const {
         return data.get()[i * cols + j];
+    }
+
+    unsigned int num_bytes() const {
+        if (has_ownership) {
+            return sizeof(*this) + sizeof(T)*rows*cols;
+        } else {
+            return sizeof(*this);
+        }
     }
 };
 
@@ -504,4 +520,11 @@ public:
         return data.get()[k + j*nz + i*ny*nz];
     }
 
+    unsigned int num_bytes() const {
+        if (has_ownership) {
+            return sizeof(*this) + sizeof(T)*nx*ny*nz;
+        } else {
+            return sizeof(*this);
+        }
+    }
 };

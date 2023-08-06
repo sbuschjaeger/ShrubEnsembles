@@ -10,6 +10,7 @@
 #include <memory>
 #include <stdexcept>
 
+#include "Tree.h"
 #include "Datatypes.h"
 #include "Matrix.h"
 #include "Optimizer.h"
@@ -19,47 +20,6 @@
 namespace DT {
     enum TREE_INIT {TRAIN, RANDOM};
 }
-
-class Node {
-public:
-    data_t threshold;
-    unsigned int feature;
-    unsigned int left, right;
-    bool left_is_leaf, right_is_leaf;
-
-    // I want to make sure that these objects are only moved and never copied. I expect the code below to not 
-    // use any copy c'tors, but for safe measures we delete the copy constructor entirely.
-    Node(const Node&) = default; //delete;
-    Node() = default;
-    Node(Node &&) = default;
-
-    unsigned int num_bytes() const {
-        return sizeof(*this);
-    }
-};
-
-/**
- * @brief  The main reason why this interface exists, is because it makes class instansiation a little easier for the Pythonbindings. 
- * @note   
- * @retval None
- */
-class Tree {
-public:
-
-    virtual void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) = 0;
-
-    virtual matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) = 0;
-
-    virtual unsigned int num_bytes() const = 0;
-
-    virtual unsigned int num_nodes() const = 0;
-
-    virtual void load(matrix1d<internal_t> const & new_nodes, matrix1d<internal_t> const & new_leafs) = 0;
-
-    virtual std::tuple<matrix1d<internal_t>, matrix1d<internal_t>> store() const = 0;
-
-    virtual ~Tree() { }
-};
 
 template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
 class DecisionTree : public Tree {
@@ -84,7 +44,7 @@ private:
         if (_nodes.size() > 0) {
             while(true){
                 auto const & n = _nodes[idx];
-                if (x(n.feature) <= n.threshold) {
+                if (x(n.idx) <= n.threshold) {
                     idx = _nodes[idx].left;
                     if (n.left_is_leaf) break;
                 } else {
@@ -515,7 +475,7 @@ public:
 
                     auto t = split.value().first;
                     auto f = split.value().second;
-                    _nodes[cur_idx].feature = f;
+                    _nodes[cur_idx].idx = f;
                     _nodes[cur_idx].threshold = t;
 
                     // We do not need to store the predictions in inner nodes. Thus delete them here
@@ -562,7 +522,7 @@ public:
             Node &n = _nodes[nnodes];
             // Node n;
             n.threshold = static_cast<data_t>(new_nodes(j));
-            n.feature = static_cast<unsigned int>(new_nodes(j+1));
+            n.idx = static_cast<unsigned int>(new_nodes(j+1));
             n.left = static_cast<unsigned int>(new_nodes(j+2));
             n.right = static_cast<unsigned int>(new_nodes(j+3));
             n.left_is_leaf = new_nodes(j+4) == 0.0 ? false : true;
@@ -583,7 +543,7 @@ public:
         unsigned int i = 0;
         for (auto const &n : _nodes) {
             primitive_nodes(i++) = static_cast<internal_t>(n.threshold);
-            primitive_nodes(i++) = static_cast<internal_t>(n.feature);
+            primitive_nodes(i++) = static_cast<internal_t>(n.idx);
             primitive_nodes(i++) = static_cast<internal_t>(n.left);
             primitive_nodes(i++) = static_cast<internal_t>(n.right);
             primitive_nodes(i++) = static_cast<internal_t>(n.left_is_leaf);
@@ -603,8 +563,8 @@ protected:
 public:
 
     DecisionTreeClassifier(
-        unsigned int max_depth, 
         unsigned int n_classes, 
+        unsigned int max_depth, 
         unsigned int max_features,
         unsigned long seed, 
         internal_t step_size,

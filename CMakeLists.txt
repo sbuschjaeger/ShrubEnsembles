@@ -17,12 +17,15 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra -g -Wno-unused-parameter")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -ffast-math -march=native -mtune=native -fopenmp -g") 
 
+find_package(ZLIB)
+
 add_subdirectory(lib/pybind11)
 
 include_directories("src/se")
 
-# add_executable(debug tests/debug.cpp)
-# target_include_directories(debug PUBLIC)
+add_executable(debug tests/debug.cpp )
+target_link_libraries(debug ZLIB::ZLIB)
+target_include_directories(debug PUBLIC)
 
 # add_executable(benchmark tests/benchmark_tree.cpp)
 # target_include_directories(benchmark PUBLIC)
