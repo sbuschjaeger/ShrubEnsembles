@@ -149,56 +149,56 @@ namespace pybind11 { namespace detail {
 
 PYBIND11_MODULE(CShrubEnsembles, m) {
 
-py::class_<OSE>(m, "COSE")
-    .def(py::init<unsigned int, unsigned int,unsigned long, bool, unsigned int, unsigned int, std::string, internal_t, std::string, std::string, std::string, internal_t>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("normalize_weights"), py::arg("burnin_steps"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("regularizer"), py::arg("l_reg"))
-    .def ("init", &OSE::init, py::arg("X"), py::arg("Y"), py::arg("n_trees"), py::arg("bootstrap"), py::arg("batch_size"))
-    .def ("next", &OSE::next, py::arg("X"), py::arg("Y"))
-    .def ("predict_proba", &OSE::predict_proba, py::arg("X"))
-    .def ("num_nodes", &OSE::num_nodes)
-    .def ("num_bytes", &OSE::num_bytes)
-    .def ("num_trees", &OSE::num_trees
-);
+// py::class_<OSE>(m, "COSE")
+//     .def(py::init<unsigned int, unsigned int,unsigned long, bool, unsigned int, unsigned int, std::string, internal_t, std::string, std::string, std::string, internal_t>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("normalize_weights"), py::arg("burnin_steps"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("regularizer"), py::arg("l_reg"))
+//     .def ("init", &OSE::init, py::arg("X"), py::arg("Y"), py::arg("n_trees"), py::arg("bootstrap"), py::arg("batch_size"))
+//     .def ("next", &OSE::next, py::arg("X"), py::arg("Y"))
+//     .def ("predict_proba", &OSE::predict_proba, py::arg("X"))
+//     .def ("num_nodes", &OSE::num_nodes)
+//     .def ("num_bytes", &OSE::num_bytes)
+//     .def ("num_trees", &OSE::num_trees
+// );
 
-py::class_<MASE>(m, "CMASE")
-    .def(py::init<unsigned int, unsigned int,unsigned long, unsigned int, unsigned int, std::string, internal_t, std::string, std::string, unsigned int, unsigned int, unsigned int, unsigned int, bool, unsigned int>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("burnin_steps"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("n_trees"), py::arg("n_worker"), py::arg("n_rounds"), py::arg("batch_size"), py::arg("bootstrap"), py::arg("init_tree_size"))
-    .def ("init", &MASE::init, py::arg("X"), py::arg("Y"))
-    .def ("fit", &MASE::fit, py::arg("X"), py::arg("Y"))
-    .def ("next", &MASE::next, py::arg("X"), py::arg("Y"))
-    .def ("predict_proba", &MASE::predict_proba, py::arg("X"))
-    // .def ("leafs", &PyMase::leafs)
-    // .def ("nodes", &PyMase::nodes)
-    .def ("num_nodes", &MASE::num_nodes)
-    .def ("num_bytes", &MASE::num_bytes)
-    .def ("load", &MASE::load, py::arg("new_nodes"), py::arg("new_leafs"), py::arg("new_weights"))
-    .def ("store", &MASE::store)
-    .def ("num_trees", &MASE::num_trees
-);
+// py::class_<MASE>(m, "CMASE")
+//     .def(py::init<unsigned int, unsigned int,unsigned long, unsigned int, unsigned int, std::string, internal_t, std::string, std::string, unsigned int, unsigned int, unsigned int, unsigned int, bool, unsigned int>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("burnin_steps"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("n_trees"), py::arg("n_worker"), py::arg("n_rounds"), py::arg("batch_size"), py::arg("bootstrap"), py::arg("init_tree_size"))
+//     .def ("init", &MASE::init, py::arg("X"), py::arg("Y"))
+//     .def ("fit", &MASE::fit, py::arg("X"), py::arg("Y"))
+//     .def ("next", &MASE::next, py::arg("X"), py::arg("Y"))
+//     .def ("predict_proba", &MASE::predict_proba, py::arg("X"))
+//     // .def ("leafs", &PyMase::leafs)
+//     // .def ("nodes", &PyMase::nodes)
+//     .def ("num_nodes", &MASE::num_nodes)
+//     .def ("num_bytes", &MASE::num_bytes)
+//     .def ("load", &MASE::load, py::arg("new_nodes"), py::arg("new_leafs"), py::arg("new_weights"))
+//     .def ("store", &MASE::store)
+//     .def ("num_trees", &MASE::num_trees
+// );
 
-py::class_<GASE>(m, "CGASE")
-    .def(py::init<unsigned int, unsigned int,unsigned long, unsigned int, std::string, internal_t, std::string, std::string, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, bool>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("n_trees"), py::arg("n_worker"), py::arg("n_rounds"),py::arg("init_batch_size"), py::arg("batch_size"), py::arg("bootstrap"))
-    .def ("init", &GASE::init, py::arg("X"), py::arg("Y"))
-    .def ("fit", &GASE::fit, py::arg("X"), py::arg("Y"))
-    .def ("next", &GASE::next, py::arg("X"), py::arg("Y"))
-    // .def ("leafs", &PyGase::leafs)
-    // .def ("nodes", &PyGase::nodes)
-    .def ("predict_proba", &GASE::predict_proba, py::arg("X"))
-    .def ("num_nodes", &GASE::num_nodes)
-    .def ("num_bytes", &GASE::num_bytes)
-    .def ("load", &GASE::load, py::arg("new_nodes"), py::arg("new_leafs"), py::arg("new_weights"))
-    .def ("store", &GASE::store)
-    .def ("num_trees", &GASE::num_trees
-);
+// py::class_<GASE>(m, "CGASE")
+//     .def(py::init<unsigned int, unsigned int,unsigned long, unsigned int, std::string, internal_t, std::string, std::string, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, bool>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("n_trees"), py::arg("n_worker"), py::arg("n_rounds"),py::arg("init_batch_size"), py::arg("batch_size"), py::arg("bootstrap"))
+//     .def ("init", &GASE::init, py::arg("X"), py::arg("Y"))
+//     .def ("fit", &GASE::fit, py::arg("X"), py::arg("Y"))
+//     .def ("next", &GASE::next, py::arg("X"), py::arg("Y"))
+//     // .def ("leafs", &PyGase::leafs)
+//     // .def ("nodes", &PyGase::nodes)
+//     .def ("predict_proba", &GASE::predict_proba, py::arg("X"))
+//     .def ("num_nodes", &GASE::num_nodes)
+//     .def ("num_bytes", &GASE::num_bytes)
+//     .def ("load", &GASE::load, py::arg("new_nodes"), py::arg("new_leafs"), py::arg("new_weights"))
+//     .def ("store", &GASE::store)
+//     .def ("num_trees", &GASE::num_trees
+// );
 
-py::class_<DecisionTreeClassifier>(m, "CDecisionTreeClassifier")
-    .def(py::init<unsigned int, unsigned int, unsigned int, unsigned long, internal_t, std::string, std::string>(), py::arg("max_depth"), py::arg("n_classes"), py::arg("max_features"), py::arg("seed"), py::arg("step_size"), py::arg("tree_init_mode"), py::arg("tree_update_mode"))
-    //.def ("next", &TreeAdaptor::next, py::arg("X"), py::arg("Y"), py::arg("tree_grad"))
-    .def ("fit", &DecisionTreeClassifier::fit, py::arg("X"), py::arg("Y"))
-    .def ("num_bytes", &DecisionTreeClassifier::num_bytes)
-    .def ("num_nodes", &DecisionTreeClassifier::num_nodes)
-    .def ("load", &DecisionTreeClassifier::load, py::arg("new_nodes"), py::arg("new_leafs"))
-    .def ("store", &DecisionTreeClassifier::store)
-    .def ("predict_proba", &DecisionTreeClassifier::predict_proba, py::arg("X")
-);
+// py::class_<DecisionTreeClassifier>(m, "CDecisionTreeClassifier")
+//     .def(py::init<unsigned int, unsigned int, unsigned int, unsigned long, internal_t, std::string, std::string>(), py::arg("max_depth"), py::arg("n_classes"), py::arg("max_features"), py::arg("seed"), py::arg("step_size"), py::arg("tree_init_mode"), py::arg("tree_update_mode"))
+//     //.def ("next", &TreeAdaptor::next, py::arg("X"), py::arg("Y"), py::arg("tree_grad"))
+//     .def ("fit", &DecisionTreeClassifier::fit, py::arg("X"), py::arg("Y"))
+//     .def ("num_bytes", &DecisionTreeClassifier::num_bytes)
+//     .def ("num_nodes", &DecisionTreeClassifier::num_nodes)
+//     .def ("load", &DecisionTreeClassifier::load, py::arg("new_nodes"), py::arg("new_leafs"))
+//     .def ("store", &DecisionTreeClassifier::store)
+//     .def ("predict_proba", &DecisionTreeClassifier::predict_proba, py::arg("X")
+// );
 
 py::class_<DistanceDecisionTree<DDT::TREE_INIT::TRAIN, DISTANCE::TYPES::ZLIB, OPTIMIZER::NONE>>(m, "DistanceDecisionTreeTrainNone")
     .def(py::init<unsigned int, unsigned int, unsigned int, unsigned long, internal_t, internal_t>(), py::arg("max_depth"), py::arg("n_classes"), py::arg("max_features"), py::arg("seed"), py::arg("lambda"), py::arg("step_size"))

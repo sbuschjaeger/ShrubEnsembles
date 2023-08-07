@@ -22,12 +22,12 @@ template <DDT::TREE_INIT tree_init, DISTANCE::TYPES distance_type, OPTIMIZER::OP
 class DistanceDecisionTree { //: public Tree {
 
 // template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, DDT::TREE_INIT friend_tree_init>
-// friend class ShrubEnsemble;
+// friend class TreeEnsemble;
 
 private:
     std::vector<Node> _nodes;
     matrix2d<data_t> examples; 
-    std::vector<internal_t> _leafs;
+    std::vector<internal_t> _leaves;
     unsigned int n_classes;
     unsigned int max_depth;
     unsigned int max_examples;
@@ -360,13 +360,13 @@ private:
             auto & parent = _nodes[pid];
             if (is_left) {
                 parent.left_is_leaf = true;
-                parent.left = _leafs.size();
+                parent.left = _leaves.size();
             } else {
                 parent.right_is_leaf = true;
-                parent.right = _leafs.size();
+                parent.right = _leaves.size();
             }
         }
-        _leafs.insert(_leafs.end(), preds.begin(), preds.end());
+        _leaves.insert(_leaves.end(), preds.begin(), preds.end());
     }
 
 public:
@@ -380,7 +380,7 @@ public:
             node_size += n.num_bytes();
         }
 
-        return sizeof(*this) + node_size + sizeof(internal_t) * _leafs.size() + optimizer.num_bytes() + examples.num_bytes() + distance.num_bytes();
+        return sizeof(*this) + node_size + sizeof(internal_t) * _leaves.size() + optimizer.num_bytes() + examples.num_bytes() + distance.num_bytes();
     }
 
     unsigned int num_ref_examples() const {
@@ -389,7 +389,7 @@ public:
 
     void predict_proba(matrix2d<data_t> const &X, matrix2d<data_t> & preds) {
         for (unsigned int i = 0; i < X.rows; ++i) {
-            internal_t const * const node_preds = &_leafs[leaf_index(X(i))]; //.preds.get();
+            internal_t const * const node_preds = &_leaves[leaf_index(X(i))]; //.preds.get();
             std::copy(node_preds, node_preds+n_classes, preds(i).begin());
         }
     }
@@ -398,14 +398,14 @@ public:
         matrix2d<data_t> preds(X.rows, n_classes);
 
         for (unsigned int i = 0; i < X.rows; ++i) {
-            internal_t const * const node_preds = &_leafs[leaf_index(X(i))]; //.preds.get();
+            internal_t const * const node_preds = &_leaves[leaf_index(X(i))]; //.preds.get();
             std::copy(node_preds, node_preds+n_classes, preds(i).begin());
         }
         return preds;
     }
 
     unsigned int num_nodes() const {
-        return _nodes.size() + int(_leafs.size() / n_classes);
+        return _nodes.size() + int(_leaves.size() / n_classes);
     }
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) {
@@ -578,10 +578,10 @@ public:
             nnodes++;
         }
 
-        _leafs = std::vector<internal_t>(new_leafs.dim);
-        std::copy(new_leafs.begin(), new_leafs.end(), _leafs.begin());
-        // _leafs = std::move(t_leafs);
-        // _leafs = std::move(new_leafs);
+        _leaves = std::vector<internal_t>(new_leafs.dim);
+        std::copy(new_leafs.begin(), new_leafs.end(), _leaves.begin());
+        // _leaves = std::move(t_leafs);
+        // _leaves = std::move(new_leafs);
     }
 
     std::tuple<matrix1d<internal_t>, matrix1d<internal_t>> store() const {
@@ -598,107 +598,8 @@ public:
             primitive_nodes(i++) = static_cast<internal_t>(n.right_is_leaf);
         }
 
-        matrix1d<internal_t> t_leafs(_leafs.size());
-        std::copy(_leafs.begin(), _leafs.end(), t_leafs.begin());
+        matrix1d<internal_t> t_leafs(_leaves.size());
+        std::copy(_leaves.begin(), _leaves.end(), t_leafs.begin());
         return std::make_tuple<matrix1d<internal_t>, matrix1d<internal_t>> (std::move(primitive_nodes), std::move(t_leafs));
     }
 };
-
-// class DistanceDecisionTreeClassifier {
-// protected:
-// 	Tree * tree = nullptr;
-
-// public:
-
-//     DistanceDecisionTreeClassifier(
-//         unsigned int n_classes, 
-//         unsigned int max_depth, 
-//         unsigned int max_examples,
-//         data_t lambda,
-//         unsigned long seed, 
-//         internal_t step_size,
-//         const std::string tree_init_mode, 
-//         const std::string tree_optimizer
-//     ) { 
-
-//         // Yeha this is ugly and there is probably clever way to do this with C++17/20, but this was quicker to code and it gets the job done.
-//         // Also, lets be real here: There is only a limited chance more init/next modes are added without much refactoring of the whole project
-//         if (tree_init_mode == "random" && tree_optimizer == "sgd") {
-//             tree = new DistanceDecisionTree<DDT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::SGD>(n_classes,max_depth,max_examples,seed,lambda,step_size);
-//         } else if (tree_init_mode == "random" && tree_optimizer == "adam") {
-//             tree = new DistanceDecisionTree<DDT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::ADAM>(n_classes,max_depth,max_examples,seed,lambda,step_size);
-//         } else if (tree_init_mode == "random" && tree_optimizer == "none") {
-//             tree = new DistanceDecisionTree<DDT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::NONE>(n_classes,max_depth,max_examples,seed,lambda,step_size);
-//         } else if (tree_init_mode == "train" && tree_optimizer == "sgd") {
-//             tree = new DistanceDecisionTree<DDT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::SGD>(n_classes,max_depth,max_examples,seed,lambda,step_size);
-//         } else if (tree_init_mode == "train" && tree_optimizer == "adam") {
-//             tree = new DistanceDecisionTree<DDT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::ADAM>(n_classes,max_depth,max_examples,seed,lambda,step_size);
-//         } else if (tree_init_mode == "train" && tree_optimizer == "none") {
-//             tree = new DistanceDecisionTree<DDT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::NONE>(n_classes,max_depth,max_examples,seed,lambda,step_size);
-//         } else {
-//             throw std::runtime_error("Currently only the two tree_init_mode {random, train} and the three  optimizers {none,sgd,adam} are supported for trees, but you provided a combination of " + tree_init_mode + " and " + tree_optimizer);
-//         }
-//     }
-
-//     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) {
-//         if (tree != nullptr) {
-//             tree->fit(X, Y);
-//         } else {
-//             throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-//         }
-//     }
-
-//     matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) {
-//         if (tree != nullptr) {
-//             return tree->predict_proba(X);
-//         } else {
-//             throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-//         }
-//     }
-    
-//     ~DistanceDecisionTreeClassifier() {
-//         if (tree != nullptr) {
-//             delete tree;
-//         }
-//     }
-
-//     unsigned int num_ref_examples() const {
-//         if (tree != nullptr) {
-//             return static_cast<DistanceDecisionTree*>(tree)->num_ref_examples();
-//         } else {
-//             throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-//         }
-//     }
-
-//     unsigned int num_bytes() const {
-//         if (tree != nullptr) {
-//             return tree->num_bytes();
-//         } else {
-//             throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-//         }
-//     }
-
-//     unsigned int num_nodes() const {
-//         if (tree != nullptr) {
-//             return tree->num_nodes();
-//         } else {
-//             throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-//         }
-//     }
-
-//     void load(matrix1d<internal_t> const & new_nodes, matrix1d<internal_t> const & new_leafs) {
-//         if (tree != nullptr) {
-//             return tree->load(new_nodes,new_leafs);
-//         } else {
-//             throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-//         }
-//     }
-
-//     std::tuple<matrix1d<internal_t>, matrix1d<internal_t>> store() const {
-//         if (tree != nullptr) {
-//             return tree->store();
-//         } else {
-//             throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-//         }
-//     }
-// };

@@ -9,7 +9,7 @@
 #include "DecisionTree.h"
 #include "GASE.h"
 #include "MASE.h"
-//#include "ShrubEnsemble.h"
+//#include "TreeEnsemble.h"
 
 
 #include <valgrind/callgrind.h>

@@ -25,11 +25,11 @@ template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
 class DecisionTree : public Tree {
 
 template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, DT::TREE_INIT friend_tree_init>
-friend class ShrubEnsemble;
+friend class TreeEnsemble;
 
 private:
     std::vector<Node> _nodes;
-    std::vector<internal_t> _leafs;
+    std::vector<internal_t> _leaves;
     unsigned int n_classes;
     unsigned int max_depth;
     unsigned int max_features;
@@ -323,13 +323,13 @@ private:
             auto & parent = _nodes[pid];
             if (is_left) {
                 parent.left_is_leaf = true;
-                parent.left = _leafs.size();
+                parent.left = _leaves.size();
             } else {
                 parent.right_is_leaf = true;
-                parent.right = _leafs.size();
+                parent.right = _leaves.size();
             }
         }
-        _leafs.insert(_leafs.end(), preds.begin(), preds.end());
+        _leaves.insert(_leaves.end(), preds.begin(), preds.end());
     }
 
 public:
@@ -343,12 +343,12 @@ public:
             node_size += n.num_bytes();
         }
 
-        return sizeof(*this) + node_size + sizeof(internal_t) * _leafs.size() + optimizer.num_bytes();
+        return sizeof(*this) + node_size + sizeof(internal_t) * _leaves.size() + optimizer.num_bytes();
     }
 
     void predict_proba(matrix2d<data_t> const &X, matrix2d<data_t> & preds) {
         for (unsigned int i = 0; i < X.rows; ++i) {
-            internal_t const * const node_preds = &_leafs[leaf_index(X(i))]; //.preds.get();
+            internal_t const * const node_preds = &_leaves[leaf_index(X(i))]; //.preds.get();
             std::copy(node_preds, node_preds+n_classes, preds(i).begin());
         }
     }
@@ -357,14 +357,14 @@ public:
         matrix2d<data_t> preds(X.rows, n_classes);
 
         for (unsigned int i = 0; i < X.rows; ++i) {
-            internal_t const * const node_preds = &_leafs[leaf_index(X(i))]; //.preds.get();
+            internal_t const * const node_preds = &_leaves[leaf_index(X(i))]; //.preds.get();
             std::copy(node_preds, node_preds+n_classes, preds(i).begin());
         }
         return preds;
     }
 
     unsigned int num_nodes() const {
-        return _nodes.size() + int(_leafs.size() / n_classes);
+        return _nodes.size() + int(_leaves.size() / n_classes);
     }
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) {
@@ -514,134 +514,46 @@ public:
         }
     }
 
-    void load(matrix1d<internal_t> const &  new_nodes, matrix1d<internal_t> const & new_leafs) {
-        _nodes = std::vector<Node>(static_cast<unsigned int>(new_nodes.dim / 6));
+    void load(matrix1d<internal_t> const & nodes) {
+        unsigned int n_nodes = nodes(0);
+        unsigned int n_leaves = nodes(1);
 
-        unsigned int nnodes = 0;
-        for (unsigned int j = 0; j < new_nodes.dim; j += 6) {
-            Node &n = _nodes[nnodes];
+        _nodes = std::vector<Node>(n_nodes);
+
+        unsigned int j = 2;
+        for (unsigned int i = 0; i < n_nodes; ++i, j += 6) {
+            Node &n = _nodes[i];
             // Node n;
-            n.threshold = static_cast<data_t>(new_nodes(j));
-            n.idx = static_cast<unsigned int>(new_nodes(j+1));
-            n.left = static_cast<unsigned int>(new_nodes(j+2));
-            n.right = static_cast<unsigned int>(new_nodes(j+3));
-            n.left_is_leaf = new_nodes(j+4) == 0.0 ? false : true;
-            n.right_is_leaf = new_nodes(j+5) == 0.0 ? false : true;
-            // t_nodes.push_back(n);
-            nnodes++;
+            n.threshold = static_cast<data_t>(nodes(j));
+            n.idx = static_cast<unsigned int>(nodes(j+1));
+            n.left = static_cast<unsigned int>(nodes(j+2));
+            n.right = static_cast<unsigned int>(nodes(j+3));
+            n.left_is_leaf = nodes(j+4) == 0.0 ? false : true;
+            n.right_is_leaf = nodes(j+5) == 0.0 ? false : true;
         }
 
-        _leafs = std::vector<internal_t>(new_leafs.dim);
-        std::copy(new_leafs.begin(), new_leafs.end(), _leafs.begin());
+        _leaves = std::vector<internal_t>(n_leaves);
+        std::copy(&nodes.data[j], &nodes.data[j+n_leaves*n_classes], _leaves.begin());
         // _leafs = std::move(t_leafs);
         // _leafs = std::move(new_leafs);
     }
 
-    std::tuple<matrix1d<internal_t>, matrix1d<internal_t>> store() const {
-        matrix1d<internal_t> primitive_nodes(6 * _nodes.size());
+    matrix1d<internal_t> store() const {
+        matrix1d<internal_t> nodes(2 + 6 * _nodes.size() + n_classes * _leaves.size());
+        nodes(0) = _nodes.size();
+        nodes(1) = _leaves.size();
 
-        unsigned int i = 0;
+        unsigned int i = 2;
         for (auto const &n : _nodes) {
-            primitive_nodes(i++) = static_cast<internal_t>(n.threshold);
-            primitive_nodes(i++) = static_cast<internal_t>(n.idx);
-            primitive_nodes(i++) = static_cast<internal_t>(n.left);
-            primitive_nodes(i++) = static_cast<internal_t>(n.right);
-            primitive_nodes(i++) = static_cast<internal_t>(n.left_is_leaf);
-            primitive_nodes(i++) = static_cast<internal_t>(n.right_is_leaf);
+            nodes(i++) = static_cast<internal_t>(n.threshold);
+            nodes(i++) = static_cast<internal_t>(n.idx);
+            nodes(i++) = static_cast<internal_t>(n.left);
+            nodes(i++) = static_cast<internal_t>(n.right);
+            nodes(i++) = static_cast<internal_t>(n.left_is_leaf);
+            nodes(i++) = static_cast<internal_t>(n.right_is_leaf);
         }
-
-        matrix1d<internal_t> t_leafs(_leafs.size());
-        std::copy(_leafs.begin(), _leafs.end(), t_leafs.begin());
-        return std::make_tuple<matrix1d<internal_t>, matrix1d<internal_t>> (std::move(primitive_nodes), std::move(t_leafs));
-    }
-};
-
-class DecisionTreeClassifier {
-protected:
-	Tree * tree = nullptr;
-
-public:
-
-    DecisionTreeClassifier(
-        unsigned int n_classes, 
-        unsigned int max_depth, 
-        unsigned int max_features,
-        unsigned long seed, 
-        internal_t step_size,
-        const std::string tree_init_mode, 
-        const std::string tree_optimizer
-    ) { 
-
-        // Yeha this is ugly and there is probably clever way to do this with C++17/20, but this was quicker to code and it gets the job done.
-        // Also, lets be real here: There is only a limited chance more init/next modes are added without much refactoring of the whole project
-        if (tree_init_mode == "random" && tree_optimizer == "sgd") {
-            tree = new DecisionTree<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::SGD>(n_classes,max_depth,max_features,seed,step_size);
-        } else if (tree_init_mode == "random" && tree_optimizer == "adam") {
-            tree = new DecisionTree<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::ADAM>(n_classes,max_depth,max_features,seed,step_size);
-        } else if (tree_init_mode == "random" && tree_optimizer == "none") {
-            tree = new DecisionTree<DT::TREE_INIT::RANDOM, OPTIMIZER::OPTIMIZER_TYPE::NONE>(n_classes,max_depth,max_features,seed,step_size);
-        } else if (tree_init_mode == "train" && tree_optimizer == "sgd") {
-            tree = new DecisionTree<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::SGD>(n_classes,max_depth,max_features,seed,step_size);
-        } else if (tree_init_mode == "train" && tree_optimizer == "adam") {
-            tree = new DecisionTree<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::ADAM>(n_classes,max_depth,max_features,seed,step_size);
-        } else if (tree_init_mode == "train" && tree_optimizer == "none") {
-            tree = new DecisionTree<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::NONE>(n_classes,max_depth,max_features,seed,step_size);
-        } else {
-            throw std::runtime_error("Currently only the two tree_init_mode {random, train} and the three  optimizers {none,sgd,adam} are supported for trees, but you provided a combination of " + tree_init_mode + " and " + tree_optimizer);
-        }
-    }
-
-    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) {
-        if (tree != nullptr) {
-            tree->fit(X, Y);
-        } else {
-            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-        }
-    }
-
-    matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) {
-        if (tree != nullptr) {
-            return tree->predict_proba(X);
-        } else {
-            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-        }
-    }
-    
-    ~DecisionTreeClassifier() {
-        if (tree != nullptr) {
-            delete tree;
-        }
-    }
-
-    unsigned int num_bytes() const {
-        if (tree != nullptr) {
-            return tree->num_bytes();
-        } else {
-            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-        }
-    }
-
-    unsigned int num_nodes() const {
-        if (tree != nullptr) {
-            return tree->num_nodes();
-        } else {
-            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-        }
-    }
-
-    void load(matrix1d<internal_t> const & new_nodes, matrix1d<internal_t> const & new_leafs) {
-        if (tree != nullptr) {
-            return tree->load(new_nodes,new_leafs);
-        } else {
-            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-        }
-    }
-
-    std::tuple<matrix1d<internal_t>, matrix1d<internal_t>> store() const {
-        if (tree != nullptr) {
-            return tree->store();
-        } else {
-            throw std::runtime_error("The internal object pointer in DecisionTree was null. This should now happen!");
-        }
+        
+        std::copy(_leaves.begin(), _leaves.end(), &nodes.data[i]);
+        return nodes;
     }
 };

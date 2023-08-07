@@ -20,8 +20,8 @@ public:
     unsigned int left, right;
     bool left_is_leaf, right_is_leaf;
 
-    // I want to make sure that these objects are only moved and never copied. I expect the code below to not 
-    // use any copy c'tors, but for safe measures we delete the copy constructor entirely.
+    // I want to make sure that these objects are only moved and never copied. I expect the in DecisionTree / DistanceTree to 
+    // not use any copy c'tors, but for safe measures we delete the copy constructor entirely.
     Node(const Node&) = default; //delete;
     Node() = default;
     Node(Node &&) = default;
@@ -31,15 +31,12 @@ public:
     }
 };
 
-/**
- * @brief  The main reason why this interface exists, is because it makes class instansiation a little easier for the Pythonbindings. 
- * @note   
- * @retval None
- */
 class Tree {
 public:
 
     virtual void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) = 0;
+
+    virtual void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::vector<unsigned int> const &idx) = 0;
 
     virtual matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) = 0;
 
@@ -47,9 +44,9 @@ public:
 
     virtual unsigned int num_nodes() const = 0;
 
-    virtual void load(matrix1d<internal_t> const & new_nodes, matrix1d<internal_t> const & new_leafs) = 0;
+    virtual void load(matrix1d<internal_t> const & nodes) = 0;
 
-    virtual std::tuple<matrix1d<internal_t>, matrix1d<internal_t>> store() const = 0;
+    virtual matrix1d<internal_t> store() const = 0;
 
     virtual ~Tree() { }
 };

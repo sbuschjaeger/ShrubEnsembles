@@ -4,17 +4,21 @@
 
 #include "Datatypes.h"
 #include "DecisionTree.h"
-#include "ShrubEnsemble.h"
+#include "TreeEnsemble.h"
 #include "EnsembleRegularizer.h"
 #include "TreeRegularizer.h"
+#include "Utils.h"
 
-class OSE {
+template <LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, ENSEMBLE_REGULARIZER::TYPE ensemble_reg, DT::TREE_INIT tree_init>
+class OSE : public TreeEnsemble<loss_type, opt, tree_opt, tree_init> {
     
-private:
-
-    TreeEnsemble * model = nullptr;
+protected:
     
     unsigned int burnin_steps;
+    unsigned int n_trees;
+    unsigned int batch_size;
+    bool bootstrap; 
+    unsigned int epochs;
 
 public:
 
@@ -25,104 +29,47 @@ public:
         bool normalize_weights = true,
         unsigned int burnin_steps = 0,
         unsigned int max_features = 0,
-        const std::string loss = "mse",
         internal_t step_size = 1e-2,
-        const std::string optimizer = "sgd", 
-        const std::string tree_init_mode = "train", 
-        const std::string regularizer = "none",
-        internal_t l_reg = 0
-    ) : burnin_steps(burnin_steps) { 
-
-        if (tree_init_mode == "random" && optimizer == "sgd" && loss == "mse") {
-            model = new ShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD,OPTIMIZER::OPTIMIZER_TYPE::NONE,DT::TREE_INIT::RANDOM>(n_classes, max_depth, seed, normalize_weights, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::TYPE::NO, 0.0);
-        } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "mse") {
-            model = new ShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::ADAM,OPTIMIZER::OPTIMIZER_TYPE::NONE,DT::TREE_INIT::RANDOM>(n_classes, max_depth, seed, normalize_weights, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::TYPE::NO, 0.0);
-        } else if (tree_init_mode == "train" && optimizer == "sgd" && loss == "mse") {
-            model = new ShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::SGD,OPTIMIZER::OPTIMIZER_TYPE::NONE,DT::TREE_INIT::TRAIN>(n_classes, max_depth, seed, normalize_weights, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::TYPE::NO, 0.0);
-        } else if (tree_init_mode == "train" && optimizer == "adam" && loss == "mse") {
-            model = new ShrubEnsemble<LOSS::TYPE::MSE, OPTIMIZER::OPTIMIZER_TYPE::ADAM,OPTIMIZER::OPTIMIZER_TYPE::NONE,DT::TREE_INIT::TRAIN>(n_classes, max_depth, seed, normalize_weights, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::TYPE::NO, 0.0);
-        } else if (tree_init_mode == "random" && optimizer == "sgd" && loss == "cross-entropy") {
-            model = new ShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::SGD,OPTIMIZER::OPTIMIZER_TYPE::NONE,DT::TREE_INIT::RANDOM>(n_classes, max_depth, seed, normalize_weights, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::TYPE::NO, 0.0);
-        } else if (tree_init_mode == "random" && optimizer == "adam" && loss == "cross-entropy") {
-            model = new ShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::ADAM,OPTIMIZER::OPTIMIZER_TYPE::NONE,DT::TREE_INIT::RANDOM>(n_classes, max_depth, seed, normalize_weights, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::TYPE::NO, 0.0);
-        } else if (tree_init_mode == "train" && optimizer == "sgd" && loss == "cross-entropy") {
-            model = new ShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::SGD,OPTIMIZER::OPTIMIZER_TYPE::NONE,DT::TREE_INIT::TRAIN>(n_classes, max_depth, seed, normalize_weights, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::TYPE::NO, 0.0);
-        } else if (tree_init_mode == "train" && optimizer == "adam" && loss == "cross-entropy") {
-            model = new ShrubEnsemble<LOSS::TYPE::CROSS_ENTROPY, OPTIMIZER::OPTIMIZER_TYPE::ADAM,OPTIMIZER::OPTIMIZER_TYPE::NONE,DT::TREE_INIT::TRAIN>(n_classes, max_depth, seed, normalize_weights, max_features, step_size, ENSEMBLE_REGULARIZER::from_string(regularizer), l_reg, TREE_REGULARIZER::TYPE::NO, 0.0);
-        } else {
-            throw std::runtime_error("Currently only the two tree_init_mode {random, train} and the two optimizer modes {adam, sgd} and the two losses {mse, cross-entropy} are supported for OSE, but you provided a combination of " + tree_init_mode + " and " + optimizer + " and " + loss);
-        }
-    }
-
-    ~OSE() {
-        if (model != nullptr) {
-            delete model;
-        }
+        internal_t l_reg = 0,
+        unsigned int n_trees = 32,
+        unsigned int batch_size = 0,
+        unsigned int bootstrap = true,
+        unsigned int epochs = 0
+    ) : TreeEnsemble<loss_type, opt, tree_opt, tree_init>(n_classes, max_depth, seed, false, max_features, step_size, ensemble_reg, l_reg, TREE_REGULARIZER::TYPE::NO, 0), burnin_steps(burnin_steps), n_trees(n_trees), batch_size(batch_size), bootstrap(bootstrap), epochs(epochs) { 
     }
 
     void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
-        if (model != nullptr) {
-            model->next(X,Y,burnin_steps);
-        } else {
-            throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
-        }
-    }
-    
-    void init(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y, unsigned int n_trees, bool bootstrap, unsigned int batch_size) {
-        if (model != nullptr) {
-            model->init_trees(X,Y,n_trees, bootstrap, batch_size);
-        } else {
-            throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
+        this->_weights.push_back(0.0);
+        this->_trees.push_back(DecisionTree<tree_init, tree_opt>(this->n_classes, this->max_depth, this->max_features, this->seed++, this->step_size));
+        this->_trees.back().fit(X,Y);
+        
+        this->update_trees(X, Y, burnin_steps, std::nullopt, std::nullopt, this->seed);
+        if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+            this->prune();
         }
     }
 
-    matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) {
-        if (model != nullptr) {
-            return model->predict_proba(X);
-        } else {
-            throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
+    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
+        this->init_trees(X, Y, n_trees, bootstrap, batch_size);
+
+        for (unsigned int i = 0; i < epochs; ++i) {
+            unsigned int cnt = 0;
+
+            unsigned int batch_cnt = 0;
+            while(cnt < X.rows) {
+                auto cur_batch_size = std::min(static_cast<int>(X.rows - cnt), static_cast<int>(batch_size));
+                if (cur_batch_size <= 0) break;
+
+                auto idx = sample_indices(X.rows, batch_size, bootstrap, this->seed + i);
+                this->_weights.push_back(0.0);
+                this->_trees.push_back(DecisionTree<tree_init, tree_opt>(this->n_classes, this->max_depth, this->max_features, this->seed++, this->step_size));
+                this->_trees.back().fit(X,Y,idx);
+                
+                this->update_trees(X, Y, burnin_steps, std::nullopt, std::nullopt, this->seed);
+                if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+                    this->prune();
+                }
+            }
         }
     }
-
-    unsigned int num_nodes() const {
-        if (model != nullptr) {
-            return model->num_nodes();
-        } else {
-            throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
-        }
-    }
-
-    unsigned int num_bytes() const {
-        if (model != nullptr) {
-            return model->num_bytes();
-        } else {
-            throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
-        }
-    }
-
-    unsigned int num_trees() const {
-        if (model != nullptr) {
-            return model->num_trees();
-        } else {
-            throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
-        }
-    }
-
-    // // TODO
-    // void load(std::vector<std::vector<internal_t>> & new_nodes, std::vector<std::vector<internal_t>> & new_leafs, std::vector<internal_t> & new_weights) {
-    //     if (model != nullptr) {
-    //         model->load(new_nodes, new_leafs, new_weights);
-    //     } else {
-    //         throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
-    //     }
-    // }
-
-    // // TODO
-    // std::tuple<std::vector<std::vector<internal_t>>, std::vector<std::vector<internal_t>>, std::vector<internal_t>> store() const {
-    //     if (model != nullptr) {
-    //         return model->store();
-    //     } else {
-    //         throw std::runtime_error("The internal object pointer in OSE was null. This should now happen!");
-    //     }
-    // }
 };
