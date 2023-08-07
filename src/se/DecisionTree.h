@@ -22,12 +22,12 @@ namespace DT {
 }
 
 template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
-class DecisionTree : public Tree {
+class DecisionTree : public Tree<tree_opt> {
 
-template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, DT::TREE_INIT friend_tree_init>
-friend class TreeEnsemble;
+// template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, DT::TREE_INIT friend_tree_init>
+// friend class TreeEnsemble;
 
-private:
+protected:
     std::vector<Node> _nodes;
     std::vector<internal_t> _leaves;
     unsigned int n_classes;
@@ -35,26 +35,7 @@ private:
     unsigned int max_features;
     unsigned long seed;
 
-    OPTIMIZER::Optimizer<tree_opt,OPTIMIZER::STEP_SIZE_TYPE::CONSTANT> optimizer;
-
-    inline unsigned int leaf_index(matrix1d<data_t> const &x) const {
-        unsigned int idx = 0;
-
-        // On small datasets / batchs there might be no node fitted. In this case we only have leaf nodes
-        if (_nodes.size() > 0) {
-            while(true){
-                auto const & n = _nodes[idx];
-                if (x(n.idx) <= n.threshold) {
-                    idx = _nodes[idx].left;
-                    if (n.left_is_leaf) break;
-                } else {
-                    idx = _nodes[idx].right;
-                    if (n.right_is_leaf) break;
-                }
-            }
-        } 
-        return idx;
-    }
+    OPTIMIZER::Optimizer<tree_opt> _optimizer;
 
      /**
      * @brief  Compute a random split for the given data. This algorithm has O(d * log d + d * N) runtime in the worst case, but should usually run in O(d * log d + N), where N is the number of examples and d is the number of features.
@@ -334,7 +315,7 @@ private:
 
 public:
 
-    DecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed, internal_t step_size) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),optimizer(step_size) {}
+    DecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed, internal_t step_size) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),_optimizer(step_size) {}
 
     unsigned int num_bytes() const {
         unsigned int node_size = 0;
@@ -343,8 +324,47 @@ public:
             node_size += n.num_bytes();
         }
 
-        return sizeof(*this) + node_size + sizeof(internal_t) * _leaves.size() + optimizer.num_bytes();
+        return sizeof(*this) + node_size + sizeof(internal_t) * _leaves.size() + _optimizer.num_bytes();
     }
+
+    inline unsigned int leaf_index(matrix1d<data_t> const &x) const {
+        unsigned int idx = 0;
+
+        // On small datasets / batchs there might be no node fitted. In this case we only have leaf nodes
+        if (_nodes.size() > 0) {
+            while(true){
+                auto const & n = _nodes[idx];
+                if (x(n.idx) <= n.threshold) {
+                    idx = _nodes[idx].left;
+                    if (n.left_is_leaf) break;
+                } else {
+                    idx = _nodes[idx].right;
+                    if (n.right_is_leaf) break;
+                }
+            }
+        } 
+        return idx;
+    }
+
+    std::vector<internal_t> & leaves() {
+        return _leaves;
+    };
+    
+    std::vector<Node> & nodes() {
+        return _nodes;
+    };
+
+    OPTIMIZER::Optimizer<tree_opt> &optimizer() {
+        return _optimizer;
+    }
+
+    Tree<tree_opt>* clone(unsigned int seed) const {
+        if constexpr(tree_opt == OPTIMIZER::NONE) {
+            return new DecisionTree<tree_init, tree_opt>(n_classes, max_depth, max_features, seed, 0);
+        } else {
+            return new DecisionTree<tree_init, tree_opt>(n_classes, max_depth, max_features, seed, _optimizer.step_size);
+        }
+    };
 
     void predict_proba(matrix2d<data_t> const &X, matrix2d<data_t> & preds) {
         for (unsigned int i = 0; i < X.rows; ++i) {
@@ -367,19 +387,26 @@ public:
         return _nodes.size() + int(_leaves.size() / n_classes);
     }
 
-    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) {
-        matrix1d<unsigned int> idx(X.rows);
-        std::iota(idx.begin(), idx.end(), 0);
+    // void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) {
+    //     matrix1d<unsigned int> idx(X.rows);
+    //     std::iota(idx.begin(), idx.end(), 0);
 
+    //     std::vector<bool> feature_is_const(X.cols, false);
+
+    //     this->fit(X,Y,idx,feature_is_const);
+    // }
+
+    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::optional<std::reference_wrapper<const matrix1d<unsigned int>>> idx = std::nullopt) {
         std::vector<bool> feature_is_const(X.cols, false);
 
-        this->fit(X,Y,idx,feature_is_const);
-    }
-
-    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, matrix1d<unsigned int> const & idx) {
-        std::vector<bool> feature_is_const(X.cols, false);
-
-        this->fit(X,Y,idx,feature_is_const);
+        if (idx) {
+            const matrix1d<unsigned int>& idx_ref = *idx;
+            this->fit(X,Y,idx_ref,feature_is_const);
+        } else {
+            matrix1d<unsigned int> idx_ref(X.rows);
+            std::iota(idx_ref.begin(), idx_ref.end(), 0);
+            this->fit(X,Y,idx_ref,feature_is_const);
+        }
     }
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, matrix1d<unsigned int> const & idx, std::vector<bool> & feature_is_const) {

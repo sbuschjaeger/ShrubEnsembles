@@ -5,29 +5,31 @@
 #include <math.h>
 #include <numeric>
 
-#include "DecisionTree.h"
+#include "Optimizer.h"
+#include "Tree.h"
 #include "Datatypes.h"
 
 namespace TREE_REGULARIZER {
 
 enum class TYPE {NO,NODES};
 
-template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
-data_t no_reg(DecisionTree<tree_init,tree_opt> const &tree) {
+template <OPTIMIZER::OPTIMIZER_TYPE optimizer_type>
+data_t no_reg(Tree<optimizer_type> const & tree) {
     return 0.0;
 }
 
-template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
-data_t nodes_reg(DecisionTree<tree_init, tree_opt> const &tree) {
+template <OPTIMIZER::OPTIMIZER_TYPE optimizer_type>
+data_t nodes_reg(Tree<optimizer_type> const & tree) {
     return tree.num_nodes();
 }
 
 // https://stackoverflow.com/questions/14848924/how-to-define-typedef-of-function-pointer-which-has-template-arguments
-template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
-using fptr = data_t (*)(DecisionTree<tree_init,tree_opt> const &tree);
+template <OPTIMIZER::OPTIMIZER_TYPE optimizer_type>
+using fptr = internal_t (*)(Tree<optimizer_type> const &);
 
-template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
-fptr<tree_init, tree_opt> from_enum(TYPE reg) {
+// template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
+template <OPTIMIZER::OPTIMIZER_TYPE optimizer_type>
+fptr<optimizer_type> from_enum(TYPE reg) {
     if (reg == TYPE::NO) {
         return no_reg;
     } else if (reg == TYPE::NODES) {

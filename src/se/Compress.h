@@ -104,13 +104,13 @@ struct Distance {
 
 template<>
 struct Distance<DISTANCE::TYPES::EUCLIDEAN> {
-    void reset_and_init() {}
+    void reset_and_init(unsigned int dim) {}
 
     unsigned int num_bytes() const {
         return sizeof(*this);
     }
 
-    internal_t operator()(matrix1d<data_t> const &x1, matrix1d<data_t> const &x2) {
+    internal_t operator()(matrix1d<data_t> const &x1, matrix1d<data_t> const &x2) const {
         return std::inner_product(x1.begin(), x1.end(), x2.begin(), data_t(0), 
             std::plus<data_t>(), [](data_t x,data_t y){return (y-x)*(y-x);}
         );

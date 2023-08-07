@@ -9,8 +9,8 @@
 #include "EnsembleRegularizer.h"
 #include "TreeRegularizer.h"
 
-template <LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, DT::TREE_INIT tree_init>
-class MASE : public TreeEnsemble<loss_type, opt, tree_opt, tree_init> {
+template <LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
+class MASE : public TreeEnsemble<loss_type, opt, tree_opt> {
     
 protected:
     unsigned int const n_trees;
@@ -36,7 +36,7 @@ public:
         unsigned int batch_size = 0,
         bool bootstrap = true, 
         unsigned int init_tree_size = 0
-    ) : TreeEnsemble<loss_type, opt, tree_opt, tree_init>(n_classes, max_depth, seed, false, max_features, step_size, ENSEMBLE_REGULARIZER::TYPE::NO, 0, TREE_REGULARIZER::TYPE::NO, 0), n_trees(n_trees), n_rounds(n_rounds), batch_size(batch_size), bootstrap(bootstrap), burnin_steps(burnin_steps), n_worker(n_worker), init_tree_size(init_tree_size) { 
+    ) : TreeEnsemble<loss_type, opt, tree_opt>(n_classes, max_depth, seed, false, max_features, step_size, ENSEMBLE_REGULARIZER::TYPE::NO, 0, TREE_REGULARIZER::TYPE::NO, 0), n_trees(n_trees), n_rounds(n_rounds), batch_size(batch_size), bootstrap(bootstrap), burnin_steps(burnin_steps), n_worker(n_worker), init_tree_size(init_tree_size) { 
     }
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_trees, unsigned int init_tree_size, unsigned int n_parallel, bool bootstrap, unsigned int batch_size, unsigned int n_rounds, unsigned int burnin_steps) {
@@ -63,7 +63,7 @@ public:
     }
 
     void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_parallel, bool boostrap, unsigned int batch_size, unsigned int burnin_steps) {
-        std::vector<TreeEnsemble<loss_type, opt, tree_opt, tree_init>> ses(n_parallel, *this);
+        std::vector<TreeEnsemble<loss_type, opt, tree_opt>> ses(n_parallel, *this);
 
         #pragma omp parallel for
         for (unsigned int k = 0; k < n_parallel; ++k){

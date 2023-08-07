@@ -15,18 +15,25 @@
 
 namespace DDT {
     enum TREE_INIT {TRAIN, RANDOM};
+
+    // DDT::TREE_INIT tree_init_from_string(std::string const & tree_init) {
+    //     if (tree_init == "TRAIN" || tree_init == "train") {
+    //         return DDT::TREE_INIT::TRAIN;
+    //     } else if (tree_init == "RANDOM" || tree_init == "random") {
+    //         return DDT::TREE_INIT::RANDOM;
+    //     } else {
+    //         //return DDT::TREE_INIT::TRAIN;
+    //         throw std::runtime_error("Currently supported DDT::TREE_INIT methods are {TRAIN, RANDOM}, but you provided: " + tree_init);
+    //     }
+    // }
 }
 
-
 template <DDT::TREE_INIT tree_init, DISTANCE::TYPES distance_type, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
-class DistanceDecisionTree { //: public Tree {
-
-// template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, DDT::TREE_INIT friend_tree_init>
-// friend class TreeEnsemble;
+class DistanceDecisionTree : public Tree<tree_opt> {
 
 private:
     std::vector<Node> _nodes;
-    matrix2d<data_t> examples; 
+    matrix2d<data_t> _examples; 
     std::vector<internal_t> _leaves;
     unsigned int n_classes;
     unsigned int max_depth;
@@ -34,67 +41,10 @@ private:
     unsigned int lambda;
     unsigned long seed;
 
-    //char * tmp_concat_data; // TODO Make the existence conditioned on distance_type
     DISTANCE::Distance<distance_type> distance;
-    OPTIMIZER::Optimizer<tree_opt,OPTIMIZER::STEP_SIZE_TYPE::CONSTANT> optimizer;
+    OPTIMIZER::Optimizer<tree_opt> _optimizer;
 
-    inline unsigned int leaf_index(matrix1d<data_t> const &x) const {
-        unsigned int idx = 0;
-
-        // On small datasets / batchs there might be no node fitted. In this case we only have leaf nodes
-        if (_nodes.size() > 0) {
-            while(true){
-                auto const & n = _nodes[idx];
-                auto const & ref = examples(n.idx);
-
-                if (distance(ref,x) <= n.threshold) {
-                    idx = _nodes[idx].left;
-                    if (n.left_is_leaf) break;
-                } else {
-                    idx = _nodes[idx].right;
-                    if (n.right_is_leaf) break;
-                }
-            }
-        } 
-        return idx;
-    }
-
-    // internal_t distance(matrix1d<data_t> const &x1, matrix1d<data_t> const &x2) const {
-    //     if constexpr (distance_type == DDT::DISTANCE::EUCLIDEAN) {
-    //         return std::inner_product(x1.begin(), x1.end(), x2.begin(), data_t(0), 
-    //             std::plus<data_t>(), [](data_t x,data_t y){return (y-x)*(y-x);}
-    //         );
-    //     } else {
-    //         const char * d1 = reinterpret_cast<const char *>(x1.begin());
-    //         unsigned int n1 = sizeof(data_t)*x1.dim;
-    //         unsigned int len_n1;
-    //         if constexpr (distance_type == DDT::DISTANCE::SHOCO) len_n1 = shoco_len(d1, n1);
-    //         else if constexpr(distance_type == DDT::DISTANCE::LZ4) len_n1 = lz4_len(d1, n1);
-    //         else len_n1 = zlib_len(d1, n1);
-
-    //         const char * d2 = reinterpret_cast<const char *>(x2.begin());
-    //         unsigned int n2 = sizeof(data_t)*x2.dim;
-    //         unsigned int len_n2;
-    //         if constexpr (distance_type == DDT::DISTANCE::SHOCO) len_n2 = shoco_len(d2, n2);
-    //         else if constexpr(distance_type == DDT::DISTANCE::LZ4) len_n2 = lz4_len(d2, n2);
-    //         else len_n2 = zlib_len(d2, n2);
-            
-    //         // char * concat_data = new char[n1+n2];
-
-    //         std::memcpy(tmp_concat_data, d1, n1);
-    //         std::memcpy(tmp_concat_data + n1, d2, n2);
-
-    //         unsigned int len_concat;
-    //         if constexpr (distance_type == DDT::DISTANCE::SHOCO) len_concat = shoco_len(tmp_concat_data, n1+n2);
-    //         else if constexpr(distance_type == DDT::DISTANCE::LZ4) len_concat = lz4_len(tmp_concat_data, n1+n2);
-    //         else len_concat = zlib_len(tmp_concat_data, n1+n2);
-
-    //         // delete[] concat_data;
-    //         return static_cast<internal_t>(len_concat - std::min(len_n1, len_n2)) / static_cast<internal_t>(std::max(len_n1, len_n2));
-    //     }
-    // }
-
-     /**
+    /**
      * @brief  Compute a random split for the given data. This algorithm has O(d * log d + d * N) runtime in the worst case, but should usually run in O(d * log d + N), where N is the number of examples and d is the number of features.
      * This implementation ensures that the returned split splits the data so that each child is non-empty if applied to the given data (at-least one example form X is routed towards left and towards right). The only exception occurs if X is empty or contains one example. In this case we return feature 0 with threshold 1. Threshold-values are placed in the middle between two samples. 
      * @note   
@@ -371,7 +321,7 @@ private:
 
 public:
 
-    DistanceDecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_examples, unsigned long seed, internal_t lambda, internal_t step_size) : n_classes(n_classes),max_depth(max_depth),max_examples(max_examples), lambda(lambda),seed(seed),optimizer(step_size) {}
+    DistanceDecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_examples, unsigned long seed, internal_t lambda, internal_t step_size) : n_classes(n_classes),max_depth(max_depth),max_examples(max_examples), lambda(lambda),seed(seed),_optimizer(step_size) {}
 
     unsigned int num_bytes() const {
         unsigned int node_size = 0;
@@ -380,11 +330,52 @@ public:
             node_size += n.num_bytes();
         }
 
-        return sizeof(*this) + node_size + sizeof(internal_t) * _leaves.size() + optimizer.num_bytes() + examples.num_bytes() + distance.num_bytes();
+        return sizeof(*this) + node_size + sizeof(internal_t) * _leaves.size() + _optimizer.num_bytes() + _examples.num_bytes() + distance.num_bytes();
     }
 
     unsigned int num_ref_examples() const {
-        return examples.rows;
+        return _examples.rows;
+    }
+
+    std::vector<internal_t> & leaves() {
+        return _leaves;
+    };
+    
+    std::vector<Node> & nodes() {
+        return _nodes;
+    };
+
+    OPTIMIZER::Optimizer<tree_opt> &optimizer() {
+        return _optimizer;
+    }
+
+    Tree<tree_opt>* clone(unsigned int seed) const {
+        if constexpr(tree_opt == OPTIMIZER::NONE) {
+            return new DistanceDecisionTree<tree_init, distance_type, tree_opt>(n_classes, max_depth, max_examples, seed, lambda, 0);
+        } else {
+            return new DistanceDecisionTree<tree_init, distance_type, tree_opt>(n_classes, max_depth, max_examples, seed, lambda, _optimizer.step_size);
+        }
+    };
+
+    inline unsigned int leaf_index(matrix1d<data_t> const &x) const {
+        unsigned int idx = 0;
+
+        // On small datasets / batchs there might be no node fitted. In this case we only have leaf nodes
+        if (_nodes.size() > 0) {
+            while(true){
+                auto const & n = _nodes[idx];
+                auto const & ref = _examples(n.idx);
+
+                if (distance(ref,x) <= n.threshold) {
+                    idx = _nodes[idx].left;
+                    if (n.left_is_leaf) break;
+                } else {
+                    idx = _nodes[idx].right;
+                    if (n.right_is_leaf) break;
+                }
+            }
+        } 
+        return idx;
     }
 
     void predict_proba(matrix2d<data_t> const &X, matrix2d<data_t> & preds) {
@@ -408,21 +399,37 @@ public:
         return _nodes.size() + int(_leaves.size() / n_classes);
     }
 
-    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) {
-        matrix1d<unsigned int> idx(X.rows);
-        std::iota(idx.begin(), idx.end(), 0);
+    void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::optional<std::reference_wrapper<const matrix1d<unsigned int>>> idx = std::nullopt) {
+        if (idx) {
+            const matrix1d<unsigned int>& idx_ref = *idx;
+            // TODO This seems a bit inefficient since we might have to create a very large but sparse distance matrix
+            auto max_idx = *std::max_element(idx_ref.begin(), idx_ref.end()); 
 
-        distance.reset_and_init(X.cols);
-        matrix2d<internal_t> distance_matrix(idx.dim, idx.dim);
-        for (unsigned int i = 0; i < idx.dim; ++i) {
-            for (unsigned int j = i; j < idx.dim; ++j) {
-                // idx are 1...X.rows, so no indirect access is necessary here
-                distance_matrix(i,j) = distance(X(i), X(j));
-                if (i != j) distance_matrix(j,i) = distance_matrix(i,j);
+            distance.reset_and_init(X.cols);
+            matrix2d<internal_t> distance_matrix(max_idx, max_idx);
+
+            // TODO This seems a bit inefficient since compute the entire N x N distance matrix instead the upper half
+            for (auto i: idx_ref) {
+                for (auto j: idx_ref) {
+                    distance_matrix(i,j) = distance(X(i), X(j));
+                }
             }
-        }
+            this->fit(X,Y,idx_ref,distance_matrix);
+        } else {
+            distance.reset_and_init(X.cols);
+            matrix2d<internal_t> distance_matrix(X.rows, X.rows);
+            matrix1d<unsigned int> idx_ref(X.rows);
 
-        this->fit(X,Y,idx,distance_matrix);
+            for (unsigned int i = 0; i < X.rows; ++i) {
+                idx_ref(i) = i;
+                for (unsigned int j = i; j < X.rows; ++j) {
+                    distance_matrix(i,j) = distance(X(i), X(j));
+                    if (i != j) distance_matrix(j,i) = distance_matrix(i,j);
+                }
+
+            }
+            this->fit(X,Y,idx_ref,distance_matrix);
+        }
     }
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, matrix1d<unsigned int> const & idx, matrix2d<data_t> const &distance_matrix) {
@@ -551,55 +558,63 @@ public:
                 }
             }
 
-            examples = matrix2d<data_t>(example_idx.size(), X.cols);
+            _examples = matrix2d<data_t>(example_idx.size(), X.cols);
             for (unsigned int i = 0; i < example_idx.size(); ++i) {
                 for (unsigned int j = 0; j < X.cols; ++j) {
-                    examples(i,j) = X(example_idx[i],j);
+                    _examples(i,j) = X(example_idx[i],j);
                 }
             }
         }
     }
 
-    void load(matrix1d<internal_t> const &  new_nodes, matrix1d<internal_t> const & new_leafs) {
-        // TODO ADD examples as well
-        _nodes = std::vector<Node>(static_cast<unsigned int>(new_nodes.dim / 6));
+    void load(matrix1d<internal_t> const & nodes) {
+        unsigned int n_nodes = nodes(0);
+        unsigned int n_leaves = nodes(1);
+        unsigned int n_examples = nodes(2);
+        unsigned int dim = nodes(3);
 
-        unsigned int nnodes = 0;
-        for (unsigned int j = 0; j < new_nodes.dim; j += 6) {
-            Node &n = _nodes[nnodes];
+        _nodes = std::vector<Node>(n_nodes);
+
+        unsigned int j = 4;
+        for (unsigned int i = 0; i < n_nodes; ++i, j += 6) {
+            Node &n = _nodes[i];
             // Node n;
-            n.threshold = static_cast<data_t>(new_nodes(j));
-            n.idx = static_cast<unsigned int>(new_nodes(j+1));
-            n.left = static_cast<unsigned int>(new_nodes(j+2));
-            n.right = static_cast<unsigned int>(new_nodes(j+3));
-            n.left_is_leaf = new_nodes(j+4) == 0.0 ? false : true;
-            n.right_is_leaf = new_nodes(j+5) == 0.0 ? false : true;
-            // t_nodes.push_back(n);
-            nnodes++;
+            n.threshold = static_cast<data_t>(nodes(j));
+            n.idx = static_cast<unsigned int>(nodes(j+1));
+            n.left = static_cast<unsigned int>(nodes(j+2));
+            n.right = static_cast<unsigned int>(nodes(j+3));
+            n.left_is_leaf = nodes(j+4) == 0.0 ? false : true;
+            n.right_is_leaf = nodes(j+5) == 0.0 ? false : true;
         }
 
-        _leaves = std::vector<internal_t>(new_leafs.dim);
-        std::copy(new_leafs.begin(), new_leafs.end(), _leaves.begin());
-        // _leaves = std::move(t_leafs);
-        // _leaves = std::move(new_leafs);
+        _leaves = std::vector<internal_t>(n_leaves);
+        std::copy(&nodes.data[j], &nodes.data[j+n_leaves*n_classes], _leaves.begin());
+
+        j = j+n_leaves*n_classes;
+        _examples = matrix2d<data_t>(n_examples, dim);
+        std::copy(&nodes.data[j], &nodes.data[j+n_examples*dim], &_examples.data[0]);
     }
 
-    std::tuple<matrix1d<internal_t>, matrix1d<internal_t>> store() const {
-        matrix1d<internal_t> primitive_nodes(6 * _nodes.size());
-        // TODO ADD examples as well
+    matrix1d<internal_t> store() const {
+        matrix1d<internal_t> nodes(4 + 6 * _nodes.size() + n_classes * _leaves.size() + _examples.cols * _examples.rows);
+        nodes(0) = _nodes.size();
+        nodes(1) = _leaves.size();
+        nodes(2) = _examples.rows;
+        nodes(3) = _examples.cols;
 
-        unsigned int i = 0;
+        unsigned int i = 4;
         for (auto const &n : _nodes) {
-            primitive_nodes(i++) = static_cast<internal_t>(n.threshold);
-            primitive_nodes(i++) = static_cast<internal_t>(n.idx);
-            primitive_nodes(i++) = static_cast<internal_t>(n.left);
-            primitive_nodes(i++) = static_cast<internal_t>(n.right);
-            primitive_nodes(i++) = static_cast<internal_t>(n.left_is_leaf);
-            primitive_nodes(i++) = static_cast<internal_t>(n.right_is_leaf);
+            nodes(i++) = static_cast<internal_t>(n.threshold);
+            nodes(i++) = static_cast<internal_t>(n.idx);
+            nodes(i++) = static_cast<internal_t>(n.left);
+            nodes(i++) = static_cast<internal_t>(n.right);
+            nodes(i++) = static_cast<internal_t>(n.left_is_leaf);
+            nodes(i++) = static_cast<internal_t>(n.right_is_leaf);
         }
-
-        matrix1d<internal_t> t_leafs(_leaves.size());
-        std::copy(_leaves.begin(), _leaves.end(), t_leafs.begin());
-        return std::make_tuple<matrix1d<internal_t>, matrix1d<internal_t>> (std::move(primitive_nodes), std::move(t_leafs));
+        
+        std::copy(_leaves.begin(), _leaves.end(), &nodes.data[i]);
+        i += _leaves.size();
+        std::copy(_examples.begin(), _examples.end(), &nodes.data[i]);
+        return nodes;
     }
 };

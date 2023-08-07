@@ -12,6 +12,7 @@
 
 #include "Datatypes.h"
 #include "Matrix.h"
+#include "Optimizer.h"
 
 class Node {
 public:
@@ -31,12 +32,21 @@ public:
     }
 };
 
+template <OPTIMIZER::OPTIMIZER_TYPE optimizer_type>
 class Tree {
 public:
 
-    virtual void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y) = 0;
+    virtual OPTIMIZER::Optimizer<optimizer_type> &optimizer() = 0;
 
-    virtual void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::vector<unsigned int> const &idx) = 0;
+    virtual std::vector<internal_t> &leaves() = 0;
+    
+    virtual std::vector<Node> &nodes() = 0;
+
+    virtual unsigned int leaf_index(matrix1d<data_t> const &x) const = 0;
+
+    virtual void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::optional<std::reference_wrapper<const matrix1d<unsigned int>>> idx = std::nullopt) = 0;
+
+    // virtual void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, matrix1d<unsigned int> const &idx) = 0;
 
     virtual matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) = 0;
 
@@ -49,4 +59,6 @@ public:
     virtual matrix1d<internal_t> store() const = 0;
 
     virtual ~Tree() { }
+
+    virtual Tree * clone(unsigned int seed) const = 0;
 };

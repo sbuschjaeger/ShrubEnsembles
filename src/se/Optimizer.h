@@ -8,17 +8,17 @@ namespace OPTIMIZER {
 
 enum OPTIMIZER_TYPE {NONE, SGD, ADAM};
 
-enum STEP_SIZE_TYPE {CONSTANT, ADAPTIVE};
+// enum STEP_SIZE_TYPE {CONSTANT, ADAPTIVE};
 
-auto step_type_from_string(std::string const & step_size_type) {
-    if (step_size_type == "CONSTANT" || step_size_type == "constant") {
-        return STEP_SIZE_TYPE::CONSTANT;
-    } else if (step_size_type == "ADAPTIVE" || step_size_type == "adaptive") {
-        return STEP_SIZE_TYPE::ADAPTIVE;
-    } else {
-        throw std::runtime_error("Currently only step_size_type {CONSTANT, ADAPTIVE} are supported, but you provided: " + step_size_type);
-    }
-}
+// auto step_type_from_string(std::string const & step_size_type) {
+//     if (step_size_type == "CONSTANT" || step_size_type == "constant") {
+//         return STEP_SIZE_TYPE::CONSTANT;
+//     } else if (step_size_type == "ADAPTIVE" || step_size_type == "adaptive") {
+//         return STEP_SIZE_TYPE::ADAPTIVE;
+//     } else {
+//         throw std::runtime_error("Currently only step_size_type {CONSTANT, ADAPTIVE} are supported, but you provided: " + step_size_type);
+//     }
+// }
 
 auto optimizer_from_string(std::string const & optimizer) {
     if (optimizer == "SGD" || optimizer == "sgd") {
@@ -32,13 +32,15 @@ auto optimizer_from_string(std::string const & optimizer) {
     }
 }
 
-template<OPTIMIZER_TYPE, STEP_SIZE_TYPE>
+template<OPTIMIZER_TYPE>
 struct Optimizer{
     /* This should never be reached */
 };
 
-template<STEP_SIZE_TYPE step_size_type> 
-struct Optimizer<OPTIMIZER_TYPE::NONE,step_size_type> {
+template<> 
+struct Optimizer<OPTIMIZER_TYPE::NONE> {
+    internal_t const step_size = 0; // TODO Technically this value is not required here, but per convention we assume that every optimizer has a step_size variable
+
     Optimizer(internal_t step_size) {}
 
     void reset() {}
@@ -51,8 +53,8 @@ struct Optimizer<OPTIMIZER_TYPE::NONE,step_size_type> {
     }
 };
 
-template<STEP_SIZE_TYPE step_size_type> 
-struct Optimizer<OPTIMIZER_TYPE::SGD,step_size_type> {
+template<> 
+struct Optimizer<OPTIMIZER_TYPE::SGD> {
     internal_t step_size;
 
     Optimizer(internal_t step_size) : step_size(step_size){}
@@ -61,13 +63,6 @@ struct Optimizer<OPTIMIZER_TYPE::SGD,step_size_type> {
     void reset() {}
 
     void step(matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) {
-        internal_t step_size;
-        if constexpr(step_size_type == STEP_SIZE_TYPE::ADAPTIVE) {
-            step_size = 1.0 / (weight.dim + 1);
-        } else {
-            step_size = this->step_size;
-        }
-
         for (unsigned int i = 0; i < grad.dim; ++i) {
             weight(i) -= step_size * grad(i); 
         }
@@ -78,8 +73,8 @@ struct Optimizer<OPTIMIZER_TYPE::SGD,step_size_type> {
     }
 };
 
-template<STEP_SIZE_TYPE step_size_type> 
-struct Optimizer<OPTIMIZER_TYPE::ADAM,step_size_type> {
+template<> 
+struct Optimizer<OPTIMIZER_TYPE::ADAM> {
     internal_t step_size;
     internal_t beta1;
     internal_t beta2;
@@ -109,14 +104,6 @@ struct Optimizer<OPTIMIZER_TYPE::ADAM,step_size_type> {
     }
 
     void step(matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) {
-        data_t step_size;
-
-        if constexpr(step_size_type == STEP_SIZE_TYPE::ADAPTIVE) {
-            step_size = 1.0 / (weight.dim + 1);
-        } else {
-            step_size = this->step_size;
-        }
-
         // TODO Also check v / weight?
         if (m.size() != grad.dim) {
             // m = matrix1d<internal_t>(grad.dim);
