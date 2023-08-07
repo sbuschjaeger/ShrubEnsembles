@@ -8,35 +8,17 @@
 #include <optional>
 #include <string_view>
 #include <memory>
-#include <stdexcept>
-#include <zlib.h>
-#include <string.h>
-#include <cstring>
 
+#include "Compress.h"
 #include "Optimizer.h"
 #include "Tree.h"
 
 namespace DDT {
     enum TREE_INIT {TRAIN, RANDOM};
-    enum DISTANCE {EUCLIDEAN, ZLIB};
 }
 
-unsigned int compress_len(char const * const data, unsigned int n_bytes, int level = Z_BEST_SPEED) {
-    // Use zlib's compressBound function to calculate the maximum size of the compressed data buffer
-    auto n_bytes_compressed = compressBound(n_bytes);
-    char outbuffer[n_bytes_compressed];
 
-    // Perform the compression
-    int result = compress2((Bytef*)outbuffer, &n_bytes_compressed, (const Bytef*)data, n_bytes, level);
-
-    if (result != Z_OK) {
-        throw(std::runtime_error("Errorung during zlib compression. Error code was " + std::to_string(result)));
-    }
-
-    return n_bytes_compressed;
-}
-
-template <DDT::TREE_INIT tree_init, DDT::DISTANCE distance_type, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
+template <DDT::TREE_INIT tree_init, DISTANCE::TYPES distance_type, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
 class DistanceDecisionTree { //: public Tree {
 
 // template <LOSS::TYPE friend_loss_type, OPTIMIZER::OPTIMIZER_TYPE friend_opt, OPTIMIZER::OPTIMIZER_TYPE friend_tree_opt, DDT::TREE_INIT friend_tree_init>
@@ -52,8 +34,8 @@ private:
     unsigned int lambda;
     unsigned long seed;
 
-    char * tmp_concat_data; // TODO Make the existence conditioned on distance_type
-
+    //char * tmp_concat_data; // TODO Make the existence conditioned on distance_type
+    DISTANCE::Distance<distance_type> distance;
     OPTIMIZER::Optimizer<tree_opt,OPTIMIZER::STEP_SIZE_TYPE::CONSTANT> optimizer;
 
     inline unsigned int leaf_index(matrix1d<data_t> const &x) const {
@@ -77,32 +59,40 @@ private:
         return idx;
     }
 
-    internal_t distance(matrix1d<data_t> const &x1, matrix1d<data_t> const &x2) const {
-        if constexpr (distance_type == DDT::DISTANCE::EUCLIDEAN) {
-            return std::inner_product(x1.begin(), x1.end(), x2.begin(), data_t(0), 
-                std::plus<data_t>(), [](data_t x,data_t y){return (y-x)*(y-x);}
-            );
-        } else {
-            const char * d1 = reinterpret_cast<const char *>(x1.begin());
-            unsigned int n1 = sizeof(data_t)*x1.dim;
-            unsigned int len_n1 = compress_len(d1, n1);
+    // internal_t distance(matrix1d<data_t> const &x1, matrix1d<data_t> const &x2) const {
+    //     if constexpr (distance_type == DDT::DISTANCE::EUCLIDEAN) {
+    //         return std::inner_product(x1.begin(), x1.end(), x2.begin(), data_t(0), 
+    //             std::plus<data_t>(), [](data_t x,data_t y){return (y-x)*(y-x);}
+    //         );
+    //     } else {
+    //         const char * d1 = reinterpret_cast<const char *>(x1.begin());
+    //         unsigned int n1 = sizeof(data_t)*x1.dim;
+    //         unsigned int len_n1;
+    //         if constexpr (distance_type == DDT::DISTANCE::SHOCO) len_n1 = shoco_len(d1, n1);
+    //         else if constexpr(distance_type == DDT::DISTANCE::LZ4) len_n1 = lz4_len(d1, n1);
+    //         else len_n1 = zlib_len(d1, n1);
 
-            const char * d2 = reinterpret_cast<const char *>(x2.begin());
-            unsigned int n2 = sizeof(data_t)*x2.dim;
-            unsigned int len_n2 = compress_len(d2, n2);
+    //         const char * d2 = reinterpret_cast<const char *>(x2.begin());
+    //         unsigned int n2 = sizeof(data_t)*x2.dim;
+    //         unsigned int len_n2;
+    //         if constexpr (distance_type == DDT::DISTANCE::SHOCO) len_n2 = shoco_len(d2, n2);
+    //         else if constexpr(distance_type == DDT::DISTANCE::LZ4) len_n2 = lz4_len(d2, n2);
+    //         else len_n2 = zlib_len(d2, n2);
             
-            // TODO This can be a temporary field in the class which we create once per fit
-            char * concat_data = new char[n1+n2];
+    //         // char * concat_data = new char[n1+n2];
 
-            std::memcpy(concat_data, d1, n1);
-            std::memcpy(concat_data + n1, d2, n2);
+    //         std::memcpy(tmp_concat_data, d1, n1);
+    //         std::memcpy(tmp_concat_data + n1, d2, n2);
 
-            unsigned int len_concat = compress_len(concat_data, n1+n2);
+    //         unsigned int len_concat;
+    //         if constexpr (distance_type == DDT::DISTANCE::SHOCO) len_concat = shoco_len(tmp_concat_data, n1+n2);
+    //         else if constexpr(distance_type == DDT::DISTANCE::LZ4) len_concat = lz4_len(tmp_concat_data, n1+n2);
+    //         else len_concat = zlib_len(tmp_concat_data, n1+n2);
 
-            delete[] concat_data;
-            return static_cast<internal_t>(len_concat - std::min(len_n1, len_n2)) / static_cast<internal_t>(std::max(len_n1, len_n2));
-        }
-    }
+    //         // delete[] concat_data;
+    //         return static_cast<internal_t>(len_concat - std::min(len_n1, len_n2)) / static_cast<internal_t>(std::max(len_n1, len_n2));
+    //     }
+    // }
 
      /**
      * @brief  Compute a random split for the given data. This algorithm has O(d * log d + d * N) runtime in the worst case, but should usually run in O(d * log d + N), where N is the number of examples and d is the number of features.
@@ -390,7 +380,7 @@ public:
             node_size += n.num_bytes();
         }
 
-        return sizeof(*this) + node_size + sizeof(internal_t) * _leafs.size() + optimizer.num_bytes() + examples.num_bytes();
+        return sizeof(*this) + node_size + sizeof(internal_t) * _leafs.size() + optimizer.num_bytes() + examples.num_bytes() + distance.num_bytes();
     }
 
     unsigned int num_ref_examples() const {
@@ -422,6 +412,7 @@ public:
         matrix1d<unsigned int> idx(X.rows);
         std::iota(idx.begin(), idx.end(), 0);
 
+        distance.reset_and_init(X.cols);
         matrix2d<internal_t> distance_matrix(idx.dim, idx.dim);
         for (unsigned int i = 0; i < idx.dim; ++i) {
             for (unsigned int j = i; j < idx.dim; ++j) {
@@ -457,8 +448,6 @@ public:
             TreeExpansion(TreeExpansion &&) = default;
         };
         if (max_examples == 0) max_examples = idx.dim;
-
-        if constexpr(distance_type == DDT::DISTANCE::ZLIB) tmp_concat_data = new char[2*sizeof(data_t)*X.cols];
 
         std::queue<TreeExpansion> to_expand; 
         TreeExpansion root;
@@ -569,8 +558,6 @@ public:
                 }
             }
         }
-
-        if constexpr(distance_type == DDT::DISTANCE::ZLIB) delete[] tmp_concat_data;
     }
 
     void load(matrix1d<internal_t> const &  new_nodes, matrix1d<internal_t> const & new_leafs) {

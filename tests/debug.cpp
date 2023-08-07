@@ -416,52 +416,83 @@ int main() {
 		YMat(i) = Y[i];
 	}
 
-	std::cout << "===   Init Tests    === " << std::endl;
-	std::cout << "Training and testing on " << XMat.rows << " examples with " << XMat.cols << " features" << std::endl;
-	std::cout << "=== Init Tests Done === " << std::endl;
+	// std::cout << "===   Init Tests    === " << std::endl;
+	// std::cout << "Training and testing on " << XMat.rows << " examples with " << XMat.cols << " features" << std::endl;
+	// std::cout << "=== Init Tests Done === " << std::endl;
 
-	DecisionTreeClassifier dt(n_classes,max_depth,max_features,seed,step_size,"train","none");
-	auto start = std::chrono::steady_clock::now();
-	dt.fit(XMat,YMat);
-	auto end = std::chrono::steady_clock::now();
-	std::chrono::duration<double> runtime_seconds = end-start;
+	// DecisionTreeClassifier dt(n_classes,max_depth,max_features,seed,step_size,"train","none");
+	// auto start = std::chrono::steady_clock::now();
+	// dt.fit(XMat,YMat);
+	// auto end = std::chrono::steady_clock::now();
+	// std::chrono::duration<double> runtime_seconds = end-start;
     
-	std::cout << "=== Testing single DT ===" << std::endl;
-	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << dt.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << dt.num_nodes() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(dt.predict_proba(XMat), Y) << std::endl;
-	std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
+	// std::cout << "=== Testing single DT ===" << std::endl;
+	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    // std::cout << "Size is " << dt.num_bytes() << " bytes" << std::endl; 
+    // std::cout << "Number of nodes was " << dt.num_nodes() << std::endl; 
+	// std::cout << "Accuracy is: " << accuracy_score(dt.predict_proba(XMat), Y) << std::endl;
+	// std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
 
 	auto lambda = 0;
-	DistanceDecisionTree<DDT::TRAIN, DDT::DISTANCE::ZLIB, OPTIMIZER::NONE> ddt(n_classes,max_depth,max_examples,seed, lambda, step_size);
+	// DistanceDecisionTree<DDT::TRAIN, DDT::DISTANCE::ZLIB, OPTIMIZER::NONE> ddt(n_classes,max_depth,max_examples,seed, lambda, step_size);
 
-	start = std::chrono::steady_clock::now();
-	ddt.fit(XMat,YMat);
-	end = std::chrono::steady_clock::now();
-	runtime_seconds = end-start;
+	// auto start = std::chrono::steady_clock::now();
+	// ddt.fit(XMat,YMat);
+	// auto end = std::chrono::steady_clock::now();
+	// auto runtime_seconds = end-start;
     
-	std::cout << "=== Testing single DDT with ZLIB ===" << std::endl;
-	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << ddt.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << ddt.num_nodes() << std::endl; 
-    std::cout << "Number of ref examples was " << ddt.num_ref_examples() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(ddt.predict_proba(XMat), Y) << std::endl;
-	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
+	// std::cout << "=== Testing single DDT with ZLIB ===" << std::endl;
+	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    // std::cout << "Size is " << ddt.num_bytes() << " bytes" << std::endl; 
+    // std::cout << "Number of nodes was " << ddt.num_nodes() << std::endl; 
+    // std::cout << "Number of ref examples was " << ddt.num_ref_examples() << std::endl; 
+	// std::cout << "Accuracy is: " << accuracy_score(ddt.predict_proba(XMat), Y) << std::endl;
+	// std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
 
-	DistanceDecisionTree<DDT::TRAIN, DDT::DISTANCE::EUCLIDEAN, OPTIMIZER::NONE> ddt_e(n_classes,max_depth,max_examples,seed, lambda, step_size);
+	// DistanceDecisionTree<DDT::TRAIN, DDT::DISTANCE::EUCLIDEAN, OPTIMIZER::NONE> ddt_e(n_classes,max_depth,max_examples,seed, lambda, step_size);
 
-	start = std::chrono::steady_clock::now();
-	ddt_e.fit(XMat,YMat);
-	end = std::chrono::steady_clock::now();
-	runtime_seconds = end-start;
+	// start = std::chrono::steady_clock::now();
+	// ddt_e.fit(XMat,YMat);
+	// end = std::chrono::steady_clock::now();
+	// runtime_seconds = end-start;
     
-	std::cout << "=== Testing single DDT with EUCLIDEAN ===" << std::endl;
+	// std::cout << "=== Testing single DDT with EUCLIDEAN ===" << std::endl;
+	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    // std::cout << "Size is " << ddt_e.num_bytes() << " bytes" << std::endl; 
+    // std::cout << "Number of nodes was " << ddt_e.num_nodes() << std::endl; 
+    // std::cout << "Number of ref examples was " << ddt_e.num_ref_examples() << std::endl; 
+	// std::cout << "Accuracy is: " << accuracy_score(ddt_e.predict_proba(XMat), Y) << std::endl;
+	// std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
+
+	// DistanceDecisionTree<DDT::TRAIN, DDT::DISTANCE::SHOCO, OPTIMIZER::NONE> ddt_s(n_classes,max_depth,max_examples,seed, lambda, step_size);
+
+	// auto start = std::chrono::steady_clock::now();
+	// ddt_s.fit(XMat,YMat);
+	// auto end = std::chrono::steady_clock::now();
+	// auto runtime_seconds = end-start;
+    
+	// std::cout << "=== Testing single DDT with SHOCO ===" << std::endl;
+	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    // std::cout << "Size is " << ddt_s.num_bytes() << " bytes" << std::endl; 
+    // std::cout << "Number of nodes was " << ddt_s.num_nodes() << std::endl; 
+    // std::cout << "Number of ref examples was " << ddt_s.num_ref_examples() << std::endl; 
+	// std::cout << "Accuracy is: " << accuracy_score(ddt_s.predict_proba(XMat), Y) << std::endl;
+	// std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
+
+	// TODO Test what happens if we reuse a classifier?
+	DistanceDecisionTree<DDT::TRAIN, DISTANCE::TYPES::LZ4, OPTIMIZER::NONE> ddt_z(n_classes,max_depth,max_examples,seed, lambda, step_size);
+
+	auto start = std::chrono::steady_clock::now();
+	ddt_z.fit(XMat,YMat);
+	auto end = std::chrono::steady_clock::now();
+	auto runtime_seconds = end-start;
+    
+	std::cout << "=== Testing single DDT with LZ4 ===" << std::endl;
 	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << ddt_e.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << ddt_e.num_nodes() << std::endl; 
-    std::cout << "Number of ref examples was " << ddt_e.num_ref_examples() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(ddt_e.predict_proba(XMat), Y) << std::endl;
+    std::cout << "Size is " << ddt_z.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << ddt_z.num_nodes() << std::endl; 
+    std::cout << "Number of ref examples was " << ddt_z.num_ref_examples() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(ddt_z.predict_proba(XMat), Y) << std::endl;
 	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
 
 	// auto loss = "mse";

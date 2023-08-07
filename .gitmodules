@@ -2,3 +2,6 @@
 	path = lib/pybind11
 	url = https://github.com/pybind/pybind11.git
 	branch = stable
+[submodule "lib/shoco"]
+	path = lib/shoco
+	url = https://github.com/Ed-von-Schleck/shoco.git
