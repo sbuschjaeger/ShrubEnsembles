@@ -2,6 +2,7 @@
 **/ShrubEnsembles.egg-info/*
 **/ShrubEnsemble.egg-info/*
 .vscode
+.venv
 build
 *.so
 docs/_api
