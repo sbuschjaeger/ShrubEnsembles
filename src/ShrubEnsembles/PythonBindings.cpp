@@ -150,7 +150,7 @@ template <DDT::TREE_INIT tree_init, DISTANCE::TYPES distance_type, OPTIMIZER::OP
 void bindDistanceDecisionTree(py::module& m, const std::string& suffix) {
     using TreeType = DistanceDecisionTree<tree_init, distance_type, tree_opt>;
 
-    py::class_<TreeType>(m, ("DistanceDecisionTree" + suffix).c_str())
+    py::class_<TreeType>(m, ("DistanceDecisionTree" + suffix).c_str(), py::module_local())
         .def(py::init<unsigned int, unsigned int, unsigned int, unsigned long, internal_t, internal_t>(),
              py::arg("n_classes"), py::arg("max_depth"), py::arg("max_features"),
              py::arg("seed"), py::arg("lambda"), py::arg("step_size"))
@@ -162,7 +162,7 @@ void bindDistanceDecisionTree(py::module& m, const std::string& suffix) {
         .def("store", &TreeType::store)
         .def("fit", py::overload_cast<matrix2d<data_t> const&, matrix1d<unsigned int> const&,
                                      std::optional<std::reference_wrapper<const matrix1d<unsigned int>>>>(&TreeType::fit),
-             py::arg("X"), py::arg("Y"), py::arg("indices"))
+             py::arg("X"), py::arg("Y"), py::arg("indices") = py::none())
         .def("fit", py::overload_cast<matrix2d<data_t> const&, matrix1d<unsigned int> const&,
                                      matrix1d<unsigned int> const&, matrix2d<data_t> const&>(&TreeType::fit),
              py::arg("X"), py::arg("Y"), py::arg("indices"), py::arg("distance_matrix"));
@@ -172,7 +172,7 @@ template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
 void bindDecisionTree(py::module& m, const std::string& suffix) {
     using TreeType = DecisionTree<tree_init, tree_opt>;
 
-    py::class_<TreeType>(m, ("DecisionDecisionTree" + suffix).c_str())
+    py::class_<TreeType>(m, ("DecisionTree" + suffix).c_str(), py::module_local())
         .def(py::init<unsigned int, unsigned int, unsigned int, unsigned long, internal_t>(),
              py::arg("n_classes"), py::arg("max_depth"), py::arg("max_features"),
              py::arg("seed"), py::arg("step_size"))
@@ -184,7 +184,7 @@ void bindDecisionTree(py::module& m, const std::string& suffix) {
         .def("store", &TreeType::store)
         .def("fit", py::overload_cast<matrix2d<data_t> const&, matrix1d<unsigned int> const&,
                                      std::optional<std::reference_wrapper<const matrix1d<unsigned int>>>>(&TreeType::fit),
-             py::arg("X"), py::arg("Y"), py::arg("indices"));
+             py::arg("X"), py::arg("Y"), py::arg("indices") = py::none());
 }
 
 // Helper function to compute the size of an array at compile time
@@ -227,7 +227,7 @@ constexpr DT::TREE_INIT dt_tree_init_from_string(const char * tree_init) {
     }
 }
 
-constexpr const char* ddt_tree_inits[] = {"TRAIN", "NONE"};
+constexpr const char* ddt_tree_inits[] = {"TRAIN", "RANDOM"};
 constexpr auto ddt_inits_max = n_elements(ddt_tree_inits);
 constexpr const char* distances[] = {"ZLIB", "EUCLIDEAN", "LZ4", "SHOCO"};
 constexpr auto distances_max = n_elements(distances);
@@ -244,7 +244,7 @@ void bindDistanceDecisionTreeCombinations(py::module& m) {
     }
 }
 
-constexpr const char* dt_tree_inits[] = {"TRAIN", "NONE"};
+constexpr const char* dt_tree_inits[] = {"TRAIN", "RANDOM"};
 constexpr auto dt_inits_max = n_elements(dt_tree_inits);
 
 template <unsigned int i>
@@ -257,7 +257,7 @@ void bindDecisionTreeCombinations(py::module& m) {
     }
 }
 
-PYBIND11_MODULE(CShrubEnsembles, m) {
+PYBIND11_MODULE(ShrubEnsembles, m) {
   bindDistanceDecisionTreeCombinations<0,0>(m);
   bindDecisionTreeCombinations<0>(m);
 // py::class_<OSE>(m, "COSE")

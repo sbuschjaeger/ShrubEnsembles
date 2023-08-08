@@ -11,9 +11,9 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 
-from se.GASE import GASE
-from se.MASE import MASE
-from se.OSE import OSE
+from ShrubEnsembles.GASE import GASE
+from ShrubEnsembles.MASE import MASE
+from ShrubEnsembles.OSE import OSE
 
 import os, psutil
 process = psutil.Process(os.getpid())

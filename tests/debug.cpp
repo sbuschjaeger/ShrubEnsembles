@@ -401,7 +401,7 @@ int main() {
 	// auto Y = random_targets(1 << 14);
 
 	auto n_classes = 2;
-	auto max_depth = 25; 
+	auto max_depth = 5; 
 	auto max_features = 0;
 	auto max_examples = (int)(0.1*X.size());
 	auto seed = 12345L;

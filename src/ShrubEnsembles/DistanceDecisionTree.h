@@ -409,6 +409,7 @@ public:
             matrix2d<internal_t> distance_matrix(max_idx, max_idx);
 
             // TODO This seems a bit inefficient since compute the entire N x N distance matrix instead the upper half
+            #pragma omp parallel for collapse(2)
             for (auto i: idx_ref) {
                 for (auto j: idx_ref) {
                     distance_matrix(i,j) = distance(X(i), X(j));
@@ -420,13 +421,20 @@ public:
             matrix2d<internal_t> distance_matrix(X.rows, X.rows);
             matrix1d<unsigned int> idx_ref(X.rows);
 
+            // omp + collapse(2) does not work if we include idx_ref(i) here (Maybe because its not a canonical loop?)
+            // Hence we split this into two loops 
+            #pragma omp parallel for collapse(2)
             for (unsigned int i = 0; i < X.rows; ++i) {
-                idx_ref(i) = i;
+                // idx_ref(i) = i;
                 for (unsigned int j = i; j < X.rows; ++j) {
                     distance_matrix(i,j) = distance(X(i), X(j));
                     if (i != j) distance_matrix(j,i) = distance_matrix(i,j);
                 }
-
+            }
+            
+            #pragma omp parallel for
+            for (unsigned int i = 0; i < X.rows; ++i) {
+                idx_ref(i) = i;
             }
             this->fit(X,Y,idx_ref,distance_matrix);
         }
@@ -454,6 +462,7 @@ public:
             TreeExpansion() = default;
             TreeExpansion(TreeExpansion &&) = default;
         };
+        // TODO Check if this is correctly set
         if (max_examples == 0) max_examples = idx.dim;
 
         std::queue<TreeExpansion> to_expand; 

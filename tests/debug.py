@@ -9,10 +9,12 @@ from sklearn.model_selection import KFold
 # from sklearn.metrics import make_scorer, accuracy_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
+from ShrubEnsembles.DecisionTree import DecisionTree
+from ShrubEnsembles.DistanceDecisionTree import DistanceDecisionTree
 
-from se.GASE import GASE
-from se.MASE import MASE
-from se.OSE import OSE
+# from ShrubEnsembles.GASE import GASE
+# from ShrubEnsembles.MASE import MASE
+# from ShrubEnsembles.OSE import OSE
 
 '''
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
@@ -322,7 +324,7 @@ is_nominal = [False, True, True, True, True, True, False, False, True, True, Tru
 n_splits = 5
 kf = KFold(n_splits=n_splits)
 models = {}
-for d in [1,2,5]:
+for d in [5]:
     # for T in [32]:
     #     models["CP d = {}, T = {}, leaves not updated".format(d, T)] = [
     #         ShrubEnsemble(
@@ -368,69 +370,73 @@ for d in [1,2,5]:
         # ]
     
 
-    models["OSE d = {}, T = 32".format(d)] = [
-    	OSE(
-            max_depth = d,
-            seed = 12345,
-            normalize_weights = True,
-            burnin_steps = 0,
-            max_features = 0,
-            loss = "mse",
-            step_size = 1e-2,
-            optimizer = "sgd", 
-            tree_init_mode = "train", 
-            regularizer = "none",
-            l_reg = 0,
-            batch_size = 32, 
-            epochs = 5,
-            verbose = True,
-            out_path = None
-        ) for _ in range(n_splits)
-    ]
-
-    models["MASE d = {}, T = 32".format(d)] = [
-    	MASE(
-            max_depth = d,
-            seed = 12345,
-            burnin_steps = 0,
-            max_features = 0,
-            loss = "mse",
-            step_size = 1e-3,
-            optimizer = "sgd", 
-            tree_init_mode = "train", 
-            n_trees = 32, 
-            n_worker = 8,
-            n_rounds = 5,
-            batch_size = 32, 
-            bootstrap = True,
-            verbose = True,
-            out_path = None
-        ) for _ in range(n_splits)
-    ]
-
-    models["GASE d = {}, T = 32".format(d)] = [
-    	GASE(
-            max_depth = d,
-            seed = 12345,
-            max_features = 0,
-            loss = "mse",
-            step_size = 1e-2,
-            optimizer = "sgd", 
-            tree_init_mode = "train", 
-            n_trees = 32, 
-            n_rounds = 5,
-            #init_batch_size = 256, 
-            n_worker = 5,
-            bootstrap = True,
-            verbose = True,
-            out_path = None
-        ) for _ in range(n_splits)
-    ]
-
-    # models["DT d = {}, T = 1".format(d)] = [
-    # 	DecisionTreeClassifier(max_depth = d,random_state=1234) for _ in range(n_splits)
+    # models["OSE d = {}, T = 32".format(d)] = [
+    # 	OSE(
+    #         max_depth = d,
+    #         seed = 12345,
+    #         normalize_weights = True,
+    #         burnin_steps = 0,
+    #         max_features = 0,
+    #         loss = "mse",
+    #         step_size = 1e-2,
+    #         optimizer = "sgd", 
+    #         tree_init_mode = "train", 
+    #         regularizer = "none",
+    #         l_reg = 0,
+    #         batch_size = 32, 
+    #         epochs = 5,
+    #         verbose = True,
+    #         out_path = None
+    #     ) for _ in range(n_splits)
     # ]
-        
+
+    # models["MASE d = {}, T = 32".format(d)] = [
+    # 	MASE(
+    #         max_depth = d,
+    #         seed = 12345,
+    #         burnin_steps = 0,
+    #         max_features = 0,
+    #         loss = "mse",
+    #         step_size = 1e-3,
+    #         optimizer = "sgd", 
+    #         tree_init_mode = "train", 
+    #         n_trees = 32, 
+    #         n_worker = 8,
+    #         n_rounds = 5,
+    #         batch_size = 32, 
+    #         bootstrap = True,
+    #         verbose = True,
+    #         out_path = None
+    #     ) for _ in range(n_splits)
+    # ]
+
+    # models["GASE d = {}, T = 32".format(d)] = [
+    # 	GASE(
+    #         max_depth = d,
+    #         seed = 12345,
+    #         max_features = 0,
+    #         loss = "mse",
+    #         step_size = 1e-2,
+    #         optimizer = "sgd", 
+    #         tree_init_mode = "train", 
+    #         n_trees = 32, 
+    #         n_rounds = 5,
+    #         #init_batch_size = 256, 
+    #         n_worker = 5,
+    #         bootstrap = True,
+    #         verbose = True,
+    #         out_path = None
+    #     ) for _ in range(n_splits)
+    # ]
+
+    models[f"DT d = {d}, T = 1"] = [
+    	DecisionTree(tree_init_mode = "train", max_depth = d, random_state=1234) for _ in range(n_splits)
+    ]
+    
+    models[f"DDT d = {d}, T = 1"] = [
+    	DistanceDecisionTree(distance="euclidean", tree_init_mode = "train", max_depth = d, random_state=1234) for _ in range(n_splits)
+    ]
+
     # models["RF d = {}, T = 6".format(d)] = [
     #     RandomForestClassifier(n_estimators = 6, max_depth = d,max_features=int(np.sqrt(X.shape[1])),random_state=11) for _ in range(n_splits)
     # ]

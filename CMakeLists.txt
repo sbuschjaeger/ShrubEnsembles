@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
-project(CShrubEnsemble LANGUAGES CXX C)
+project(ShrubEnsembles LANGUAGES CXX C)
 
 SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,7 +23,7 @@ find_package(LZ4 REQUIRED)
 
 add_subdirectory(lib/pybind11)
 
-include_directories("src/se" "lib/shoco")
+include_directories("src/ShrubEnsembles" "lib/shoco")
 set_source_files_properties(lib/shoco/shoco.c PROPERTIES LANGUAGE C)
 
 add_executable(debug lib/shoco/shoco.c tests/debug.cpp)
@@ -33,4 +33,5 @@ target_include_directories(debug PUBLIC)
 # add_executable(benchmark tests/benchmark_tree.cpp)
 # target_include_directories(benchmark PUBLIC)
 
-pybind11_add_module(CShrubEnsembles src/se/PythonBindings.cpp lib/shoco/shoco.c)
+pybind11_add_module(ShrubEnsembles src/ShrubEnsembles/PythonBindings.cpp lib/shoco/shoco.c)
+target_link_libraries(ShrubEnsembles PRIVATE ZLIB::ZLIB LZ4::LZ4)

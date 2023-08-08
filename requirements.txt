@@ -1,0 +1,12 @@
+numpy
+pylint
+scikit-learn
+pandas
+setuptools
+matplotlib
+tqdm
+karma-sphinx-theme
+sphinx_rtd_theme
+breathe
+exhale
+-e file:.
