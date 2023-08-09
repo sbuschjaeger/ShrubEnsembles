@@ -399,7 +399,7 @@ public:
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::optional<std::reference_wrapper<const matrix1d<unsigned int>>> idx = std::nullopt) {
         std::vector<bool> feature_is_const(X.cols, false);
 
-        if (idx) {
+        if (idx.has_value()) {
             const matrix1d<unsigned int>& idx_ref = *idx;
             this->fit(X,Y,idx_ref,feature_is_const);
         } else {

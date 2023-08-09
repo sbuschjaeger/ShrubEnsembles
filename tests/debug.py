@@ -449,7 +449,11 @@ for d in [5]:
 test_accuracies = {}
 train_accuracies = {}
 times = {}
-for i, (train_index, test_index) in enumerate(kf.split(X)):
+nodes = {}
+bytes = {}
+tmp = [(list(range(0,len(Y))),list(range(0,len(Y))))]
+#for i, (train_index, test_index) in enumerate(kf.split(X)):
+for i, (train_index, test_index) in enumerate(tmp):
     print("Testing fold {}".format(i))
 
     Xtrain, Xtest = X[train_index], X[test_index]
@@ -466,20 +470,28 @@ for i, (train_index, test_index) in enumerate(kf.split(X)):
             test_accuracies[m] = []
             train_accuracies[m] = []
             times[m] = []
+            nodes[m] = []
+            bytes[m] = []
 
         test_accuracies[m].append( accuracy_score(Ytest, test_proba.argmax(axis=1)) )
         train_accuracies[m].append( accuracy_score(Ytrain, train_proba.argmax(axis=1)) )
         times[m].append(end - start)
+        nodes[m].append(models[m][i].num_nodes())
+        bytes[m].append(models[m][i].num_bytes())
 
 df = {
     "test_accuracy" : {},
     "train_accuracy" : {},
-    "time" : {}
+    "time" : {},
+    "nodes" : {},
+    "bytes" : {}
 }
 for m in test_accuracies.keys():
     df["test_accuracy"][m] = np.mean(test_accuracies[m])
     df["train_accuracy"][m] = np.mean(train_accuracies[m])
     df["time"][m] = np.mean(times[m])
+    df["nodes"][m] = np.mean(nodes[m])
+    df["bytes"][m] = np.mean(bytes[m])
     
 df = pd.DataFrame(df)
 print(df)

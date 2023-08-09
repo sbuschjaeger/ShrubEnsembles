@@ -19,7 +19,7 @@ class DistanceDecisionTree(ClassifierMixin, BaseEstimator):
         random_state = 0, 
         step_size = 0,
         tree_init_mode = "train",
-        lambda_val = 1,
+        lambda_val = 0,
         distance = "lz4"
     ):
 

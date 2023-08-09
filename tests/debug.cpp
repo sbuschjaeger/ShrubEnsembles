@@ -403,7 +403,7 @@ int main() {
 	auto n_classes = 2;
 	auto max_depth = 5; 
 	auto max_features = 0;
-	auto max_examples = (int)(0.1*X.size());
+	auto max_examples = 0; //(int)(0.1*X.size());
 	auto seed = 12345L;
 	auto step_size = 1e-2;
 

@@ -152,7 +152,7 @@ void bindDistanceDecisionTree(py::module& m, const std::string& suffix) {
 
     py::class_<TreeType>(m, ("DistanceDecisionTree" + suffix).c_str(), py::module_local())
         .def(py::init<unsigned int, unsigned int, unsigned int, unsigned long, internal_t, internal_t>(),
-             py::arg("n_classes"), py::arg("max_depth"), py::arg("max_features"),
+             py::arg("n_classes"), py::arg("max_depth"), py::arg("max_examples"),
              py::arg("seed"), py::arg("lambda"), py::arg("step_size"))
         .def("num_bytes", &TreeType::num_bytes)
         .def("num_nodes", &TreeType::num_nodes)
@@ -194,9 +194,9 @@ constexpr std::size_t n_elements(const T(&)[N]) {
 }
 
 constexpr DDT::TREE_INIT ddt_tree_init_from_string(const char * tree_init) {
-    if (strcmp(tree_init, "TRAIN") == 0 || strcmp(tree_init, "train") == 0) {
+    if (strcmp(tree_init, "TRAIN") == 0) {
         return DDT::TREE_INIT::TRAIN;
-    } else if (strcmp(tree_init, "RANDOM") == 0 || strcmp(tree_init, "random") == 0) {
+    } else if (strcmp(tree_init, "RANDOM") == 0) {
         return DDT::TREE_INIT::RANDOM;
     } else {
         return DDT::TREE_INIT::TRAIN;
@@ -204,13 +204,13 @@ constexpr DDT::TREE_INIT ddt_tree_init_from_string(const char * tree_init) {
 }
 
 constexpr DISTANCE::TYPES distance_from_string(const char * distance) {
-    if (strcmp(distance, "EUCLIDEAN") == 0 || strcmp(distance, "euclidean") == 0 ) {
+    if (strcmp(distance, "EUCLIDEAN") == 0) {
         return DISTANCE::TYPES::EUCLIDEAN;
-    } else if (strcmp(distance, "ZLIB") == 0 || strcmp(distance, "zlib") == 0) {
+    } else if (strcmp(distance, "ZLIB") == 0) {
         return DISTANCE::TYPES::ZLIB;
-    } else if (strcmp(distance, "SHOCO") == 0 || strcmp(distance, "shoco") == 0) {
+    } else if (strcmp(distance, "SHOCO") == 0) {
         return DISTANCE::TYPES::SHOCO;
-    } else if (strcmp(distance, "LZ4") == 0 || strcmp(distance, "lz4") == 0) {
+    } else if (strcmp(distance, "LZ4") == 0) {
         return DISTANCE::TYPES::LZ4;
     } else {
         return DISTANCE::TYPES::LZ4;
@@ -218,9 +218,9 @@ constexpr DISTANCE::TYPES distance_from_string(const char * distance) {
 }
 
 constexpr DT::TREE_INIT dt_tree_init_from_string(const char * tree_init) {
-  if (strcmp(tree_init, "TRAIN") == 0 || strcmp(tree_init, "train") == 0) {
+  if (strcmp(tree_init, "TRAIN") == 0) {
         return DT::TREE_INIT::TRAIN;
-    } else if (strcmp(tree_init, "RANDOM") == 0 || strcmp(tree_init, "random") == 0) {
+    } else if (strcmp(tree_init, "RANDOM") == 0) {
         return DT::TREE_INIT::RANDOM;
     } else {
         return DT::TREE_INIT::TRAIN;

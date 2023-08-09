@@ -174,7 +174,7 @@ private:
             // for building the current node. Thus, make sure distances[] contains the appropriate distances for the current ref point (i) wrt. to 
             // all training data idx[j]
 
-            // For larger datasets this is probaly more memory friendly, but it is also quite slow
+            // For larger datasets the code snippet below is probaly more memory friendly, but it is also quite slow
             // std::vector<internal_t> distances(idx.size());
             // for (unsigned int j = 0; j < idx.size(); ++j) {
             //     distances[j] = distance(X(i), X(idx[j]));
@@ -288,7 +288,7 @@ private:
             if (ecnt >= max_examples && split_set) break;
         }
 
-        // std::cout << "Choosing " << overall_best_example << " with score " << overall_best_score << " and threshold " << overall_best_threshold << std::endl;
+        std::cout << "Choosing " << overall_best_example << " with score " << overall_best_score << " and threshold " << overall_best_threshold << std::endl;
 
         if (!split_set) {
             return std::nullopt;
@@ -400,7 +400,7 @@ public:
     }
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::optional<std::reference_wrapper<const matrix1d<unsigned int>>> idx = std::nullopt) {
-        if (idx) {
+        if (idx.has_value()) {
             const matrix1d<unsigned int>& idx_ref = *idx;
             // TODO This seems a bit inefficient since we might have to create a very large but sparse distance matrix
             auto max_idx = *std::max_element(idx_ref.begin(), idx_ref.end()); 
@@ -417,6 +417,7 @@ public:
             }
             this->fit(X,Y,idx_ref,distance_matrix);
         } else {
+            std::cout << "precomputing distancematrix" << std::endl;
             distance.reset_and_init(X.cols);
             matrix2d<internal_t> distance_matrix(X.rows, X.rows);
             matrix1d<unsigned int> idx_ref(X.rows);
@@ -441,6 +442,38 @@ public:
     }
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, matrix1d<unsigned int> const & idx, matrix2d<data_t> const &distance_matrix) {
+        if constexpr(tree_init == DDT::TREE_INIT::TRAIN) {
+            std::cout << "TRAIN" << std::endl;
+        }
+        if constexpr(distance_type == DISTANCE::TYPES::LZ4) {
+            std::cout << "LZ4" << std::endl;
+        }
+        if constexpr(distance_type == DISTANCE::TYPES::SHOCO) {
+            std::cout << "SHOCO" << std::endl;
+        }
+        if constexpr(distance_type == DISTANCE::TYPES::EUCLIDEAN) {
+            std::cout << "EUCLIDEAN" << std::endl;
+        }
+        std::cout << max_depth << std::endl;
+        std::cout << max_examples << std::endl;
+        std::cout << idx.dim << std::endl;
+        std::cout << distance_matrix.cols << std::endl;
+        std::cout << distance_matrix.rows << std::endl;
+
+        for (unsigned int i = 0; i < 5; ++i) {
+            for (unsigned int j = 0; j < 5; ++j) {
+                std::cout << distance_matrix(i,j) << " ";
+            }
+            std::cout << std::endl;
+        }
+
+        for (unsigned int i = 0; i < 5; ++i) {
+            std::cout << idx(i) << std::endl;
+        }
+
+        // if constexpr(distance_type == DISTANCE::TYPES::LZ4) {
+        //     std::cout << "LZ4" << std::endl;
+        // }
         /**
          *  For my future self I tried to make the code somewhat understandable while begin reasonably fast / optimized. 
          *  For training the tree we follow the "regular" top-down approach in which we expand each node by two child nodes. The current set of 
@@ -464,6 +497,7 @@ public:
         };
         // TODO Check if this is correctly set
         if (max_examples == 0) max_examples = idx.dim;
+        std::cout << "ME " << max_examples << std::endl;
 
         std::queue<TreeExpansion> to_expand; 
         TreeExpansion root;
