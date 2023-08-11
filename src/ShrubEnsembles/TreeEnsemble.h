@@ -21,7 +21,10 @@
  * @retval None
  */
 
-template <typename data_t, LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, bool update_trees>
+// TODO ALLOW FOR CUSTOM OPTIMIZER. CUSTOM OPTIMIZER IS AN OBJECT 
+// TODO ALLOW FOR CUSTOM LOSS. CUSTOM LOSS IS AN OBJECT 
+// TODO USE TWO OPTIMIZERS, ONE FOR TREE ONE FOR WEIGHTS (EACH HAVING A CUSTIM IF WE WANT TO)
+template <typename data_t, LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE tree_opt, OPTIMIZER::OPTIMIZER_TYPE weight_opt>
 //template <OPTIMIZER::OPTIMIZER_TYPE tree_opt, DT::TREE_INIT tree_init>
 class TreeEnsemble {
 
@@ -41,7 +44,8 @@ protected:
     // OPTIMIZER::Optimizer<opt> optimizer;
 
     LOSS::Loss<loss_type> loss;
-
+    
+    // TODO: Wrap this inside an std::optional
     std::function< std::vector<internal_t>(std::vector<internal_t> const &, internal_t scale) > ensemble_regularizer;
     internal_t const l_ensemble_reg;
     

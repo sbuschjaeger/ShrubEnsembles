@@ -47,7 +47,7 @@ public:
 
     // virtual void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, matrix1d<unsigned int> const &idx) = 0;
 
-    virtual matrix2d<data_t> predict_proba(matrix2d<data_t> const &X) = 0;
+    virtual matrix2d<internal_t> predict_proba(matrix2d<data_t> const &X) = 0;
 
     virtual unsigned int num_bytes() const = 0;
 

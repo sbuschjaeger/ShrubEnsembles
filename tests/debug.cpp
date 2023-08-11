@@ -396,10 +396,8 @@ int main() {
 	std::cout << "Training and testing on " << XMat.rows << " examples with " << XMat.cols << " features" << std::endl;
 	std::cout << "=== Init Tests Done === " << std::endl;
 
-	// TODO ADD TEST CASES FOR CUSTOM SCORER / DISTANCE
-	// TODO ADD PYTHON BINDINGS
-
 	DecisionTree<double, DT::INIT::GINI> dt(n_classes,max_depth,max_features,seed);
+	
 	auto start = std::chrono::steady_clock::now();
 	dt.fit(XMat,YMat);
 	auto end = std::chrono::steady_clock::now();
@@ -459,6 +457,7 @@ int main() {
 	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
 
 	DistanceDecisionTree<double, DDT::INIT::GINI, DDT::DISTANCE::EUCLIDEAN> ddt_e(n_classes,max_depth,max_examples,seed, lambda);
+
 
 	start = std::chrono::steady_clock::now();
 	ddt_e.fit(XMat,YMat);

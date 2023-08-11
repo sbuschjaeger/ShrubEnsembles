@@ -33,14 +33,11 @@ protected:
     unsigned int max_features;
     unsigned long seed;
 
-    // If we are using GINI / RANADOM, then we do not need any score object. The following code uses a member of type empty if 
-    // we use GINI /RANDOM which costs 1 byte of memory (https://stackoverflow.com/questions/621616/c-what-is-the-size-of-an-object-of-an-empty-class)
-    // We got technically get rid of this one byte if we do some static inheritance with the templates, but that introduces a lot of code duplication. 
-    // Hence, lets suffer one byte lol.
-    // class Empty {};
-    // typename std::conditional<tree_init == DT::INIT::CUSTOM, Empty, std::function< >>::type score;
-
-    // 32 byte overhead, but whateva
+    /**
+     * This is a trade-off between compile-time performance and usability. Basically, I wanted to have as much speed as possible (without too crazy optimizations) while also being able to exchange score/distance functions quickly. Hence, I decided to mix compile-time constants via templates as well as some dynamic data structures. The idea is that whenever a user uses an INIT and/or DISTANCE function that is implemented in C++ and available during compile-time, we try to hard-code its usage during compile-time. The most straightforward way to do this would be to simply use a class as a template parameter (e.g., write DistanceDecisionTree<double, MyGiniScoreClass, MyGZIPClass>). This is nice from a C++ perspective, but it does not allow us to implement score/distance functions in Python. Hence, we use a special flag DDT::INIT::CUSTOM / DDT::DISTANCE::CUSTOM to use a "dynamic" version of this class. Inside the code, we use constexpr to check during compile time if we are using e.g., the gini score or a custom score function. If we are using a custom score (or distance), then the _score /_distance fields are accessed. If, however, we are using e.g., the gini score, then we will never access _score and directly call the appropriate scoring function. In this case, the _score member basically lies dormant in our code. The reason for this approach is that accessing std::function has a small overhead. While this usually does not impact the performance much, it can be noticeable when a function gets called very often. Unfortunately, this is the case for the Gini score (and to some degree for the distance function). In a small series of benchmarks, I found that training DTs on datasets with many features and (comparably) fewer examples, there can be a performance penalty of up to 50%. For CIFAR10 datasets (50K examples, 32*32*3 =3072 features) the performance difference was around 10 % on average. 
+     * The downside of this approach is, that we have ~ 32 Bytes (tested via godbolt) per std::optional<std::function<..>> construct as overhead in every object. Also, the best_split function now depends on the template parameter and hence cannot be static anymore, increasing the code size. 
+     * There might be more room for optimization / making the whole construct nicer, but for regular DTs I also tested a few other methods, including only using std::function and using raw function pointers, which never matched the performance of this approach. In fact, raw function pointers seem to be on par with std::functions here. 
+     */
     std::optional<std::function<internal_t(std::vector<unsigned int> const &, std::vector<unsigned int> const &)>> score;
 
      /**
