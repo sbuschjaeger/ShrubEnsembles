@@ -9,8 +9,8 @@
 #include "TreeRegularizer.h"
 #include "Utils.h"
 
-template <LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, ENSEMBLE_REGULARIZER::TYPE ensemble_reg>
-class OSE : public TreeEnsemble<loss_type, opt, tree_opt> {
+template <typename data_t, LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, ENSEMBLE_REGULARIZER::TYPE ensemble_reg>
+class OSE : public TreeEnsemble<data_t, loss_type, opt, tree_opt> {
     
 protected:
     
@@ -35,7 +35,7 @@ public:
         unsigned int batch_size = 0,
         unsigned int bootstrap = true,
         unsigned int epochs = 0
-    ) : TreeEnsemble<loss_type, opt, tree_opt>(n_classes, max_depth, seed, false, max_features, step_size, ensemble_reg, l_reg, TREE_REGULARIZER::TYPE::NO, 0), burnin_steps(burnin_steps), n_trees(n_trees), batch_size(batch_size), bootstrap(bootstrap), epochs(epochs) { 
+    ) : TreeEnsemble<data_t, loss_type, opt, tree_opt>(n_classes, max_depth, seed, false, max_features, step_size, ensemble_reg, l_reg, TREE_REGULARIZER::TYPE::NO, 0), burnin_steps(burnin_steps), n_trees(n_trees), batch_size(batch_size), bootstrap(bootstrap), epochs(epochs) { 
     }
 
     void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {

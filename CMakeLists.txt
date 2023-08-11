@@ -30,8 +30,8 @@ add_executable(debug lib/shoco/shoco.c tests/debug.cpp)
 target_link_libraries(debug ZLIB::ZLIB LZ4::LZ4)
 target_include_directories(debug PUBLIC)
 
-# add_executable(benchmark tests/benchmark_tree.cpp)
-# target_include_directories(benchmark PUBLIC)
+add_executable(benchmark tests/benchmark_tree.cpp)
+target_include_directories(benchmark PUBLIC)
 
-pybind11_add_module(ShrubEnsembles src/ShrubEnsembles/PythonBindings.cpp lib/shoco/shoco.c)
-target_link_libraries(ShrubEnsembles PRIVATE ZLIB::ZLIB LZ4::LZ4)
+# pybind11_add_module(ShrubEnsembles src/ShrubEnsembles/PythonBindings.cpp lib/shoco/shoco.c)
+# target_link_libraries(ShrubEnsembles PRIVATE ZLIB::ZLIB LZ4::LZ4)

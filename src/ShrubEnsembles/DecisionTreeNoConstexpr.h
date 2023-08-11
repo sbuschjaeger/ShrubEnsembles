@@ -13,15 +13,12 @@
 #include "Tree.h"
 #include "Datatypes.h"
 #include "Matrix.h"
+#include "Optimizer.h"
 #include "Losses.h"
 // #include "DecisionTree.h"
 
-namespace DT {
-    enum INIT {GINI, RANDOM, CUSTOM};
-}
-
-template <typename data_t, DT::INIT tree_init>
-class DecisionTree : public Tree<data_t> {
+template <typename data_t>
+class DecisionTreeNoConstexpr : public Tree<data_t> {
 
 static_assert(std::is_arithmetic<data_t>::value, "The data type data_t must be an arithmetic data type. See std::is_arithmetic for more details.");
 
@@ -33,15 +30,42 @@ protected:
     unsigned int max_features;
     unsigned long seed;
 
-    // If we are using GINI / RANADOM, then we do not need any score object. The following code uses a member of type empty if 
-    // we use GINI /RANDOM which costs 1 byte of memory (https://stackoverflow.com/questions/621616/c-what-is-the-size-of-an-object-of-an-empty-class)
-    // We got technically get rid of this one byte if we do some static inheritance with the templates, but that introduces a lot of code duplication. 
-    // Hence, lets suffer one byte lol.
-    // class Empty {};
-    // typename std::conditional<tree_init == DT::INIT::CUSTOM, Empty, std::function< >>::type score;
+    //OPTIMIZER::Optimizer<tree_opt> _optimizer;
+    
+    //std::optional<std::function< internal_t(std::vector<unsigned int> const &, std::vector<unsigned int> const &)>> score;
+    using ScoreFunctionPointer = internal_t(*)(const std::vector<unsigned int>&, const std::vector<unsigned int>&);
 
-    // 32 byte overhead, but whateva
-    std::optional<std::function<internal_t(std::vector<unsigned int> const &, std::vector<unsigned int> const &)>> score;
+    ScoreFunctionPointer score;
+    //std::function< internal_t(std::vector<unsigned int> const &, std::vector<unsigned int> const &)> score;
+    bool train;
+    //std::function< std::vector<internal_t>(std::vector<internal_t> const &, data_t scale) > ensemble_regularizer;
+
+    /**
+     * @brief  Compute the weighted gini score for the given split. Weighted means here, that we weight the individual gini scores of left and right with the proportion of data in each child node. This leads to slightly more balanced splits.
+     * @note   
+     * @param  &left: Class-counts for the left child
+     * @param  &right: Class-counts for the right child.
+     * @retval The weighted gini score.
+     */
+    static internal_t my_gini(std::vector<unsigned int> const &left, std::vector<unsigned int> const &right) {
+        unsigned int sum_left = std::accumulate(left.begin(), left.end(), 0);
+        unsigned int sum_right = std::accumulate(right.begin(), right.end(), 0);
+
+        internal_t gleft = 0;
+        for (auto const l : left) {
+            gleft += (static_cast<internal_t>(l) / sum_left) * (static_cast<internal_t>(l) / sum_left);
+        }
+        gleft = 1.0 - gleft;
+
+        internal_t gright = 0;
+        for (auto const r : right) {
+            gright += (static_cast<internal_t>(r) / sum_right) * (static_cast<internal_t>(r) / sum_right);
+        }
+        gright = 1.0 - gright;
+
+        return sum_left / static_cast<internal_t>(sum_left + sum_right) * gleft + sum_right /  static_cast<internal_t>(sum_left + sum_right) * gright;
+    }
+
 
      /**
      * @brief  Compute a random split for the given data. This algorithm has O(d * log d + d * N) runtime in the worst case, but should usually run in O(d * log d + N), where N is the number of examples and d is the number of features.
@@ -125,32 +149,6 @@ protected:
     }
 
     /**
-     * @brief  Compute the weighted gini score for the given split. Weighted means here, that we weight the individual gini scores of left and right with the proportion of data in each child node. This leads to slightly more balanced splits.
-     * @note   
-     * @param  &left: Class-counts for the left child
-     * @param  &right: Class-counts for the right child.
-     * @retval The weighted gini score.
-     */
-    static internal_t gini(std::vector<unsigned int> const &left, std::vector<unsigned int> const &right) {
-        unsigned int sum_left = std::accumulate(left.begin(), left.end(), 0);
-        unsigned int sum_right = std::accumulate(right.begin(), right.end(), 0);
-
-        internal_t gleft = 0;
-        for (auto const l : left) {
-            gleft += (static_cast<internal_t>(l) / sum_left) * (static_cast<internal_t>(l) / sum_left);
-        }
-        gleft = 1.0 - gleft;
-
-        internal_t gright = 0;
-        for (auto const r : right) {
-            gright += (static_cast<internal_t>(r) / sum_right) * (static_cast<internal_t>(r) / sum_right);
-        }
-        gright = 1.0 - gright;
-
-        return sum_left / static_cast<internal_t>(sum_left + sum_right) * gleft + sum_right /  static_cast<internal_t>(sum_left + sum_right) * gright;
-    }
-    
-    /**
      * @brief  Compute the best split for the given data. This algorithm has O(d * N log N) runtime, where N is the number of examples and d is the number of features.
      * This implementation ensures that the returned split splits the data so that each child is non-empty if applied to the given data (at-least one example form X is routed towards left and towards right). The only exception occurs if X is empty or contains one example. In this case we return feature 0 with threshold 1. Threshold-values are placed in the middle between two samples. 
      * If two splits are equally good, then the first split is chosen. Note that this introduces a slight bias towards the first features. 
@@ -160,7 +158,7 @@ protected:
      * @param  n_classes: The number of classes
      * @retval The best split as a std::pair<data_t, unsigned int>(best_threshold, best_feature) where the first entry is the threshold and the second entry the feature index.
      */
-    std::optional<std::pair<internal_t, unsigned int>> best_split(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::vector<unsigned int> const &idx, long n_classes, unsigned int max_features, std::mt19937 &gen, std::vector<bool> & feature_is_const) {
+    static std::optional<std::pair<internal_t, unsigned int>> best_split(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, std::vector<unsigned int> const &idx, long n_classes, unsigned int max_features, std::mt19937 &gen, std::vector<bool> & feature_is_const, ScoreFunctionPointer score) {
         // At-least 2 points are required for splitting.
         // Technically this check is unncessary since we stop tree construction once there is only one label in the data which is always the case 
         // if we have 0 or 1 examples. For safea measure we keep this check alive however.
@@ -171,7 +169,7 @@ protected:
         unsigned int n_data = idx.size();
         unsigned int n_features = X.cols;
 
-        internal_t overall_best_score = 0;
+        internal_t overall_best_gini = 0;
         unsigned int overall_best_feature = 0;
         data_t overall_best_threshold = 0;
         bool split_set = false;
@@ -252,12 +250,7 @@ protected:
                 continue;
             }
             // Compute the corresponding gini score 
-            internal_t best_score;
-            if constexpr(tree_init == DT::INIT::GINI) {
-                best_score = gini(left_cnts, right_cnts);
-            } else {
-                best_score = (*score)(left_cnts, right_cnts);
-            }
+            internal_t best_gini = score(left_cnts, right_cnts);
 
             // Repeat what we have done above with the initial scanning, but now update left_cnts / right_cnts appropriately.
             unsigned int j = begin;
@@ -272,16 +265,10 @@ protected:
                 
                 if (j >= n_data) break;
  
-                // internal_t cur_gini = gini(left_cnts, right_cnts);
-                internal_t cur_score;
-                if constexpr(tree_init == DT::INIT::GINI) {
-                    cur_score = gini(left_cnts, right_cnts);
-                } else {
-                    cur_score = (*score)(left_cnts, right_cnts);
-                }
+                internal_t cur_gini = score(left_cnts, right_cnts);
                 data_t threshold = XTmp[lj].xf / 2.0 + XTmp[j].xf / 2.0;
-                if (cur_score < best_score) {
-                    best_score = cur_score;
+                if (cur_gini < best_gini) {
+                    best_gini = cur_gini;
                     best_threshold = threshold;
                     //best_threshold = 0.5 * (f_values[j].first + f_values[j + 1].first);
                 }
@@ -289,8 +276,8 @@ protected:
 
             // Check if we not have already select a split or if this split is better than the other splits we found so far.
             // If so, then set this split
-            if (!split_set || best_score < overall_best_score) {
-                overall_best_score = best_score;
+            if (!split_set || best_gini < overall_best_gini) {
+                overall_best_gini = best_gini;
                 overall_best_feature = i;
                 overall_best_threshold = best_threshold;
                 split_set = true;
@@ -331,13 +318,8 @@ protected:
     }
 
 public:
-    DecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),score(std::nullopt) {
-        static_assert(tree_init == DT::INIT::GINI || tree_init == DT::INIT::RANDOM, "You used DT::INIT::CUSTOM, but did not supply a score function. Please use another constructor and supply the score function.");
-    }
 
-    DecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed, std::function< internal_t(std::vector<unsigned int> const &, std::vector<unsigned int> const &)> score) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),score(score)  {
-        static_assert(tree_init == DT::INIT::CUSTOM, "You used DT::INIT::GINI or DT::INIT::SCORE, but also supplied a score function. Please use another constructor that does not require a score function.");
-    }
+    DecisionTreeNoConstexpr(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed, ScoreFunctionPointer score) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),score(score),train(true) {}
 
     unsigned int num_bytes() const {
         unsigned int node_size = 0;
@@ -376,12 +358,12 @@ public:
         return _nodes;
     };
 
+    // OPTIMIZER::Optimizer<tree_opt> &optimizer() {
+    //     return _optimizer;
+    // }
+
     Tree<data_t>* clone(unsigned int seed) const {
-        if constexpr(tree_init == DT::INIT::CUSTOM) {
-            return new DecisionTree<data_t, tree_init>(n_classes, max_depth, max_features, seed, *score);
-        } else {
-            return new DecisionTree<data_t, tree_init>(n_classes, max_depth, max_features, seed);
-        }
+        return new DecisionTreeNoConstexpr<data_t>(n_classes, max_depth, max_features, seed, score);
     };
 
     void predict_proba(matrix2d<data_t> const &X, matrix2d<internal_t> & preds) {
@@ -497,11 +479,17 @@ public:
             
                 // Compute a suitable split
                 std::optional<std::pair<internal_t, unsigned int>> split;
-                if constexpr (tree_init == DT::INIT::GINI || tree_init == DT::INIT::CUSTOM) {
-                    split = best_split(X, Y, exp.idx, n_classes, max_features, gen, exp.feature_is_const);
+                // if (score.has_value()) {
+                // if (score) {
+                if (train) {
+                    split = best_split(X, Y, exp.idx, n_classes, max_features, gen, exp.feature_is_const, my_gini);
                 } else {
-                    split = random_split(X, Y, exp.idx, gen, exp.feature_is_const);
+                    // score = nullptr
+                    split = random_split(X, Y, exp.idx, gen, exp.feature_is_const); 
                 }
+                // } else {
+                //     split = random_split(X, Y, exp.idx, gen, exp.feature_is_const);
+                // }
 
                 if (split.has_value()) {
                     // A suitable split as been found

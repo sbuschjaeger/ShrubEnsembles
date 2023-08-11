@@ -14,6 +14,7 @@
 #include "Matrix.h"
 #include "Optimizer.h"
 
+template <typename data_t>
 class Node {
 public:
     data_t threshold;
@@ -32,15 +33,13 @@ public:
     }
 };
 
-template <OPTIMIZER::OPTIMIZER_TYPE optimizer_type>
+template <typename data_t>
 class Tree {
 public:
 
-    virtual OPTIMIZER::Optimizer<optimizer_type> &optimizer() = 0;
-
     virtual std::vector<internal_t> &leaves() = 0;
     
-    virtual std::vector<Node> &nodes() = 0;
+    virtual std::vector<Node<data_t>> &nodes() = 0;
 
     virtual unsigned int leaf_index(matrix1d<data_t> const &x) const = 0;
 

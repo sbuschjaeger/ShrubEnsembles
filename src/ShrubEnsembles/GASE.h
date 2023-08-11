@@ -8,8 +8,8 @@
 #include "EnsembleRegularizer.h"
 #include "TreeRegularizer.h"
 
-template <LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
-class GASE : public TreeEnsemble<loss_type, opt, tree_opt> {
+template <typename data_t, LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
+class GASE : public TreeEnsemble<data_t, loss_type, opt, tree_opt> {
     
 private:
     unsigned int const n_rounds;
@@ -33,7 +33,7 @@ public:
         unsigned int init_batch_size = 0,
         unsigned int batch_size = 0,
         bool bootstrap = true
-    ) : TreeEnsemble<loss_type, opt, tree_opt>(n_classes, max_depth, seed, false, max_features, step_size, ENSEMBLE_REGULARIZER::TYPE::NO, 0, TREE_REGULARIZER::TYPE::NO, 0), n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), batch_size(batch_size), bootstrap(bootstrap) { 
+    ) : TreeEnsemble<data_t, loss_type, opt, tree_opt>(n_classes, max_depth, seed, false, max_features, step_size, ENSEMBLE_REGULARIZER::TYPE::NO, 0, TREE_REGULARIZER::TYPE::NO, 0), n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), batch_size(batch_size), bootstrap(bootstrap) { 
         
     }
     

@@ -5,15 +5,14 @@
 #include <chrono>
 #include <functional>
 
-#include "Losses.h"
 #include "DecisionTree.h"
-#include "GASE.h"
-#include "MASE.h"
-#include "OSE.h"
-
 #include "DistanceDecisionTree.h"
+// #include "Losses.h"
+// #include "GASE.h"
+// #include "MASE.h"
+// #include "OSE.h"
 
-void print_progress(unsigned int cur_epoch, unsigned int max_epoch, data_t progress, std::string const & pre_str, unsigned int width = 100, unsigned int precision = 8) {
+void print_progress(unsigned int cur_epoch, unsigned int max_epoch, internal_t progress, std::string const & pre_str, unsigned int width = 100, unsigned int precision = 8) {
     //data_t progress = data_t(cur_idx) / data_t(max_idx);
 
     std::cout << "[" << cur_epoch << "/" << max_epoch << "] " << std::setprecision(precision) << pre_str <<  " " ;
@@ -27,7 +26,7 @@ void print_progress(unsigned int cur_epoch, unsigned int max_epoch, data_t progr
     std::cout << std::flush;
 }
 
-void print_matrix(std::vector<std::vector<data_t>> const &X) {
+void print_matrix(std::vector<std::vector<internal_t>> const &X) {
 	for (auto const & Xi: X) {
 	    for (auto const & Xij : Xi) {
 	        std::cout << Xij << " ";
@@ -36,7 +35,7 @@ void print_matrix(std::vector<std::vector<data_t>> const &X) {
 	}
 }
 
-void print_vector(std::vector<data_t> const &X) {
+void print_vector(std::vector<internal_t> const &X) {
 	for (auto const & Xi: X) {
 		std::cout << Xi << " ";
 	}
@@ -57,24 +56,9 @@ void print_vector(std::vector<data_t> const &X) {
 // 	}
 // }
 
-matrix2d<data_t> random_data(unsigned int N, unsigned int d) {
-	auto gen = std::bind(std::uniform_real_distribution<>(0,1),std::default_random_engine());
-    matrix2d<data_t> tmp(N, d);
-	//std::generate(tmp._data, tmp._data + N*d, gen);
-	std::generate(tmp.begin(), tmp.end(), gen);
 
-    return tmp;
-}
 
-std::vector<unsigned int> random_targets(unsigned int N) {
-	std::vector<unsigned int> Y(N);
-	auto gen = std::bind(std::uniform_int_distribution<>(0,1),std::default_random_engine());
-	std::generate(Y.begin(), Y.end(), gen);
-	return Y;
-}
-
-internal_t accuracy_score(matrix2d<data_t> const &proba, std::vector<unsigned int> const &Y) {
-
+internal_t accuracy_score(matrix2d<internal_t> const &proba, std::vector<unsigned int> const &Y) {
 	internal_t accuracy = 0;
 	for (unsigned int i = 0; i < proba.rows; ++i) {
 		auto max_idx = std::distance(proba(i).begin(), std::max_element(proba(i).begin(), proba(i).end()));
@@ -87,10 +71,6 @@ internal_t accuracy_score(matrix2d<data_t> const &proba, std::vector<unsigned in
 	return accuracy / proba.rows * 100.0;
 }
 
-#ifdef BENCHMARK
-	std::vector<std::vector<data_t>> X = random_data(1 << 14, 32);
-	std::vector<unsigned int> Y = random_targets(1 << 14);
-#else
 /**
 # https://archive.ics.uci.edu/ml/datasets/Statlog+%28Heart%29
 data = [[...]]
@@ -116,7 +96,7 @@ df = df.drop("label", axis=1)
 is_nominal = (df.nunique() == 2).values
 X = df.values
 **/
-std::vector<std::vector<data_t>> X = {
+std::vector<std::vector<double>> X = {
 	{0.8541666666666666, 1.0, 0.0, 0.0, 0.0, 1.0, 0.339622641509434, 0.44748858447488576, 0.0, 0.0, 0.0, 1.0, 0.2900763358778625, 0.0, 0.3870967741935484, 0.5, 1.0, 0.0},
 	{0.7916666666666666, 0.0, 0.0, 0.0, 1.0, 0.0, 0.19811320754716977, 0.9999999999999998, 0.0, 0.0, 0.0, 1.0, 0.6793893129770993, 0.0, 0.25806451612903225, 0.5, 0.0, 1.0},
 	{0.5833333333333334, 1.0, 0.0, 1.0, 0.0, 0.0, 0.28301886792452835, 0.30821917808219174, 0.0, 1.0, 0.0, 0.0, 0.5343511450381678, 0.0, 0.04838709677419355, 0.0, 0.0, 1.0},
@@ -394,14 +374,10 @@ std::vector<unsigned int> Y = {
 };
 
 std::vector<bool> is_nominal = {false, true, true, true, true, true, false, false, true, true, true, true, false, true, false, false, false, false};
-#endif
 
 int main() {
-	// auto X = random_data(1 << 14, 32);
-	// auto Y = random_targets(1 << 14);
-
 	auto n_classes = 2;
-	auto max_depth = 5; 
+	auto max_depth = 25; 
 	auto max_features = 0;
 	auto max_examples = 0; //(int)(0.1*X.size());
 	auto seed = 12345L;
@@ -420,7 +396,10 @@ int main() {
 	std::cout << "Training and testing on " << XMat.rows << " examples with " << XMat.cols << " features" << std::endl;
 	std::cout << "=== Init Tests Done === " << std::endl;
 
-	DecisionTree<DT::TREE_INIT::TRAIN, OPTIMIZER::OPTIMIZER_TYPE::NONE> dt(n_classes,max_depth,max_features,seed,step_size);
+	// TODO ADD TEST CASES FOR CUSTOM SCORER / DISTANCE
+	// TODO ADD PYTHON BINDINGS
+
+	DecisionTree<double, DT::INIT::GINI> dt(n_classes,max_depth,max_features,seed);
 	auto start = std::chrono::steady_clock::now();
 	dt.fit(XMat,YMat);
 	auto end = std::chrono::steady_clock::now();
@@ -433,8 +412,38 @@ int main() {
 	std::cout << "Accuracy is: " << accuracy_score(dt.predict_proba(XMat), Y) << std::endl;
 	std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
 
+	DecisionTree<double, DT::INIT::CUSTOM> dtc(n_classes,max_depth,max_features,seed,[](std::vector<unsigned int> const &left, std::vector<unsigned int> const &right) -> internal_t {
+        unsigned int sum_left = std::accumulate(left.begin(), left.end(), 0);
+        unsigned int sum_right = std::accumulate(right.begin(), right.end(), 0);
+
+        internal_t gleft = 0;
+        for (auto const l : left) {
+            gleft += (static_cast<internal_t>(l) / sum_left) * (static_cast<internal_t>(l) / sum_left);
+        }
+        gleft = 1.0 - gleft;
+
+        internal_t gright = 0;
+        for (auto const r : right) {
+            gright += (static_cast<internal_t>(r) / sum_right) * (static_cast<internal_t>(r) / sum_right);
+        }
+        gright = 1.0 - gright;
+
+        return sum_left / static_cast<internal_t>(sum_left + sum_right) * gleft + sum_right /  static_cast<internal_t>(sum_left + sum_right) * gright;
+	});
+	start = std::chrono::steady_clock::now();
+	dtc.fit(XMat,YMat);
+	end = std::chrono::steady_clock::now();
+	runtime_seconds = end-start;
+    
+	std::cout << "=== Testing single DT with custom score===" << std::endl;
+	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    std::cout << "Size is " << dtc.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << dtc.num_nodes() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(dtc.predict_proba(XMat), Y) << std::endl;
+	std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
+
 	auto lambda = 0;
-	DistanceDecisionTree<DDT::TRAIN, DISTANCE::ZLIB, OPTIMIZER::NONE> ddt(n_classes,max_depth,max_examples,seed, lambda, step_size);
+	DistanceDecisionTree<double, DDT::INIT::GINI, DDT::DISTANCE::ZLIB> ddt(n_classes,max_depth,max_examples,seed, lambda);
 
 	start = std::chrono::steady_clock::now();
 	ddt.fit(XMat,YMat);
@@ -449,7 +458,7 @@ int main() {
 	std::cout << "Accuracy is: " << accuracy_score(ddt.predict_proba(XMat), Y) << std::endl;
 	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
 
-	DistanceDecisionTree<DDT::TRAIN, DISTANCE::EUCLIDEAN, OPTIMIZER::NONE> ddt_e(n_classes,max_depth,max_examples,seed, lambda, step_size);
+	DistanceDecisionTree<double, DDT::INIT::GINI, DDT::DISTANCE::EUCLIDEAN> ddt_e(n_classes,max_depth,max_examples,seed, lambda);
 
 	start = std::chrono::steady_clock::now();
 	ddt_e.fit(XMat,YMat);
@@ -464,36 +473,94 @@ int main() {
 	std::cout << "Accuracy is: " << accuracy_score(ddt_e.predict_proba(XMat), Y) << std::endl;
 	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
 
-	DistanceDecisionTree<DDT::TRAIN, DISTANCE::SHOCO, OPTIMIZER::NONE> ddt_s(n_classes, max_depth, max_examples,seed, lambda, step_size);
+	DistanceDecisionTree<double, DDT::INIT::GINI, DDT::DISTANCE::CUSTOM> ddt_ec(n_classes,max_depth,max_examples,seed, lambda,[](matrix1d<double> const &x1, matrix1d<double> const &x2) -> internal_t {
+		return std::inner_product(x1.begin(), x1.end(), x2.begin(), double(0), 
+			std::plus<double>(), [](double x,double y){return (y-x)*(y-x);}
+		);
+	});
 
 	start = std::chrono::steady_clock::now();
-	ddt_s.fit(XMat,YMat);
+	ddt_ec.fit(XMat,YMat);
 	end = std::chrono::steady_clock::now();
 	runtime_seconds = end-start;
     
-	std::cout << "=== Testing single DDT with SHOCO ===" << std::endl;
+	std::cout << "=== Testing single DDT with CUSTOM EUCLIDEAN ===" << std::endl;
 	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << ddt_s.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << ddt_s.num_nodes() << std::endl; 
-    std::cout << "Number of ref examples was " << ddt_s.num_ref_examples() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(ddt_s.predict_proba(XMat), Y) << std::endl;
+    std::cout << "Size is " << ddt_ec.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << ddt_ec.num_nodes() << std::endl; 
+    std::cout << "Number of ref examples was " << ddt_ec.num_ref_examples() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(ddt_ec.predict_proba(XMat), Y) << std::endl;
 	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
 
-	// TODO Test what happens if we reuse a classifier?
-	DistanceDecisionTree<DDT::TRAIN, DISTANCE::TYPES::LZ4, OPTIMIZER::NONE> ddt_z(n_classes,max_depth,max_examples,seed, lambda, step_size);
+	DistanceDecisionTree<double, DDT::INIT::CUSTOM, DDT::DISTANCE::CUSTOM> ddt_gec(n_classes,max_depth,max_examples,seed, [](internal_t left_m, internal_t left_var, std::vector<unsigned int> const &left_cnts, internal_t right_m, internal_t right_var, std::vector<unsigned int> const &right_cnts) {
+		auto lambda = 0;
+		unsigned int sum_left = std::accumulate(left_cnts.begin(), left_cnts.end(), 0);
+        unsigned int sum_right = std::accumulate(right_cnts.begin(), right_cnts.end(), 0);
+
+        internal_t gleft = 0;
+        for (auto const l : left_cnts) {
+            gleft += (static_cast<internal_t>(l) / sum_left) * (static_cast<internal_t>(l) / sum_left);
+        }
+        gleft = 1.0 - gleft;
+
+        internal_t gright = 0;
+        for (auto const r : right_cnts) {
+            gright += (static_cast<internal_t>(r) / sum_right) * (static_cast<internal_t>(r) / sum_right);
+        }
+        gright = 1.0 - gright;
+
+        internal_t gini =  sum_left / static_cast<internal_t>(sum_left + sum_right) * gleft + sum_right /  static_cast<internal_t>(sum_left + sum_right) * gright;
+        return lambda * (left_var / 2.0 + right_var / 2.0) + (1.0 - lambda) * gini;
+	},
+		[](matrix1d<double> const &x1, matrix1d<double> const &x2) -> internal_t {
+		return std::inner_product(x1.begin(), x1.end(), x2.begin(), double(0), 
+			std::plus<double>(), [](double x,double y){return (y-x)*(y-x);}
+		);
+	});
 
 	start = std::chrono::steady_clock::now();
-	ddt_z.fit(XMat,YMat);
+	ddt_gec.fit(XMat,YMat);
 	end = std::chrono::steady_clock::now();
 	runtime_seconds = end-start;
     
-	std::cout << "=== Testing single DDT with LZ4 ===" << std::endl;
+	std::cout << "=== Testing single DDT with CUSTOM GINI AND CUSTOM EUCLIDEAN ===" << std::endl;
 	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << ddt_z.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << ddt_z.num_nodes() << std::endl; 
-    std::cout << "Number of ref examples was " << ddt_z.num_ref_examples() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(ddt_z.predict_proba(XMat), Y) << std::endl;
+    std::cout << "Size is " << ddt_gec.num_bytes() << " bytes" << std::endl; 
+    std::cout << "Number of nodes was " << ddt_gec.num_nodes() << std::endl; 
+    std::cout << "Number of ref examples was " << ddt_gec.num_ref_examples() << std::endl; 
+	std::cout << "Accuracy is: " << accuracy_score(ddt_gec.predict_proba(XMat), Y) << std::endl;
 	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
+
+	// DistanceDecisionTree<DDT::TRAIN, DISTANCE::SHOCO, OPTIMIZER::NONE> ddt_s(n_classes, max_depth, max_examples,seed, lambda, step_size);
+
+	// start = std::chrono::steady_clock::now();
+	// ddt_s.fit(XMat,YMat);
+	// end = std::chrono::steady_clock::now();
+	// runtime_seconds = end-start;
+    
+	// std::cout << "=== Testing single DDT with SHOCO ===" << std::endl;
+	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    // std::cout << "Size is " << ddt_s.num_bytes() << " bytes" << std::endl; 
+    // std::cout << "Number of nodes was " << ddt_s.num_nodes() << std::endl; 
+    // std::cout << "Number of ref examples was " << ddt_s.num_ref_examples() << std::endl; 
+	// std::cout << "Accuracy is: " << accuracy_score(ddt_s.predict_proba(XMat), Y) << std::endl;
+	// std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
+
+	// // TODO Test what happens if we reuse a classifier?
+	// DistanceDecisionTree<DDT::TRAIN, DISTANCE::TYPES::LZ4, OPTIMIZER::NONE> ddt_z(n_classes,max_depth,max_examples,seed, lambda, step_size);
+
+	// start = std::chrono::steady_clock::now();
+	// ddt_z.fit(XMat,YMat);
+	// end = std::chrono::steady_clock::now();
+	// runtime_seconds = end-start;
+    
+	// std::cout << "=== Testing single DDT with LZ4 ===" << std::endl;
+	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    // std::cout << "Size is " << ddt_z.num_bytes() << " bytes" << std::endl; 
+    // std::cout << "Number of nodes was " << ddt_z.num_nodes() << std::endl; 
+    // std::cout << "Number of ref examples was " << ddt_z.num_ref_examples() << std::endl; 
+	// std::cout << "Accuracy is: " << accuracy_score(ddt_z.predict_proba(XMat), Y) << std::endl;
+	// std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
 
 	// auto loss = "mse";
 	// auto optimizer = "sgd";

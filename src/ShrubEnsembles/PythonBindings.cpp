@@ -168,7 +168,7 @@ void bindDistanceDecisionTree(py::module& m, const std::string& suffix) {
              py::arg("X"), py::arg("Y"), py::arg("indices"), py::arg("distance_matrix"));
 }
 
-template <DT::TREE_INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
+template <DT::INIT tree_init, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
 void bindDecisionTree(py::module& m, const std::string& suffix) {
     using TreeType = DecisionTree<tree_init, tree_opt>;
 
@@ -217,13 +217,13 @@ constexpr DISTANCE::TYPES distance_from_string(const char * distance) {
     }
 }
 
-constexpr DT::TREE_INIT dt_tree_init_from_string(const char * tree_init) {
+constexpr DT::INIT dt_tree_init_from_string(const char * tree_init) {
   if (strcmp(tree_init, "TRAIN") == 0) {
-        return DT::TREE_INIT::TRAIN;
+        return DT::INIT::GINI;
     } else if (strcmp(tree_init, "RANDOM") == 0) {
-        return DT::TREE_INIT::RANDOM;
+        return DT::INIT::RANDOM;
     } else {
-        return DT::TREE_INIT::TRAIN;
+        return DT::INIT::GINI;
     }
 }
 

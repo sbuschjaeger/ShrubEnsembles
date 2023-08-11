@@ -7,6 +7,7 @@
  * @param  s: The scaling factor
  * @retval None, the operation changes X in-place
  */
+template <typename data_t>
 void scale(matrix2d<data_t> &X, data_t s) {
     for (unsigned int j = 0; j < X.rows; ++j) {
         for (unsigned int k = 0; k < X.cols; ++k) {
@@ -21,11 +22,11 @@ void scale(matrix2d<data_t> &X, data_t s) {
  * @param  &X: The matrix
  * @retval The mean of all matrix entries. 
  */
-template<typename T>
-T mean_all_dim(matrix2d<data_t> &X) {
+template <typename data_t>
+data_t mean_all_dim(matrix2d<data_t> &X) {
     unsigned int n_first = X.rows;
     unsigned int n_second = X.cols;
-    T mean = 0;
+    data_t mean = 0;
 
     for (unsigned int j = 0; j < n_first; ++j) {
         for (unsigned int k = 0; k < n_second; ++k) {
@@ -43,6 +44,7 @@ T mean_all_dim(matrix2d<data_t> &X) {
  * @param  &weights: A (N,) vector
  * @retval A (M,K) matrix stored as matrix<data_t>
  */
+template <typename data_t>
 matrix2d<data_t> weighted_sum_first_dim(matrix3d<data_t> const &X, matrix1d<data_t> const &weights) {
     matrix2d<data_t> XMean(X.ny, X.nz); 
     std::fill(XMean.begin(), XMean.end(), 0);

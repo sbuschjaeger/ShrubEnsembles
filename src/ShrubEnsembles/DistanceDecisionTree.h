@@ -9,40 +9,127 @@
 #include <string_view>
 #include <memory>
 
-#include "Compress.h"
+#include <stdexcept>
+#include <string>
+#include <zlib.h>
+#include <string.h>
+#include <cstring>
+#include "lz4.h"
+
+extern "C" {
+#include "shoco.h"
+}
+
+// #include "Compress.h"
 #include "Optimizer.h"
 #include "Tree.h"
 
 namespace DDT {
-    enum TREE_INIT {TRAIN, RANDOM};
+    enum class INIT {GINI, RANDOM, CUSTOM};
 
-    // DDT::TREE_INIT tree_init_from_string(std::string const & tree_init) {
-    //     if (tree_init == "TRAIN" || tree_init == "train") {
-    //         return DDT::TREE_INIT::TRAIN;
-    //     } else if (tree_init == "RANDOM" || tree_init == "random") {
-    //         return DDT::TREE_INIT::RANDOM;
-    //     } else {
-    //         //return DDT::TREE_INIT::TRAIN;
-    //         throw std::runtime_error("Currently supported DDT::TREE_INIT methods are {TRAIN, RANDOM}, but you provided: " + tree_init);
-    //     }
-    // }
+    enum class DISTANCE {EUCLIDEAN, ZLIB, SHOCO, LZ4, CUSTOM};
+
+    unsigned int zlib_len(char const * const data, unsigned int n_bytes, int level = Z_BEST_SPEED) {
+        // Use zlib's compressBound function to calculate the maximum size of the compressed data buffer
+        auto n_bytes_compressed = compressBound(n_bytes);
+        char outbuffer[n_bytes_compressed];
+
+        // Perform the compression
+        int result = compress2((Bytef*)outbuffer, &n_bytes_compressed, (const Bytef*)data, n_bytes, level);
+
+        if (result != Z_OK) {
+            throw(std::runtime_error("Error during zlib compression. Error code was " + std::to_string(result)));
+        }
+
+        return n_bytes_compressed;
+    }
+
+    unsigned int shoco_len(char const * const data, unsigned int n_bytes) {
+        char outbuffer[n_bytes];
+        auto n_bytes_compressed = shoco_compress(data, n_bytes, outbuffer, n_bytes);
+
+        if (n_bytes_compressed > n_bytes) {
+            throw(std::runtime_error("Error during shoco compression. Likely the buffer size was not large enough and the compressed string is larger than the original!"));
+        }
+
+        return n_bytes_compressed;
+    }
+
+    unsigned int lz4_len(char const * const data, unsigned int n_bytes) {
+        char outbuffer[n_bytes];
+        int n_bytes_compressed = LZ4_compress_default(data, outbuffer, n_bytes, n_bytes);
+
+        if (n_bytes_compressed < 1) {
+            throw(std::runtime_error("Error during lz4 compression. Likely the buffer size was not large enough and the compressed string is larger than the original!"));
+        }
+
+        return n_bytes_compressed;
+    }
+
+    template <typename data_t, DDT::DISTANCE distance_type>
+    internal_t distance(matrix1d<data_t> const &x1, matrix1d<data_t> const &x2) {
+        if constexpr (distance_type == DDT::DISTANCE::EUCLIDEAN) {
+            return std::inner_product(x1.begin(), x1.end(), x2.begin(), data_t(0), 
+                std::plus<data_t>(), [](data_t x,data_t y){return (y-x)*(y-x);}
+            );
+        } else {
+            const char * d1 = reinterpret_cast<const char *>(x1.begin());
+            unsigned int n1 = sizeof(data_t)*x1.dim;
+            unsigned int len_n1;
+            if constexpr (distance_type == DDT::DISTANCE::SHOCO) len_n1 = shoco_len(d1, n1);
+            else if constexpr(distance_type == DDT::DISTANCE::LZ4) len_n1 = lz4_len(d1, n1);
+            else len_n1 = zlib_len(d1, n1);
+
+            const char * d2 = reinterpret_cast<const char *>(x2.begin());
+            unsigned int n2 = sizeof(data_t)*x2.dim;
+            unsigned int len_n2;
+            if constexpr (distance_type == DDT::DISTANCE::SHOCO) len_n2 = shoco_len(d2, n2);
+            else if constexpr(distance_type == DDT::DISTANCE::LZ4) len_n2 = lz4_len(d2, n2);
+            else len_n2 = zlib_len(d2, n2);
+            
+            // TODO This is inefficient, because we repeaditly call new / delete. One way would be to only create
+            // a single buffer, but this can become tricky once we compute the distances over multiple threads
+            // as we usually do in DistanceDecisionTree::fit
+            char * concat_data = new char[n1+n2];
+
+            std::memcpy(concat_data, d1, n1);
+            std::memcpy(concat_data + n1, d2, n2);
+
+            unsigned int len_concat;
+            if constexpr (distance_type == DDT::DISTANCE::SHOCO) len_concat = shoco_len(concat_data, n1+n2);
+            else if constexpr(distance_type == DDT::DISTANCE::LZ4) len_concat = lz4_len(concat_data, n1+n2);
+            else len_concat = zlib_len(concat_data, n1+n2);
+
+            delete[] concat_data;
+            return static_cast<internal_t>(len_concat - std::min(len_n1, len_n2)) / static_cast<internal_t>(std::max(len_n1, len_n2));
+        }
+    }
 }
 
-template <DDT::TREE_INIT tree_init, DISTANCE::TYPES distance_type, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
-class DistanceDecisionTree : public Tree<tree_opt> {
+template <typename data_t, DDT::INIT tree_init, DDT::DISTANCE distance_type>
+class DistanceDecisionTree : public Tree<data_t> {
 
 private:
-    std::vector<Node> _nodes;
+    std::vector<Node<data_t>> _nodes;
     matrix2d<data_t> _examples; 
     std::vector<internal_t> _leaves;
     unsigned int n_classes;
     unsigned int max_depth;
     unsigned int max_examples;
-    unsigned int lambda;
+    unsigned int lambda; /* Only used when DDT::INIT::GINI is used*/
     unsigned long seed;
 
-    DISTANCE::Distance<distance_type> distance;
-    OPTIMIZER::Optimizer<tree_opt> _optimizer;
+    // If we are using {EUCLIDEAN, ZLIB, SHOCO, LZ4}, then we do not need any distance object. The following code uses a member of type Empty if 
+    // we use {EUCLIDEAN, ZLIB, SHOCO, LZ4} costs 1 byte of memory (https://stackoverflow.com/questions/621616/c-what-is-the-size-of-an-object-of-an-empty-class)
+    // We got technically get rid of this one byte if we do some static inheritance with the templates, but that introduces a lot of code duplication. 
+    // Hence, lets suffer one byte lol.
+    std::optional<std::function< internal_t(matrix1d<data_t> const &, matrix1d<data_t> const &)>> _distance;
+    std::optional<std::function< internal_t(internal_t, internal_t, std::vector<unsigned int> const &, internal_t, internal_t, std::vector<unsigned int> const &)>> _score;
+
+    // class Empty {};
+    // typename std::conditional<distance_type == DDT::DISTANCE::CUSTOM, Empty, std::function< internal_t(matrix1d<data_t> const &, matrix1d<data_t> const &)>>::type _distance;
+    
+    // typename std::conditional<tree_init == DDT::INIT::CUSTOM, Empty, std::function< internal_t(internal_t, internal_t, std::vector<unsigned int> const &, internal_t, internal_t, std::vector<unsigned int> const &)>>::type _score;
 
     /**
      * @brief  Compute a random split for the given data. This algorithm has O(d * log d + d * N) runtime in the worst case, but should usually run in O(d * log d + N), where N is the number of examples and d is the number of features.
@@ -71,7 +158,11 @@ private:
         for (auto const & cur_idx: ref_example) {
             std::vector<internal_t> distances(idx.size());
             for (unsigned int i = 0; i < idx.size(); ++i) {
-                distances[i] = distance(X(cur_idx), X(idx[i]));
+                if constexpr(distance_type == DDT::DISTANCE::CUSTOM) {
+                    distances[i] = (*_distance)(X(cur_idx), X(idx[i]));
+                } else {
+                    distances[i] = DDT::distance<data_t, distance_type>(X(cur_idx), X(idx[i]));
+                }
             }
 
             std::sort(distances.begin(), distances.end());
@@ -95,7 +186,7 @@ private:
         return std::nullopt;
     }
 
-    static internal_t score(internal_t left_m, internal_t left_var, std::vector<unsigned int> const &left_cnts, internal_t right_m, internal_t right_var, std::vector<unsigned int> const &right_cnts, internal_t lambda) {
+    internal_t gini_score(internal_t left_m, internal_t left_var, std::vector<unsigned int> const &left_cnts, internal_t right_m, internal_t right_var, std::vector<unsigned int> const &right_cnts) {
         return lambda * (left_var / 2.0 + right_var / 2.0) + (1.0 - lambda) * gini(left_cnts, right_cnts);
     }
 
@@ -106,23 +197,23 @@ private:
      * @param  &right: Class-counts for the right child.
      * @retval The weighted gini score.
      */
-    static data_t gini(std::vector<unsigned int> const &left, std::vector<unsigned int> const &right) {
-        unsigned int sum_left = std::accumulate(left.begin(), left.end(), data_t(0));
-        unsigned int sum_right = std::accumulate(right.begin(), right.end(), data_t(0));
+    static internal_t gini(std::vector<unsigned int> const &left, std::vector<unsigned int> const &right) {
+        unsigned int sum_left = std::accumulate(left.begin(), left.end(), internal_t(0));
+        unsigned int sum_right = std::accumulate(right.begin(), right.end(), internal_t(0));
 
-        data_t gleft = 0;
+        internal_t gleft = 0;
         for (auto const l : left) {
-            gleft += (static_cast<data_t>(l) / sum_left) * (static_cast<data_t>(l) / sum_left);
+            gleft += (static_cast<internal_t>(l) / sum_left) * (static_cast<internal_t>(l) / sum_left);
         }
         gleft = 1.0 - gleft;
 
-        data_t gright = 0;
+        internal_t gright = 0;
         for (auto const r : right) {
-            gright += (static_cast<data_t>(r) / sum_right) * (static_cast<data_t>(r) / sum_right);
+            gright += (static_cast<internal_t>(r) / sum_right) * (static_cast<internal_t>(r) / sum_right);
         }
         gright = 1.0 - gright;
 
-        return sum_left / static_cast<data_t>(sum_left + sum_right) * gleft + sum_right /  static_cast<data_t>(sum_left + sum_right) * gright;
+        return sum_left / static_cast<internal_t>(sum_left + sum_right) * gleft + sum_right /  static_cast<internal_t>(sum_left + sum_right) * gright;
     }
     
     /**
@@ -233,8 +324,13 @@ private:
             // Compute the corresponding score 
             internal_t left_var = left_ss == 0 || left_n <= 1 ? 0 : std::sqrt(left_ss / (left_n - 1));
             internal_t right_var = right_ss == 0 || right_n <= 1 ? 0 : std::sqrt(right_ss / (right_n - 1));
-            data_t best_score = score(left_m, left_var, left_cnts, right_m, right_var, right_cnts, lambda);
 
+            data_t best_score;
+            if constexpr(tree_init == DDT::INIT::GINI) {
+                best_score = gini_score(left_m, left_var, left_cnts, right_m, right_var, right_cnts);
+            } else {
+                best_score = (*_score)(left_m, left_var, left_cnts, right_m, right_var, right_cnts);
+            }
             // Repeat what we have done above with the initial scanning, but now update left_cnts / right_cnts etc. appropriately.
             unsigned int j = begin;
 
@@ -265,7 +361,13 @@ private:
                 left_var = left_ss == 0 || left_n <= 1 ? 0 : std::sqrt(left_ss / (left_n - 1));
                 right_var = right_ss == 0 || right_n <= 1 ? 0 : std::sqrt(right_ss / (right_n - 1));
 
-                data_t cur_score = score(left_m, left_var, left_cnts, right_m, right_var, right_cnts, lambda);
+                internal_t cur_score; // = gini_score(left_m, left_var, left_cnts, right_m, right_var, right_cnts);
+                if constexpr(tree_init == DDT::INIT::GINI) {
+                    cur_score = gini_score(left_m, left_var, left_cnts, right_m, right_var, right_cnts);
+                } else {
+                    cur_score = (*_score)(left_m, left_var, left_cnts, right_m, right_var, right_cnts);
+                }
+
                 data_t threshold = distances[lj] / 2.0 + distances[j] / 2.0;
                 if (cur_score < best_score) {
                     best_score = cur_score;
@@ -287,8 +389,6 @@ private:
             ecnt += 1;
             if (ecnt >= max_examples && split_set) break;
         }
-
-        std::cout << "Choosing " << overall_best_example << " with score " << overall_best_score << " and threshold " << overall_best_threshold << std::endl;
 
         if (!split_set) {
             return std::nullopt;
@@ -321,7 +421,21 @@ private:
 
 public:
 
-    DistanceDecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_examples, unsigned long seed, internal_t lambda, internal_t step_size) : n_classes(n_classes),max_depth(max_depth),max_examples(max_examples), lambda(lambda),seed(seed),_optimizer(step_size) {}
+    DistanceDecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_examples, unsigned long seed, internal_t lambda) : n_classes(n_classes),max_depth(max_depth),max_examples(max_examples), lambda(lambda), seed(seed), _distance(std::nullopt), _score(std::nullopt) {
+        static_assert((tree_init != DDT::INIT::CUSTOM && distance_type != DDT::DISTANCE::CUSTOM), "You used DDT::INIT::CUSTOM and DDT::DISTANCE::CUSTOM, but did not supply a score / distance function. Please use another constructor and supply the score and distance function.");
+    }
+
+    DistanceDecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_examples, unsigned long seed, std::function<internal_t(internal_t,internal_t,std::vector<unsigned int>, internal_t,internal_t,std::vector<unsigned int>)> score) : n_classes(n_classes), max_depth(max_depth),max_examples(max_examples), seed(seed), _distance(std::nullopt),  _score(score) {
+        static_assert((tree_init == DDT::INIT::CUSTOM && distance_type != DDT::DISTANCE::CUSTOM), "You supplied a custom score function and no distance type, but you either did not set DDT::INIT::CUSTOM or you set DDT::DISTANCE::CUSTOM without supplied a proper distance function. Please choose the appropriate options and/or call the appropriate constructor for your options");
+    }
+
+    DistanceDecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_examples, unsigned long seed, internal_t lambda, std::function<internal_t(matrix1d<data_t> const &, matrix1d<data_t> const &)> distance) : n_classes(n_classes), max_depth(max_depth),max_examples(max_examples), lambda(lambda), seed(seed), _distance(distance), _score(std::nullopt) {
+        static_assert((tree_init != DDT::INIT::CUSTOM && distance_type == DDT::DISTANCE::CUSTOM), "You supplied a custom distance function and no score type, but you either did not set DDT::DISTANCE::CUSTOM or you set DDT::INIT::CUSTOM without supplied a proper score function. Please choose the appropriate options and/or call the appropriate constructor for your options");
+    }
+
+    DistanceDecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_examples, unsigned long seed, std::function<internal_t(internal_t,internal_t,std::vector<unsigned int>, internal_t,internal_t,std::vector<unsigned int>)> score, std::function<internal_t(matrix1d<data_t> const &, matrix1d<data_t> const &)> distance) : n_classes(n_classes), max_depth(max_depth),max_examples(max_examples), seed(seed), _distance(distance), _score(score) {
+        static_assert((tree_init == DDT::INIT::CUSTOM && distance_type == DDT::DISTANCE::CUSTOM), "You supplied a custom score function and a custom distance function, but did not set DDT::INIT::CUSTOM and  DDT::DISTANCE::CUSTOM. Please choose the appropriate options and/or call the appropriate constructor for your options");
+    }
 
     unsigned int num_bytes() const {
         unsigned int node_size = 0;
@@ -330,7 +444,7 @@ public:
             node_size += n.num_bytes();
         }
 
-        return sizeof(*this) + node_size + sizeof(internal_t) * _leaves.size() + _optimizer.num_bytes() + _examples.num_bytes() + distance.num_bytes();
+        return sizeof(*this) + node_size + sizeof(internal_t) * _leaves.size() + _examples.num_bytes();
     }
 
     unsigned int num_ref_examples() const {
@@ -341,19 +455,19 @@ public:
         return _leaves;
     };
     
-    std::vector<Node> & nodes() {
+    std::vector<Node<data_t>> & nodes() {
         return _nodes;
     };
 
-    OPTIMIZER::Optimizer<tree_opt> &optimizer() {
-        return _optimizer;
-    }
-
-    Tree<tree_opt>* clone(unsigned int seed) const {
-        if constexpr(tree_opt == OPTIMIZER::NONE) {
-            return new DistanceDecisionTree<tree_init, distance_type, tree_opt>(n_classes, max_depth, max_examples, seed, lambda, 0);
+    Tree<data_t>* clone(unsigned int seed) const {
+        if constexpr(tree_init != DDT::INIT::CUSTOM && distance_type != DDT::DISTANCE::CUSTOM) {
+            return new DistanceDecisionTree<data_t, tree_init, distance_type>(n_classes, max_depth, max_examples, seed, lambda);
+        } else if constexpr(tree_init == DDT::INIT::CUSTOM && distance_type != DDT::DISTANCE::CUSTOM) {
+            return new DistanceDecisionTree<data_t, tree_init, distance_type>(n_classes, max_depth, max_examples, seed, (*_score));
+        } else if constexpr(tree_init != DDT::INIT::CUSTOM && distance_type == DDT::DISTANCE::CUSTOM) {
+            return new DistanceDecisionTree<data_t, tree_init, distance_type>(n_classes, max_depth, max_examples, seed, lambda, (*_distance));
         } else {
-            return new DistanceDecisionTree<tree_init, distance_type, tree_opt>(n_classes, max_depth, max_examples, seed, lambda, _optimizer.step_size);
+            return new DistanceDecisionTree<data_t, tree_init, distance_type>(n_classes, max_depth, max_examples, seed, (*_score), (*_distance));
         }
     };
 
@@ -366,7 +480,14 @@ public:
                 auto const & n = _nodes[idx];
                 auto const & ref = _examples(n.idx);
 
-                if (distance(ref,x) <= n.threshold) {
+                internal_t d;
+                if constexpr(distance_type == DDT::DISTANCE::CUSTOM) {
+                    d = (*_distance)(ref,x);
+                } else {
+                    d = DDT::distance<data_t, distance_type>(ref, x);
+                }
+
+                if (d <= n.threshold) {
                     idx = _nodes[idx].left;
                     if (n.left_is_leaf) break;
                 } else {
@@ -405,20 +526,21 @@ public:
             // TODO This seems a bit inefficient since we might have to create a very large but sparse distance matrix
             auto max_idx = *std::max_element(idx_ref.begin(), idx_ref.end()); 
 
-            distance.reset_and_init(X.cols);
             matrix2d<internal_t> distance_matrix(max_idx, max_idx);
 
             // TODO This seems a bit inefficient since compute the entire N x N distance matrix instead the upper half
             #pragma omp parallel for collapse(2)
             for (auto i: idx_ref) {
                 for (auto j: idx_ref) {
-                    distance_matrix(i,j) = distance(X(i), X(j));
+                    if constexpr(distance_type == DDT::DISTANCE::CUSTOM) {
+                        distance_matrix(i,j) = (*_distance)(X(i), X(j));
+                    } else {
+                        distance_matrix(i,j) = DDT::distance<data_t, distance_type>(X(i), X(j));
+                    }
                 }
             }
             this->fit(X,Y,idx_ref,distance_matrix);
         } else {
-            std::cout << "precomputing distancematrix" << std::endl;
-            distance.reset_and_init(X.cols);
             matrix2d<internal_t> distance_matrix(X.rows, X.rows);
             matrix1d<unsigned int> idx_ref(X.rows);
 
@@ -428,7 +550,12 @@ public:
             for (unsigned int i = 0; i < X.rows; ++i) {
                 // idx_ref(i) = i;
                 for (unsigned int j = i; j < X.rows; ++j) {
-                    distance_matrix(i,j) = distance(X(i), X(j));
+                    //distance_matrix(i,j) = distance<distance_type>(X(i), X(j));
+                    if constexpr(distance_type == DDT::DISTANCE::CUSTOM) {
+                        distance_matrix(i,j) = (*_distance)(X(i), X(j));
+                    } else {
+                        distance_matrix(i,j) = DDT::distance<data_t, distance_type>(X(i), X(j));
+                    }
                     if (i != j) distance_matrix(j,i) = distance_matrix(i,j);
                 }
             }
@@ -442,38 +569,6 @@ public:
     }
 
     void fit(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, matrix1d<unsigned int> const & idx, matrix2d<data_t> const &distance_matrix) {
-        if constexpr(tree_init == DDT::TREE_INIT::TRAIN) {
-            std::cout << "TRAIN" << std::endl;
-        }
-        if constexpr(distance_type == DISTANCE::TYPES::LZ4) {
-            std::cout << "LZ4" << std::endl;
-        }
-        if constexpr(distance_type == DISTANCE::TYPES::SHOCO) {
-            std::cout << "SHOCO" << std::endl;
-        }
-        if constexpr(distance_type == DISTANCE::TYPES::EUCLIDEAN) {
-            std::cout << "EUCLIDEAN" << std::endl;
-        }
-        std::cout << max_depth << std::endl;
-        std::cout << max_examples << std::endl;
-        std::cout << idx.dim << std::endl;
-        std::cout << distance_matrix.cols << std::endl;
-        std::cout << distance_matrix.rows << std::endl;
-
-        for (unsigned int i = 0; i < 5; ++i) {
-            for (unsigned int j = 0; j < 5; ++j) {
-                std::cout << distance_matrix(i,j) << " ";
-            }
-            std::cout << std::endl;
-        }
-
-        for (unsigned int i = 0; i < 5; ++i) {
-            std::cout << idx(i) << std::endl;
-        }
-
-        // if constexpr(distance_type == DISTANCE::TYPES::LZ4) {
-        //     std::cout << "LZ4" << std::endl;
-        // }
         /**
          *  For my future self I tried to make the code somewhat understandable while begin reasonably fast / optimized. 
          *  For training the tree we follow the "regular" top-down approach in which we expand each node by two child nodes. The current set of 
@@ -495,9 +590,7 @@ public:
             TreeExpansion() = default;
             TreeExpansion(TreeExpansion &&) = default;
         };
-        // TODO Check if this is correctly set
         if (max_examples == 0) max_examples = idx.dim;
-        std::cout << "ME " << max_examples << std::endl;
 
         std::queue<TreeExpansion> to_expand; 
         TreeExpansion root;
@@ -540,7 +633,7 @@ public:
             
                 // Compute a suitable split
                 std::optional<std::pair<data_t, unsigned int>> split;
-                if constexpr (tree_init == DDT::TREE_INIT::TRAIN) {
+                if constexpr (tree_init == DDT::INIT::GINI || tree_init == DDT::INIT::CUSTOM) {
                     split = best_split(X, Y, exp.idx, distance_matrix, n_classes, max_examples, gen, lambda);
                 } else {
                     split = random_split(X, Y, exp.idx, gen);
@@ -550,7 +643,7 @@ public:
                     // A suitable split as been found
                     // To mitigate costly copy operations of the entire node, we first add it do the vector and then work
                     // on the reference via nodes[cur_idx]
-                    _nodes.push_back(Node());
+                    _nodes.push_back(Node<data_t>());
                     if (exp.parent >= 0) {
                         if (exp.left) {
                             _nodes[exp.parent].left = cur_idx;
@@ -585,7 +678,9 @@ public:
                     for (auto i : exp.idx) {
                         auto const & ref = X(e);
                         auto const & x = X(i);
-                        if (distance(ref,x) <= t) {
+                        auto d = distance_matrix(e, i);
+
+                        if (d <= t) {
                             exp_left.idx.push_back(i);
                         } else {
                             exp_right.idx.push_back(i);
@@ -616,11 +711,11 @@ public:
         unsigned int n_examples = nodes(2);
         unsigned int dim = nodes(3);
 
-        _nodes = std::vector<Node>(n_nodes);
+        _nodes = std::vector<Node<data_t>>(n_nodes);
 
         unsigned int j = 4;
         for (unsigned int i = 0; i < n_nodes; ++i, j += 6) {
-            Node &n = _nodes[i];
+            Node<data_t> &n = _nodes[i];
             // Node n;
             n.threshold = static_cast<data_t>(nodes(j));
             n.idx = static_cast<unsigned int>(nodes(j+1));

@@ -21,29 +21,31 @@
  * @retval None
  */
 
-template <LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt>
+template <typename data_t, LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, bool update_trees>
 //template <OPTIMIZER::OPTIMIZER_TYPE tree_opt, DT::TREE_INIT tree_init>
 class TreeEnsemble {
 
 protected:
     // DecisionTree<tree_init, tree_opt>
-    std::vector<Tree<tree_opt> *> _trees;
+    std::vector<Tree<data_t> *> _trees;
+    std::optional<OPTIMIZER::Optimizer<opt>> optimizer;
+    std::optional<std::vector<OPTIMIZER::Optimizer<opt>>> tree_optimizer;
     std::vector<internal_t> _weights;
-    Tree<tree_opt> * prototype;
+    Tree<data_t> * prototype;
 
     unsigned int const n_classes;
     unsigned long seed;
 
     bool const normalize_weights;
 
-    OPTIMIZER::Optimizer<opt> optimizer;
+    // OPTIMIZER::Optimizer<opt> optimizer;
 
     LOSS::Loss<loss_type> loss;
 
-    std::function< std::vector<internal_t>(std::vector<internal_t> const &, data_t scale) > ensemble_regularizer;
+    std::function< std::vector<internal_t>(std::vector<internal_t> const &, internal_t scale) > ensemble_regularizer;
     internal_t const l_ensemble_reg;
     
-    std::function< internal_t(Tree<tree_opt> const &) > tree_regularizer;
+    std::function< internal_t(Tree<data_t> const &) > tree_regularizer;
     internal_t const l_tree_reg;
 
 public:
@@ -66,7 +68,7 @@ public:
      */
     TreeEnsemble(
         unsigned int n_classes, 
-        Tree<tree_opt> * prototype, 
+        Tree<data_t> * prototype, 
         unsigned long seed = 12345,
         bool normalize_weights = true,
         internal_t step_size = 1e-2,
@@ -81,7 +83,7 @@ public:
         normalize_weights(normalize_weights), 
         ensemble_regularizer(ENSEMBLE_REGULARIZER::from_enum(ensemble_regularizer)), 
         l_ensemble_reg(l_ensemble_reg),
-        tree_regularizer(TREE_REGULARIZER::from_enum<tree_opt>(tree_regularizer)),
+        tree_regularizer(TREE_REGULARIZER::from_enum(tree_regularizer)),
         l_tree_reg(l_tree_reg)
     {
         if (prototype == nullptr) {
