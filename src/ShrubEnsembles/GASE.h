@@ -22,6 +22,47 @@ public:
 
     GASE(
         unsigned int n_classes, 
+        unsigned int max_depth,
+        unsigned int max_features,
+        std::string init = "gini",
+        std::string loss = "mse",
+        std::string optimizer = "adam",
+        internal_t step_size = 0.1,
+        unsigned long seed = 12345,
+        unsigned int n_trees = 32, 
+        unsigned int n_worker = 5,
+        unsigned int n_rounds = 5,
+        unsigned int init_batch_size = 0,
+        unsigned int batch_size = 0,
+        bool bootstrap = true
+    ) : TreeEnsemble<data_t>(n_classes, nullptr, nullptr, seed, false, nullptr , nullptr, std::nullopt, 0, std::nullopt, 0), n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), batch_size(batch_size), bootstrap(bootstrap) {
+        if (init == "gini" || init == "GINI") {
+            this->the_tree = std::make_unique<DecisionTree<data_t, DT::GINI>>(n_classes, max_depth, max_features, seed);
+        } else if (init == "random" || init == "RANDOM") {
+            this->the_tree = std::make_unique<DecisionTree<data_t, DT::RANDOM>>(n_classes, max_depth, max_features, seed);
+        } else {
+            std::runtime_error("Received a parameter that I did not understand. I understand init = {gini, random}, but you gave me " + init);
+        }
+
+        if (loss == "mse" || loss == "MSE") {
+            this->loss = std::make_unique<MSE>();
+        } else if (loss == "CrossEntropy" || loss == "CROSSENTROPY") {
+            this->loss = std::make_unique<CrossEntropy>();
+        } else {
+            std::runtime_error("Received a parameter that I did not understand. I understand loss = {mse, CrossEntropy}, but you gave me " + loss);
+        }
+
+        if (optimizer == "adam" || optimizer == "ADAM") {
+            this->the_tree_optimizer = std::make_unique<Adam>(step_size);
+        } else if (optimizer == "sgd" || optimizer == "SGD") {
+            this->the_tree_optimizer = std::make_unique<SGD>(step_size);
+        } else {
+            std::runtime_error("Received a parameter that I did not understand. I understand optimizer = {adam, sgd}, but you gave me " + optimizer);
+        }
+    }
+
+    GASE(
+        unsigned int n_classes, 
         Tree<data_t> const & tree,
         Loss const & loss,
         Optimizer const & optimizer,

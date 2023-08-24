@@ -7,7 +7,7 @@
 #include "Matrix.h"
 
 // #include "GASE.h"
-// #include "MASE.h"
+#include "MASE.h"
 // #include "OSE.h"
 #include "DecisionTree.h"
 #include "DistanceDecisionTree.h"
@@ -159,7 +159,7 @@ void bindDistanceDecisionTree(py::module& m, const std::string& suffix) {
 			.def("num_nodes", &TreeType::num_nodes)
 			.def("load", &TreeType::load, py::arg("nodes"))
 			.def("predict_proba", py::overload_cast<matrix2d<data_t> const&>(&TreeType::predict_proba),
-				py::arg("nodes"))
+				py::arg("X"))
 			.def("store", &TreeType::store)
 			.def("fit", py::overload_cast<matrix2d<data_t> const&, matrix1d<unsigned int> const&,
 										std::optional<std::reference_wrapper<const matrix1d<unsigned int>>>>(&TreeType::fit),
@@ -173,7 +173,7 @@ void bindDistanceDecisionTree(py::module& m, const std::string& suffix) {
 			.def("num_nodes", &TreeType::num_nodes)
 			.def("load", &TreeType::load, py::arg("nodes"))
 			.def("predict_proba", py::overload_cast<matrix2d<data_t> const&>(&TreeType::predict_proba),
-				py::arg("nodes"))
+				py::arg("X"))
 			.def("store", &TreeType::store)
 			.def("fit", py::overload_cast<matrix2d<data_t> const&, matrix1d<unsigned int> const&,
 										std::optional<std::reference_wrapper<const matrix1d<unsigned int>>>>(&TreeType::fit),
@@ -188,7 +188,7 @@ void bindDistanceDecisionTree(py::module& m, const std::string& suffix) {
 			.def("num_nodes", &TreeType::num_nodes)
 			.def("load", &TreeType::load, py::arg("nodes"))
 			.def("predict_proba", py::overload_cast<matrix2d<data_t> const&>(&TreeType::predict_proba),
-				py::arg("nodes"))
+				py::arg("X"))
 			.def("store", &TreeType::store)
 			.def("fit", py::overload_cast<matrix2d<data_t> const&, matrix1d<unsigned int> const&,
 										std::optional<std::reference_wrapper<const matrix1d<unsigned int>>>>(&TreeType::fit),
@@ -213,7 +213,7 @@ void bindDecisionTree(py::module& m, const std::string& suffix) {
           .def("num_nodes", &TreeType::num_nodes)
           .def("load", &TreeType::load, py::arg("nodes"))
           .def("predict_proba", py::overload_cast<matrix2d<data_t> const&>(&TreeType::predict_proba),
-              py::arg("nodes"))
+              py::arg("X"))
           .def("store", &TreeType::store)
           .def("fit", py::overload_cast<matrix2d<data_t> const&, matrix1d<unsigned int> const&,
                                       std::optional<std::reference_wrapper<const matrix1d<unsigned int>>>>(&TreeType::fit),
@@ -227,7 +227,7 @@ void bindDecisionTree(py::module& m, const std::string& suffix) {
           .def("num_nodes", &TreeType::num_nodes)
           .def("load", &TreeType::load, py::arg("nodes"))
           .def("predict_proba", py::overload_cast<matrix2d<data_t> const&>(&TreeType::predict_proba),
-              py::arg("nodes"))
+              py::arg("X"))
           .def("store", &TreeType::store)
           .def("fit", py::overload_cast<matrix2d<data_t> const&, matrix1d<unsigned int> const&,
                                       std::optional<std::reference_wrapper<const matrix1d<unsigned int>>>>(&TreeType::fit),
@@ -307,6 +307,8 @@ void bindDecisionTreeCombinations(py::module& m) {
 //     }
 // }
 
+using MASE_T = MASE<internal_t>;
+
 PYBIND11_MODULE(ShrubEnsembles, m) {
   // bindDistanceDecisionTreeCombinations<0,0>(m);
   bindDecisionTreeCombinations<0>(m);
@@ -320,20 +322,18 @@ PYBIND11_MODULE(ShrubEnsembles, m) {
 //     .def ("num_trees", &OSE::num_trees
 // );
 
-// py::class_<MASE>(m, "CMASE")
-//     .def(py::init<unsigned int, unsigned int,unsigned long, unsigned int, unsigned int, std::string, internal_t, std::string, std::string, unsigned int, unsigned int, unsigned int, unsigned int, bool, unsigned int>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("burnin_steps"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("n_trees"), py::arg("n_worker"), py::arg("n_rounds"), py::arg("batch_size"), py::arg("bootstrap"), py::arg("init_tree_size"))
-//     .def ("init", &MASE::init, py::arg("X"), py::arg("Y"))
-//     .def ("fit", &MASE::fit, py::arg("X"), py::arg("Y"))
-//     .def ("next", &MASE::next, py::arg("X"), py::arg("Y"))
-//     .def ("predict_proba", &MASE::predict_proba, py::arg("X"))
-//     // .def ("leafs", &PyMase::leafs)
-//     // .def ("nodes", &PyMase::nodes)
-//     .def ("num_nodes", &MASE::num_nodes)
-//     .def ("num_bytes", &MASE::num_bytes)
-//     .def ("load", &MASE::load, py::arg("new_nodes"), py::arg("new_leafs"), py::arg("new_weights"))
-//     .def ("store", &MASE::store)
-//     .def ("num_trees", &MASE::num_trees
-// );
+py::class_<MASE_T>(m, "MASE")
+    .def(py::init<unsigned int, unsigned int, unsigned long, std::string, std::string, std::string, internal_t, unsigned long, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, bool, unsigned int>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("max_featues"), py::arg("init"), py::arg("loss"), py::arg("optimizer"), py::arg("step_size"), py::arg("seed"),  py::arg("burnin_steps"), py::arg("n_trees"), py::arg("n_worker"), py::arg("n_rounds"), py::arg("batch_size"), py::arg("bootstrap"), py::arg("init_tree_size"))
+    .def ("init", &MASE_T::init, py::arg("X"), py::arg("Y"))
+    .def ("fit", py::overload_cast<matrix2d<internal_t> const&, matrix1d<unsigned int> const&>(&MASE_T::fit), py::arg("X"), py::arg("Y"))
+    .def ("next", py::overload_cast<matrix2d<internal_t> const&, matrix1d<unsigned int> const&>(&MASE_T::fit), py::arg("X"), py::arg("Y"))
+    .def ("predict_proba", &MASE_T::predict_proba, py::arg("X"))
+    .def ("num_nodes", &MASE_T::num_nodes)
+    .def ("num_bytes", &MASE_T::num_bytes)
+    .def ("load", &MASE_T::load, py::arg("new_nodes"), py::arg("new_weights"))
+    .def ("store", &MASE_T::store)
+    .def ("num_trees", &MASE_T::num_trees
+);
 
 // py::class_<GASE>(m, "CGASE")
 //     .def(py::init<unsigned int, unsigned int,unsigned long, unsigned int, std::string, internal_t, std::string, std::string, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, bool>(), py::arg("n_classes"), py::arg("max_depth"), py::arg("seed"), py::arg("max_features"), py::arg("loss"), py::arg("step_size"), py::arg("optimizer"),  py::arg("tree_init_mode"), py::arg("n_trees"), py::arg("n_worker"), py::arg("n_rounds"),py::arg("init_batch_size"), py::arg("batch_size"), py::arg("bootstrap"))

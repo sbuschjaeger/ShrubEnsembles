@@ -123,20 +123,6 @@ int main() {
 	std::cout << "Accuracy is: " << accuracy_score(dt.predict_proba(X), Y) << std::endl;
 	std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
 
-	DecisionTreeNoConstexpr<double> dtnc(n_classes,max_depth,max_features,seed, nullptr);
-	start = std::chrono::steady_clock::now();
-	dtnc.fit(X,Y);
-	end = std::chrono::steady_clock::now();
-	runtime_seconds = end-start;
-    
-	std::cout << "=== Testing single DT NO CONSTEXPR ===" << std::endl;
-	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << dtnc.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << dtnc.num_nodes() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(dtnc.predict_proba(X), Y) << std::endl;
-	std::cout << "=== Testing single DT NO CONSTEXPR done ===" << std::endl << std::endl;
-
-
     // //CALLGRIND_START_INSTRUMENTATION;
     // double acc = accuracy_score(dt.predict_proba(X), Y);
     // // CALLGRIND_STOP_INSTRUMENTATION;

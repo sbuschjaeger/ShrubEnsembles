@@ -411,28 +411,25 @@ public:
         }
     }
 
-    void load(std::vector<matrix1d<internal_t>> const & new_nodes, std::vector<matrix1d<internal_t>> const & new_leafs, std::vector<internal_t> const & new_weights) {
+    void load(std::vector<matrix1d<internal_t>> const & new_nodes, std::vector<internal_t> const & new_weights) {
         _trees.clear();
         _weights = std::vector<internal_t>(new_weights);
 
         for (unsigned int i = 0; i < new_weights.size(); ++i) {
-            _trees.push_back(std::make_unique<Tree<data_t>>(the_tree->clone(seed+i)));
+            _trees.push_back(the_tree->clone(seed+i));
             //_trees.push_back(DecisionTree<tree_init, tree_opt>(n_classes, max_depth, max_features, seed+i, step_size));
-            _trees.back().load(new_nodes[i], new_leafs[i]);
+            _trees.back()->load(new_nodes[i]);
         }
     }
 
-    std::tuple<std::vector<matrix1d<internal_t>>, std::vector<matrix1d<internal_t>>, std::vector<internal_t>> store() const {
-        std::vector<matrix1d<internal_t>> all_leafs(_trees.size());
+    std::tuple<std::vector<matrix1d<internal_t>>, std::vector<internal_t>> store() const {
         std::vector<matrix1d<internal_t>> all_nodes(_trees.size());
 
         for (unsigned int i = 0;i < _trees.size(); ++i) {
-            auto tmp = _trees[i]->store();
-            all_nodes[i] = std::move(std::get<0>(tmp));
-            all_leafs[i] = std::move(std::get<1>(tmp));
+            all_nodes[i] = std::move(_trees[i]->store());
         }
 
-        return std::make_tuple<std::vector<matrix1d<internal_t>>, std::vector<matrix1d<internal_t>>, std::vector<internal_t>>(std::move(all_nodes), std::move(all_leafs), std::vector(_weights)); 
+        return std::make_tuple<std::vector<matrix1d<internal_t>>, std::vector<internal_t>>(std::move(all_nodes), std::vector(_weights)); 
     }
 
     unsigned int num_nodes() const {
