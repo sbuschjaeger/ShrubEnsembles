@@ -455,17 +455,33 @@ public:
     std::vector<Node<data_t>> & nodes() {
         return _nodes;
     };
-
-    Tree<data_t>* clone(unsigned int seed) const {
-        if constexpr(tree_init != DDT::INIT::CUSTOM && distance_type != DDT::DISTANCE::CUSTOM) {
-            return new DistanceDecisionTree<data_t, tree_init, distance_type>(n_classes, max_depth, max_examples, seed, lambda);
-        } else if constexpr(tree_init == DDT::INIT::CUSTOM && distance_type != DDT::DISTANCE::CUSTOM) {
-            return new DistanceDecisionTree<data_t, tree_init, distance_type>(n_classes, max_depth, max_examples, seed, (*_score));
-        } else if constexpr(tree_init != DDT::INIT::CUSTOM && distance_type == DDT::DISTANCE::CUSTOM) {
-            return new DistanceDecisionTree<data_t, tree_init, distance_type>(n_classes, max_depth, max_examples, seed, lambda, (*_distance));
+    
+    
+    std::unique_ptr<Tree<data_t>> clone(std::optional<unsigned int> seed = std::nullopt) const {
+        std::unique_ptr<DistanceDecisionTree<data_t, tree_init, distance_type>> the_clone;
+        unsigned int the_seed;
+        if (seed.has_value()) {
+            the_seed = *seed;
         } else {
-            return new DistanceDecisionTree<data_t, tree_init, distance_type>(n_classes, max_depth, max_examples, seed, (*_score), (*_distance));
+            the_seed = this->seed;
         }
+
+        if constexpr(tree_init != DDT::INIT::CUSTOM && distance_type != DDT::DISTANCE::CUSTOM) {
+            the_clone = std::make_unique<DistanceDecisionTree<data_t, tree_init, distance_type>>(n_classes, max_depth, max_examples, the_seed, lambda);
+        } else if constexpr(tree_init == DDT::INIT::CUSTOM && distance_type != DDT::DISTANCE::CUSTOM) {
+            the_clone = std::make_unique<DistanceDecisionTree<data_t, tree_init, distance_type>>(n_classes, max_depth, max_examples, the_seed, (*_score));
+        } else if constexpr(tree_init != DDT::INIT::CUSTOM && distance_type == DDT::DISTANCE::CUSTOM) {
+            the_clone = std::make_unique<DistanceDecisionTree<data_t, tree_init, distance_type>>(n_classes, max_depth, max_examples, the_seed, lambda, (*_distance));
+        } else {
+            the_clone = std::make_unique<DistanceDecisionTree<data_t, tree_init, distance_type>>(n_classes, max_depth, max_examples, the_seed, (*_score), (*_distance));
+        }
+        
+        the_clone->_nodes = _nodes;
+        the_clone->_leaves = _leaves;
+        the_clone->_examples = matrix2d<data_t>(the_clone->_examples.rows, the_clone->_examples.cols);
+        std::copy(_examples.begin(), _examples.end(), the_clone->_examples.begin());
+        // the_clone->_examples = _examples;
+        return the_clone;
     };
 
     inline unsigned int leaf_index(matrix1d<data_t> const &x) const {

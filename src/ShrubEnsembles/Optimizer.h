@@ -1,64 +1,31 @@
 #pragma once
 
-#include <string>
+#include <vector>
+#include <cmath>
 
 #include "Matrix.h"
+#include "Datatypes.h"
 
-namespace OPTIMIZER {
+class Optimizer {
+public:
+    virtual void reset() = 0;
 
-enum OPTIMIZER_TYPE {NONE, SGD, ADAM};
+    virtual void step(matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) = 0;
 
-// enum STEP_SIZE_TYPE {CONSTANT, ADAPTIVE};
+    virtual unsigned int num_bytes() const = 0;
 
-// auto step_type_from_string(std::string const & step_size_type) {
-//     if (step_size_type == "CONSTANT" || step_size_type == "constant") {
-//         return STEP_SIZE_TYPE::CONSTANT;
-//     } else if (step_size_type == "ADAPTIVE" || step_size_type == "adaptive") {
-//         return STEP_SIZE_TYPE::ADAPTIVE;
-//     } else {
-//         throw std::runtime_error("Currently only step_size_type {CONSTANT, ADAPTIVE} are supported, but you provided: " + step_size_type);
-//     }
-// }
+    virtual ~Optimizer() { }
 
-auto optimizer_from_string(std::string const & optimizer) {
-    if (optimizer == "SGD" || optimizer == "sgd") {
-        return OPTIMIZER_TYPE::SGD;
-    } else if (optimizer == "ADAM" || optimizer == "adam") {
-        return OPTIMIZER_TYPE::ADAM;
-    } else if (optimizer == "NONE" || optimizer == "none") {
-        return OPTIMIZER_TYPE::NONE;
-    } else {
-        throw std::runtime_error("Currently only optimizer {ADAM, SGD, NONE} are supported, but you provided: " + optimizer);
-    }
-}
-
-template<OPTIMIZER_TYPE>
-struct Optimizer{
-    /* This should never be reached */
+    virtual std::unique_ptr<Optimizer> clone() const = 0;
 };
 
-template<> 
-struct Optimizer<OPTIMIZER_TYPE::NONE> {
-    internal_t const step_size = 0; // TODO Technically this value is not required here, but per convention we assume that every optimizer has a step_size variable
-
-    Optimizer(internal_t step_size) {}
-
-    void reset() {}
-
-    // void step(std::vector<internal_t> &weight, std::vector<internal_t> const &grad) {}
-    void step(matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) {}
-
-    unsigned int num_bytes() const {
-        return sizeof(*this);
-    }
-};
-
-template<> 
-struct Optimizer<OPTIMIZER_TYPE::SGD> {
+class SGD : public Optimizer {
+public:
     internal_t step_size;
 
-    Optimizer(internal_t step_size) : step_size(step_size){}
-    Optimizer() : step_size(1e-1) {}
+    SGD(internal_t step_size) : step_size(step_size){}
+
+    SGD() : step_size(1e-1) {}
 
     void reset() {}
 
@@ -71,10 +38,16 @@ struct Optimizer<OPTIMIZER_TYPE::SGD> {
     unsigned int num_bytes() const {
         return sizeof(*this);
     }
+
+    ~SGD() {}
+
+    std::unique_ptr<Optimizer> clone() const {
+        return std::make_unique<SGD>(step_size);
+    }
 };
 
-template<> 
-struct Optimizer<OPTIMIZER_TYPE::ADAM> {
+class Adam : public Optimizer {
+public:
     internal_t step_size;
     internal_t beta1;
     internal_t beta2;
@@ -87,11 +60,11 @@ struct Optimizer<OPTIMIZER_TYPE::ADAM> {
     // matrix1d<internal_t> v;
     unsigned int t;
 
-    Optimizer(internal_t step_size, internal_t beta1, internal_t beta2) : step_size(step_size), beta1(beta1), beta2(beta2), t(1) {}
+    Adam(internal_t step_size, internal_t beta1, internal_t beta2) : step_size(step_size), beta1(beta1), beta2(beta2), t(1) {}
 
-    Optimizer(internal_t step_size) : step_size(step_size), beta1(0.9), beta2(0.999), t(1) {}
+    Adam(internal_t step_size) : step_size(step_size), beta1(0.9), beta2(0.999), t(1) {}
 
-    Optimizer() : step_size(1e-1), beta1(0.9), beta2(0.999), t(1) {}
+    Adam() : step_size(1e-1), beta1(0.9), beta2(0.999), t(1) {}
 
     void reset() {
         m.clear();
@@ -126,6 +99,16 @@ struct Optimizer<OPTIMIZER_TYPE::ADAM> {
         }
         t += 1; 
     }
-};
 
-}
+    ~Adam() {}
+
+    std::unique_ptr<Optimizer> clone() const {
+        std::unique_ptr<Adam> a = std::make_unique<Adam>(step_size, beta1, beta2);
+        a->t = this->t;
+        
+        a->m = this->m;
+        a->v = this->v;
+
+        return a;
+    }
+};

@@ -373,12 +373,24 @@ public:
         return _nodes;
     };
 
-    Tree<data_t>* clone(unsigned int seed) const {
-        if constexpr(tree_init == DT::INIT::CUSTOM) {
-            return new DecisionTree<data_t, tree_init>(n_classes, max_depth, max_features, seed, *score);
+    std::unique_ptr<Tree<data_t>> clone(std::optional<unsigned int> seed = std::nullopt) const {
+        std::unique_ptr<DecisionTree<data_t, tree_init>> the_clone;
+        unsigned int the_seed;
+        if (seed.has_value()) {
+            the_seed = *seed;
         } else {
-            return new DecisionTree<data_t, tree_init>(n_classes, max_depth, max_features, seed);
+            the_seed = this->seed;
         }
+
+        if constexpr(tree_init == DT::INIT::CUSTOM) {
+            the_clone = std::make_unique<DecisionTree<data_t, tree_init>>(n_classes, max_depth, max_features, the_seed, *score);
+        } else {
+            the_clone = std::make_unique<DecisionTree<data_t, tree_init>>(n_classes, max_depth, max_features, the_seed);
+        }
+
+        the_clone->_leaves = _leaves;
+        the_clone->_nodes = _nodes;
+        return the_clone;
     };
 
     void predict_proba(matrix2d<data_t> const &X, matrix2d<internal_t> & preds) {

@@ -10,10 +10,105 @@
 #include "Datatypes.h"
 #include "DecisionTree.h"
 #include "Losses.h"
-#include "EnsembleRegularizer.h"
-#include "TreeRegularizer.h"
+
 
 #include "Utils.h"
+
+template <typename data_t>
+internal_t nodes_reg(Tree<data_t> const & tree) {
+    return tree.num_nodes();
+}
+
+std::vector<internal_t> L0_reg(std::vector<internal_t> const &w, internal_t scale) {
+    std::vector<internal_t> tmp_w(w.size());
+    internal_t tmp = std::sqrt(2 * scale);
+    for (unsigned int i = 0; i < w.size(); ++i) {
+        if (std::abs(w[i]) < tmp) {
+            tmp_w[i] = 0;
+        } else {
+            tmp_w[i] = w[i];
+        }
+    }
+
+    return tmp_w;
+}
+
+std::vector<internal_t> L1_reg(std::vector<internal_t> const &w, internal_t scale) {
+    std::vector<internal_t> tmp_w(w.size());
+    for (unsigned int i = 0; i < w.size(); ++i) {
+        internal_t sign = w[i] > 0 ? 1 : -1;
+        tmp_w[i] = sign * std::max(0.0, std::abs(w[i])  - scale);
+    }
+
+    return tmp_w;
+}
+
+std::vector<internal_t> L2_reg(std::vector<internal_t> const &w, internal_t scale) {
+    std::vector<internal_t> tmp_w(w.size());
+    for (unsigned int i = 0; i < w.size(); ++i) {
+        tmp_w[i] = 2*w[i];
+    }
+
+    return tmp_w;
+}
+
+// https://stackoverflow.com/questions/14902876/indices-of-the-k-largest-elements-in-an-unsorted-length-n-array
+std::vector<unsigned int> top_k(std::vector<internal_t> const &a, unsigned int K) {
+    std::vector<unsigned int> top_idx;
+    std::priority_queue< std::pair<internal_t, unsigned int>, std::vector< std::pair<internal_t, unsigned int> >, std::greater <std::pair<internal_t, unsigned int> > > q;
+  
+    for (unsigned int i = 0; i < a.size(); ++i) {
+        if (q.size() < K) {
+            q.push(std::pair<internal_t, unsigned int>(a[i], i));
+        } else if (q.top().first < a[i]) {
+            q.pop();
+            q.push(std::pair<internal_t, unsigned int>(a[i], i));
+        }
+    }
+
+    while (!q.empty()) {
+        top_idx.push_back(q.top().second);
+        q.pop();
+    }
+
+    return top_idx;
+}
+
+std::vector<internal_t> hard_L0_reg(std::vector<internal_t> const &w, internal_t K) {
+    std::vector<unsigned int> top_idx = top_k(w, K);
+    std::vector<internal_t> tmp_w(w.size(), 0);
+
+    for (auto i : top_idx) {
+        tmp_w[i] = w[i];
+    }
+
+    return tmp_w;
+}
+
+std::vector<internal_t> to_prob_simplex(std::vector<internal_t> const &w) {
+    if (w.size() == 0) {
+        return w;
+    }
+
+    std::vector<internal_t> u(w);
+    std::sort(u.begin(), u.end(), std::greater<int>());
+
+    internal_t u_sum = 0; 
+    internal_t l = 0;
+    for (unsigned int i = 0; i < w.size(); ++i) {
+        u_sum += u[i];
+        internal_t tmp = 1.0 / (i + 1.0) * (1.0 - u_sum);
+        if ((u[i] + tmp) > 0) {
+            l = tmp;
+        }
+    }
+
+    for (unsigned int i = 0; i < w.size(); ++i) {
+        u[i] = std::max(w[i] + l, 0.0);
+    }
+
+    return u;
+}
 
 /**
  * @brief  
@@ -21,35 +116,38 @@
  * @retval None
  */
 
-// TODO ALLOW FOR CUSTOM OPTIMIZER. CUSTOM OPTIMIZER IS AN OBJECT 
-// TODO ALLOW FOR CUSTOM LOSS. CUSTOM LOSS IS AN OBJECT 
-// TODO USE TWO OPTIMIZERS, ONE FOR TREE ONE FOR WEIGHTS (EACH HAVING A CUSTIM IF WE WANT TO)
-template <typename data_t, LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE tree_opt, OPTIMIZER::OPTIMIZER_TYPE weight_opt>
+// template <typename data_tt>
+// class MASE;
+
+template <typename data_t>
 //template <OPTIMIZER::OPTIMIZER_TYPE tree_opt, DT::TREE_INIT tree_init>
 class TreeEnsemble {
 
+template <typename data_tt>
+friend class MASE;
+
 protected:
-    // DecisionTree<tree_init, tree_opt>
-    std::vector<Tree<data_t> *> _trees;
-    std::optional<OPTIMIZER::Optimizer<opt>> optimizer;
-    std::optional<std::vector<OPTIMIZER::Optimizer<opt>>> tree_optimizer;
+    std::vector<std::unique_ptr<Tree<data_t>>> _trees;
+    std::unique_ptr<Tree<data_t>> the_tree;
+
+    std::vector<std::unique_ptr<Optimizer>> tree_optimizers;
+    std::unique_ptr<Optimizer> the_tree_optimizer;
+    
+    std::unique_ptr<Optimizer> weight_optimizer;
+
+    std::unique_ptr<Loss> loss;
+
     std::vector<internal_t> _weights;
-    Tree<data_t> * prototype;
 
     unsigned int const n_classes;
     unsigned long seed;
 
     bool const normalize_weights;
 
-    // OPTIMIZER::Optimizer<opt> optimizer;
-
-    LOSS::Loss<loss_type> loss;
-    
-    // TODO: Wrap this inside an std::optional
-    std::function< std::vector<internal_t>(std::vector<internal_t> const &, internal_t scale) > ensemble_regularizer;
+    std::optional<std::function< std::vector<internal_t>(std::vector<internal_t> const &, internal_t scale)>> ensemble_regularizer;
     internal_t const l_ensemble_reg;
     
-    std::function< internal_t(Tree<data_t> const &) > tree_regularizer;
+    std::optional<std::function< internal_t(Tree<data_t> const &)>> tree_regularizer;
     internal_t const l_tree_reg;
 
 public:
@@ -70,37 +168,37 @@ public:
      * @param  l_tree_reg: The regularization strength for the tree_regularizer. Defaults to 0.
      * @retval A new ShrubEnsembles object
      */
+
+    // TODO Add constructor that receives objects instead of pointers
     TreeEnsemble(
         unsigned int n_classes, 
-        Tree<data_t> * prototype, 
+        std::unique_ptr<Tree<data_t>> tree,
+        std::unique_ptr<Loss> loss,
         unsigned long seed = 12345,
         bool normalize_weights = true,
-        internal_t step_size = 1e-2,
-        ENSEMBLE_REGULARIZER::TYPE ensemble_regularizer = ENSEMBLE_REGULARIZER::TYPE::NO,
-        internal_t l_ensemble_reg = 0.0,
-        TREE_REGULARIZER::TYPE tree_regularizer = TREE_REGULARIZER::TYPE::NO,
-        internal_t l_tree_reg = 0.0
+        std::unique_ptr<Optimizer> tree_optimizer = nullptr,
+        std::unique_ptr<Optimizer> weight_optimizer = nullptr,
+        std::optional<std::function< std::vector<internal_t>(std::vector<internal_t> const &, internal_t scale)>> ensemble_regulizer = std::nullopt,
+        internal_t l_ensemble_reg = 0,
+        std::optional<std::function< internal_t(Tree<data_t> const &)>> tree_regularizer = std::nullopt,
+        internal_t l_tree_reg = 0
     ) : 
         n_classes(n_classes), 
-        prototype(prototype),
+        the_tree(std::move(tree)),
+        loss(std::move(loss)),
         seed(seed), 
         normalize_weights(normalize_weights), 
-        ensemble_regularizer(ENSEMBLE_REGULARIZER::from_enum(ensemble_regularizer)), 
+        the_tree_optimizer(std::move(tree_optimizer)),
+        weight_optimizer(std::move(weight_optimizer)),
+        ensemble_regularizer(ensemble_regulizer), 
         l_ensemble_reg(l_ensemble_reg),
-        tree_regularizer(TREE_REGULARIZER::from_enum(tree_regularizer)),
+        tree_regularizer(tree_regularizer),
         l_tree_reg(l_tree_reg)
     {
-        if (prototype == nullptr) {
-            throw std::runtime_error("Received a prototype that was a nullptr and hence cannot clone any objects!");
-        }
+        //if (!tree) throw std::runtime_error("Received a tree that was a nullptr and hence I cannot create new trees for training!");
     }
 
-    ~TreeEnsemble() {
-        for (unsigned int i = 0; i < _trees.size(); ++i) {
-            delete _trees[i];
-        }
-        delete prototype;
-    }
+    ~TreeEnsemble() {}
 
     /**
      * @brief  Remove all trees including their weight which have a 0 weight. 
@@ -126,18 +224,19 @@ public:
         if (before != _weights.size()) {
             // Make sure to reset the optimizer (e.g. the m/v estimates in ADAM) if a weight has been removed
             // because they are now obsolet
-            optimizer.reset();
+            weight_optimizer->reset();
         }
     }
 
-    void init(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_trees, bool boostrap, unsigned int batch_size) {
+    void init_trees(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_trees, bool boostrap, unsigned int batch_size) {
         
         // Create the tree objects and initialize their weight. 
         // We do this in a single thread so that we can perform the training without any
         // synchroization
         for (unsigned int i = 0; i < n_trees; ++i) {
-            _trees.push_back(prototype->clone(seed));
+            _trees.push_back(the_tree->clone(seed));
             _weights.push_back(1.0 / n_trees);    
+            if (the_tree_optimizer && loss) tree_optimizers.push_back(the_tree_optimizer->clone());
         }
         // Make sure to advance the random seed "properly"
         seed += n_trees;
@@ -146,7 +245,7 @@ public:
         #pragma omp parallel for
         for (unsigned int i = 0; i < n_trees; ++i){
             auto idx = sample_indices(X.rows, batch_size, boostrap, seed + i);
-            // TODO CALL DIFFERENT FIT METHOD HERE
+            // TODO somehow precompute the distance matrix if we are using distance trees?
             _trees[i]->fit(X,Y,idx);
 
         }
@@ -161,7 +260,7 @@ public:
         // leaf nodes
 
         unsigned int n_batch_size = X.rows;
-        if (batch_size.has_value() && batch_size.value() > 0) {
+        if (batch_size.has_value() && batch_size.value() > 0 && X.rows > batch_size) {
             n_batch_size = batch_size.value();
         }
 
@@ -207,9 +306,7 @@ public:
 
             // TODO This assumes a homogenous ensemble in which either all or no
             // tree is updated. 
-            //if (_trees[0].optimizer().step_size > 0) {
-            if constexpr(tree_opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
-                
+            if (tree_optimizers.size() > 0) {    
                 #pragma omp parallel for
                 for (unsigned int i = 0; i < _weights.size(); ++i) {
                     matrix1d<internal_t> loss_deriv(n_classes);
@@ -222,7 +319,7 @@ public:
                     for (unsigned int k = 0; k < n_batch_size; ++k) {
                         
                         // No need to reset loss_deriv because it will be copied anyway
-                        loss.deriv(output(k), loss_deriv, Y(idx(k)));
+                        loss->deriv(output(k), loss_deriv, Y(idx(k)));
 
                         //auto lidx = leaf_idx[i][k];
                         auto lidx = _trees[i]->leaf_index(X(idx(k)));
@@ -233,12 +330,14 @@ public:
                     }
                     // Update current tree
                     matrix1d<internal_t> tleafs(_trees[i]->leaves().size(), &_trees[i]->leaves()[0], false);
-                    _trees[i]->optimizer().step(tleafs, grad);
+                    tree_optimizers[i]->step(tleafs, grad);
+                    
+                    //_trees[i]->optimizer().step(tleafs, grad);
                     // _trees[i]->optimizer.step(_trees[i]->leaves(), grad);
                 }
             }
         
-            if constexpr(opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+            if (weight_optimizer) {
                 // Compute gradient for the weights
                 matrix1d<internal_t> grad(_weights.size());
                 std::fill(grad.begin(), grad.end(), 0); 
@@ -251,14 +350,14 @@ public:
                     internal_t dir = 0;
 
                     // Compute tree regularization if necessary
-                    if (l_tree_reg > 0) {
-                        dir += l_tree_reg * tree_regularizer(_trees[i]);
+                    if (l_tree_reg > 0 && tree_regularizer.has_value()) {
+                        dir += l_tree_reg * (*tree_regularizer)(*_trees[i]);
                     }
 
                     // Compute gradient for tree i
                     for (unsigned int j = 0; j < n_batch_size; ++j) {
                         // auto joutput = output(j);
-                        loss.deriv(output(j), loss_deriv, Y(idx(j)));
+                        loss->deriv(output(j), loss_deriv, Y(idx(j)));
 
                         //auto lidx = leaf_idx[i][j];
                         auto lidx = _trees[i]->leaf_index(X(idx(j)));
@@ -271,9 +370,10 @@ public:
 
                 // Perform SGD step for weights and apply prox operator afterwards
                 matrix1d<internal_t> tweights(_weights.size(), &_weights[0], false);
-                optimizer.step(tweights, grad);
+                weight_optimizer->step(tweights, grad);
                 // optimizer.step(_weights, grad);
-                _weights = ensemble_regularizer(_weights, l_ensemble_reg);
+
+                if (ensemble_regularizer.has_value()) _weights = ensemble_regularizer.value()(_weights, l_ensemble_reg);
             
                 if (normalize_weights && _weights.size() > 0) {
                     std::vector<internal_t> nonzero_w;
@@ -284,7 +384,7 @@ public:
                             nonzero_idx.push_back(i);
                         }
                     }
-                    nonzero_w = ENSEMBLE_REGULARIZER::to_prob_simplex(nonzero_w);
+                    nonzero_w = to_prob_simplex(nonzero_w);
                     for (unsigned int i = 0; i < nonzero_idx.size(); ++i) {
                         unsigned int tidx = nonzero_idx[i];
                         _weights[tidx] = nonzero_w[i];
@@ -316,7 +416,7 @@ public:
         _weights = std::vector<internal_t>(new_weights);
 
         for (unsigned int i = 0; i < new_weights.size(); ++i) {
-            _trees.push_back(prototype->clone(seed+i));
+            _trees.push_back(std::make_unique<Tree<data_t>>(the_tree->clone(seed+i)));
             //_trees.push_back(DecisionTree<tree_init, tree_opt>(n_classes, max_depth, max_features, seed+i, step_size));
             _trees.back().load(new_nodes[i], new_leafs[i]);
         }
@@ -338,7 +438,7 @@ public:
     unsigned int num_nodes() const {
         unsigned int n_nodes = 0;
         for (auto const & t : _trees) {
-            n_nodes += t.num_nodes();
+            n_nodes += t->num_nodes();
         }
         return n_nodes;
     }
@@ -346,10 +446,14 @@ public:
     unsigned int num_bytes() const {
         unsigned int tree_size = 0;
         for (auto const & t : _trees) {
-            tree_size += t.num_bytes();
+            tree_size += t->num_bytes();
         }
 
-        return tree_size + sizeof(*this) + optimizer.num_bytes();
+        if (tree_optimizers.size() > 0) {
+            tree_size += sizeof(std::unique_ptr<Optimizer>) * tree_optimizers.size();
+        }
+
+        return tree_size + sizeof(*this) + sizeof(internal_t) * _weights.size();
     }
 
     unsigned int num_trees() const {

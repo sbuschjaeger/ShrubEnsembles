@@ -5,12 +5,10 @@
 #include "Datatypes.h"
 #include "DecisionTree.h"
 #include "TreeEnsemble.h"
-#include "EnsembleRegularizer.h"
-#include "TreeRegularizer.h"
 #include "Utils.h"
 
-template <typename data_t, LOSS::TYPE loss_type, OPTIMIZER::OPTIMIZER_TYPE opt, OPTIMIZER::OPTIMIZER_TYPE tree_opt, ENSEMBLE_REGULARIZER::TYPE ensemble_reg>
-class OSE : public TreeEnsemble<data_t, loss_type, opt, tree_opt> {
+template <typename data_t>
+class OSE : public TreeEnsemble<data_t> {
     
 protected:
     
@@ -24,27 +22,31 @@ public:
 
     OSE(
         unsigned int n_classes, 
-        unsigned int max_depth = 5,
+        Tree<data_t> const & tree,
+        Loss const & loss,
+        Optimizer const & optimizer,
         unsigned long seed = 12345,
         bool normalize_weights = true,
         unsigned int burnin_steps = 0,
-        unsigned int max_features = 0,
-        internal_t step_size = 1e-2,
+        std::optional<std::function< std::vector<internal_t>(std::vector<internal_t> const &, internal_t scale)>> ensemble_regulizer = std::nullopt,
         internal_t l_reg = 0,
         unsigned int n_trees = 32,
         unsigned int batch_size = 0,
         unsigned int bootstrap = true,
         unsigned int epochs = 0
-    ) : TreeEnsemble<data_t, loss_type, opt, tree_opt>(n_classes, max_depth, seed, false, max_features, step_size, ensemble_reg, l_reg, TREE_REGULARIZER::TYPE::NO, 0), burnin_steps(burnin_steps), n_trees(n_trees), batch_size(batch_size), bootstrap(bootstrap), epochs(epochs) { 
+    ) : TreeEnsemble<data_t>(n_classes, nullptr, nullptr, seed, false, nullptr, nullptr, ensemble_regulizer, l_reg, std::nullopt, 0), burnin_steps(burnin_steps), n_trees(n_trees), batch_size(batch_size), bootstrap(bootstrap), epochs(epochs) {
+        this->the_tree = tree.clone(seed);
+        this->loss = loss.clone();
+        this->weight_optimizer = optimizer.clone(); 
     }
 
     void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         this->_weights.push_back(0.0);
-        this->_trees.push_back(this->prototype->clone(this->seed++));
-        this->_trees.back().fit(X,Y);
+        this->_trees.push_back(this->the_tree->clone(this->seed++));
+        this->_trees.back()->fit(X,Y);
         
         this->update_trees(X, Y, burnin_steps, std::nullopt, std::nullopt, this->seed);
-        if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+        if (this->ensemble_regularizer.has_value()) {
             this->prune();
         }
     }
@@ -66,7 +68,7 @@ public:
                 this->_trees.back().fit(X,Y,idx);
                 
                 this->update_trees(X, Y, burnin_steps, std::nullopt, std::nullopt, this->seed);
-                if constexpr (opt != OPTIMIZER::OPTIMIZER_TYPE::NONE) {
+                if (this->ensemble_regulizer.has_value()) {
                     this->prune();
                 }
             }

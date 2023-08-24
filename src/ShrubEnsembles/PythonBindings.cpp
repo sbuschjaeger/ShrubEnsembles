@@ -178,7 +178,7 @@ void bindDistanceDecisionTree(py::module& m, const std::string& suffix) {
 			.def("fit", py::overload_cast<matrix2d<data_t> const&, matrix1d<unsigned int> const&,
 										std::optional<std::reference_wrapper<const matrix1d<unsigned int>>>>(&TreeType::fit),
 				py::arg("X"), py::arg("Y"), py::arg("indices") = py::none());
-	} else constexpr(tree_init == DDT::INIT::CUSTOM && distance_type == DDT::DISTANCE::CUSTOM) {
+	} else if constexpr(tree_init == DDT::INIT::CUSTOM && distance_type == DDT::DISTANCE::CUSTOM) {
 	} else {
 		py::class_<TreeType>(m, ("DistanceDecisionTree" + suffix).c_str(), py::module_local())
 			.def(py::init<unsigned int, unsigned int, unsigned int, unsigned long, internal_t>(),

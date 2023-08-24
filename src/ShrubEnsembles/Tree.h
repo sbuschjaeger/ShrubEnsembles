@@ -24,9 +24,10 @@ public:
 
     // I want to make sure that these objects are only moved and never copied. I expect the in DecisionTree / DistanceTree to 
     // not use any copy c'tors, but for safe measures we delete the copy constructor entirely.
-    Node(const Node&) = default; //delete;
-    Node() = default;
-    Node(Node &&) = default;
+    
+    // Node(const Node&) = default; 
+    // Node() = default;
+    // Node(Node &&) = default;
 
     unsigned int num_bytes() const {
         return sizeof(*this);
@@ -49,6 +50,8 @@ public:
 
     virtual matrix2d<internal_t> predict_proba(matrix2d<data_t> const &X) = 0;
 
+    virtual void predict_proba(matrix2d<data_t> const &X, matrix2d<internal_t> & preds) = 0;
+
     virtual unsigned int num_bytes() const = 0;
 
     virtual unsigned int num_nodes() const = 0;
@@ -59,5 +62,5 @@ public:
 
     virtual ~Tree() { }
 
-    virtual Tree * clone(unsigned int seed) const = 0;
+    virtual std::unique_ptr<Tree> clone(std::optional<unsigned int> seed = std::nullopt) const = 0;
 };
