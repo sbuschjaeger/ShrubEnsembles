@@ -6,7 +6,6 @@
 #include <functional>
 
 #include "DecisionTree.h"
-#include "DistanceDecisionTree.h"
 #include "GASE.h"
 #include "MASE.h"
 #include "OSE.h"
@@ -396,7 +395,7 @@ int main() {
 	std::cout << "Training and testing on " << XMat.rows << " examples with " << XMat.cols << " features" << std::endl;
 	std::cout << "=== Init Tests Done === " << std::endl;
 
-	DecisionTree<double, DT::INIT::GINI> dt(n_classes,max_depth,max_features,seed);
+	DecisionTree<double, INIT::GINI> dt(n_classes,max_depth,max_features,seed);
 	
 	auto start = std::chrono::steady_clock::now();
 	dt.fit(XMat,YMat);
@@ -410,7 +409,7 @@ int main() {
 	std::cout << "Accuracy is: " << accuracy_score(dt.predict_proba(XMat), YMat) << std::endl;
 	std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
 
-	DecisionTree<double, DT::INIT::CUSTOM> dtc(n_classes,max_depth,max_features,seed,[](std::vector<unsigned int> const &left, std::vector<unsigned int> const &right) -> internal_t {
+	DecisionTree<double, INIT::CUSTOM> dtc(n_classes,max_depth,max_features,seed,[](std::vector<unsigned int> const &left, std::vector<unsigned int> const &right) -> internal_t {
         unsigned int sum_left = std::accumulate(left.begin(), left.end(), 0);
         unsigned int sum_right = std::accumulate(right.begin(), right.end(), 0);
 
@@ -440,127 +439,6 @@ int main() {
 	std::cout << "Accuracy is: " << accuracy_score(dtc.predict_proba(XMat), YMat) << std::endl;
 	std::cout << "=== Testing single DT done ===" << std::endl << std::endl;
 
-	auto lambda = 0;
-	DistanceDecisionTree<double, DDT::INIT::GINI, DDT::DISTANCE::ZLIB> ddt(n_classes,max_depth,max_examples,seed, lambda);
-
-	start = std::chrono::steady_clock::now();
-	ddt.fit(XMat,YMat);
-	end = std::chrono::steady_clock::now();
-	runtime_seconds = end-start;
-    
-	std::cout << "=== Testing single DDT with ZLIB ===" << std::endl;
-	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << ddt.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << ddt.num_nodes() << std::endl; 
-    std::cout << "Number of ref examples was " << ddt.num_ref_examples() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(ddt.predict_proba(XMat), YMat) << std::endl;
-	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
-
-	DistanceDecisionTree<double, DDT::INIT::GINI, DDT::DISTANCE::EUCLIDEAN> ddt_e(n_classes,max_depth,max_examples,seed, lambda);
-
-
-	start = std::chrono::steady_clock::now();
-	ddt_e.fit(XMat,YMat);
-	end = std::chrono::steady_clock::now();
-	runtime_seconds = end-start;
-    
-	std::cout << "=== Testing single DDT with EUCLIDEAN ===" << std::endl;
-	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << ddt_e.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << ddt_e.num_nodes() << std::endl; 
-    std::cout << "Number of ref examples was " << ddt_e.num_ref_examples() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(ddt_e.predict_proba(XMat), YMat) << std::endl;
-	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
-
-	DistanceDecisionTree<double, DDT::INIT::GINI, DDT::DISTANCE::CUSTOM> ddt_ec(n_classes,max_depth,max_examples,seed, lambda,[](matrix1d<double> const &x1, matrix1d<double> const &x2) -> internal_t {
-		return std::inner_product(x1.begin(), x1.end(), x2.begin(), double(0), 
-			std::plus<double>(), [](double x,double y){return (y-x)*(y-x);}
-		);
-	});
-
-	start = std::chrono::steady_clock::now();
-	ddt_ec.fit(XMat,YMat);
-	end = std::chrono::steady_clock::now();
-	runtime_seconds = end-start;
-    
-	std::cout << "=== Testing single DDT with CUSTOM EUCLIDEAN ===" << std::endl;
-	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << ddt_ec.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << ddt_ec.num_nodes() << std::endl; 
-    std::cout << "Number of ref examples was " << ddt_ec.num_ref_examples() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(ddt_ec.predict_proba(XMat), YMat) << std::endl;
-	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
-
-	DistanceDecisionTree<double, DDT::INIT::CUSTOM, DDT::DISTANCE::CUSTOM> ddt_gec(n_classes,max_depth,max_examples,seed, [](internal_t left_m, internal_t left_var, std::vector<unsigned int> const &left_cnts, internal_t right_m, internal_t right_var, std::vector<unsigned int> const &right_cnts) {
-		auto lambda = 0;
-		unsigned int sum_left = std::accumulate(left_cnts.begin(), left_cnts.end(), 0);
-        unsigned int sum_right = std::accumulate(right_cnts.begin(), right_cnts.end(), 0);
-
-        internal_t gleft = 0;
-        for (auto const l : left_cnts) {
-            gleft += (static_cast<internal_t>(l) / sum_left) * (static_cast<internal_t>(l) / sum_left);
-        }
-        gleft = 1.0 - gleft;
-
-        internal_t gright = 0;
-        for (auto const r : right_cnts) {
-            gright += (static_cast<internal_t>(r) / sum_right) * (static_cast<internal_t>(r) / sum_right);
-        }
-        gright = 1.0 - gright;
-
-        internal_t gini =  sum_left / static_cast<internal_t>(sum_left + sum_right) * gleft + sum_right /  static_cast<internal_t>(sum_left + sum_right) * gright;
-        return lambda * (left_var / 2.0 + right_var / 2.0) + (1.0 - lambda) * gini;
-	},
-		[](matrix1d<double> const &x1, matrix1d<double> const &x2) -> internal_t {
-		return std::inner_product(x1.begin(), x1.end(), x2.begin(), double(0), 
-			std::plus<double>(), [](double x,double y){return (y-x)*(y-x);}
-		);
-	});
-
-	start = std::chrono::steady_clock::now();
-	ddt_gec.fit(XMat,YMat);
-	end = std::chrono::steady_clock::now();
-	runtime_seconds = end-start;
-    
-	std::cout << "=== Testing single DDT with CUSTOM GINI AND CUSTOM EUCLIDEAN ===" << std::endl;
-	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << ddt_gec.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << ddt_gec.num_nodes() << std::endl; 
-    std::cout << "Number of ref examples was " << ddt_gec.num_ref_examples() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(ddt_gec.predict_proba(XMat), YMat) << std::endl;
-	std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
-
-	// DistanceDecisionTree<DDT::TRAIN, DISTANCE::SHOCO, OPTIMIZER::NONE> ddt_s(n_classes, max_depth, max_examples,seed, lambda, step_size);
-
-	// start = std::chrono::steady_clock::now();
-	// ddt_s.fit(XMat,YMat);
-	// end = std::chrono::steady_clock::now();
-	// runtime_seconds = end-start;
-    
-	// std::cout << "=== Testing single DDT with SHOCO ===" << std::endl;
-	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    // std::cout << "Size is " << ddt_s.num_bytes() << " bytes" << std::endl; 
-    // std::cout << "Number of nodes was " << ddt_s.num_nodes() << std::endl; 
-    // std::cout << "Number of ref examples was " << ddt_s.num_ref_examples() << std::endl; 
-	// std::cout << "Accuracy is: " << accuracy_score(ddt_s.predict_proba(XMat), Y) << std::endl;
-	// std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
-
-	// // TODO Test what happens if we reuse a classifier?
-	// DistanceDecisionTree<DDT::TRAIN, DISTANCE::TYPES::LZ4, OPTIMIZER::NONE> ddt_z(n_classes,max_depth,max_examples,seed, lambda, step_size);
-
-	// start = std::chrono::steady_clock::now();
-	// ddt_z.fit(XMat,YMat);
-	// end = std::chrono::steady_clock::now();
-	// runtime_seconds = end-start;
-    
-	// std::cout << "=== Testing single DDT with LZ4 ===" << std::endl;
-	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    // std::cout << "Size is " << ddt_z.num_bytes() << " bytes" << std::endl; 
-    // std::cout << "Number of nodes was " << ddt_z.num_nodes() << std::endl; 
-    // std::cout << "Number of ref examples was " << ddt_z.num_ref_examples() << std::endl; 
-	// std::cout << "Accuracy is: " << accuracy_score(ddt_z.predict_proba(XMat), Y) << std::endl;
-	// std::cout << "=== Testing single DDT done ===" << std::endl << std::endl;
-
 	// auto loss = "mse";
 	// auto optimizer = "sgd";
 	// auto tree_init_mode = "train";
@@ -570,7 +448,7 @@ int main() {
 	auto init_batch_size = 32;
 	auto bootstrap = true;
 	
-	GASE<double> ga(n_classes, DecisionTree<double, DT::INIT::GINI>(n_classes,max_depth,max_features,seed), MSE(), SGD(), seed, n_trees, n_batches, n_rounds, init_batch_size, bootstrap);
+	GASE<double, INIT::GINI> ga(n_classes, max_depth, max_features, MSE(), SGD(), seed, n_trees, n_batches, n_rounds, init_batch_size, bootstrap);
 	start = std::chrono::steady_clock::now();
 	ga.fit(XMat,YMat);
 	end = std::chrono::steady_clock::now();
@@ -583,83 +461,83 @@ int main() {
 	std::cout << "Accuracy is: " << accuracy_score(ga.predict_proba(XMat), YMat) << std::endl;
 	std::cout << "=== Testing GASE done ===" << std::endl << std::endl;
 
-	auto burnin_steps = 5;
-	auto n_parallel = 8;
-	auto batch_size = 1024;
-	MASE<double> ma(n_classes, DecisionTree<double, DT::INIT::GINI>(n_classes,max_depth,max_features,seed), MSE(), SGD(), seed, burnin_steps, n_trees, n_parallel, n_rounds, batch_size, bootstrap);
-	//MASE ma(n_classes, max_depth, seed, burnin_steps, max_features, loss, step_size, optimizer, tree_init_mode, n_trees, n_parallel, n_rounds, batch_size, bootstrap);
-	start = std::chrono::steady_clock::now();
-	ma.fit(XMat,YMat);
-	end = std::chrono::steady_clock::now();
-	runtime_seconds = end-start;
+	// auto burnin_steps = 5;
+	// auto n_parallel = 8;
+	// auto batch_size = 1024;
+	// MASE<double> ma(n_classes, DecisionTree<double, INIT::GINI>(n_classes,max_depth,max_features,seed), MSE(), SGD(), seed, burnin_steps, n_trees, n_parallel, n_rounds, batch_size, bootstrap);
+	// //MASE ma(n_classes, max_depth, seed, burnin_steps, max_features, loss, step_size, optimizer, tree_init_mode, n_trees, n_parallel, n_rounds, batch_size, bootstrap);
+	// start = std::chrono::steady_clock::now();
+	// ma.fit(XMat,YMat);
+	// end = std::chrono::steady_clock::now();
+	// runtime_seconds = end-start;
     
-	std::cout << "=== Testing MASE ===" << std::endl;
-	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << ma.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << ma.num_nodes() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(ma.predict_proba(XMat), YMat) << std::endl;
-	std::cout << "=== Testing MASE done ===" << std::endl << std::endl;
+	// std::cout << "=== Testing MASE ===" << std::endl;
+	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    // std::cout << "Size is " << ma.num_bytes() << " bytes" << std::endl; 
+    // std::cout << "Number of nodes was " << ma.num_nodes() << std::endl; 
+	// std::cout << "Accuracy is: " << accuracy_score(ma.predict_proba(XMat), YMat) << std::endl;
+	// std::cout << "=== Testing MASE done ===" << std::endl << std::endl;
 
-	auto epochs = 5;
-	auto normalize_weights = true;
+	// auto epochs = 5;
+	// auto normalize_weights = true;
 	
-	OSE oest(n_classes, DecisionTree<double, DT::INIT::GINI>(n_classes,max_depth,max_features,seed), MSE(), SGD(), seed, normalize_weights, burnin_steps, L0_reg, 0.0, 32, batch_size, bootstrap, epochs);
+	// OSE oest(n_classes, DecisionTree<double, INIT::GINI>(n_classes,max_depth,max_features,seed), MSE(), SGD(), seed, normalize_weights, burnin_steps, L0_reg, 0.0, 32, batch_size, bootstrap, epochs);
 
-	start = std::chrono::steady_clock::now();
-	MSE mse_loss;
+	// start = std::chrono::steady_clock::now();
+	// MSE mse_loss;
 
-	std::vector<unsigned int> idx(XMat.rows);
-	std::iota(idx.begin(), idx.end(), 0);
+	// std::vector<unsigned int> idx(XMat.rows);
+	// std::iota(idx.begin(), idx.end(), 0);
 
-    for (unsigned int i = 0; i < epochs; ++i) {
-        unsigned int cnt = 0;
-        internal_t loss_epoch = 0;
-        unsigned int nonzero_epoch = 0;
-		internal_t accuracy_epoch = 0;
+    // for (unsigned int i = 0; i < epochs; ++i) {
+    //     unsigned int cnt = 0;
+    //     internal_t loss_epoch = 0;
+    //     unsigned int nonzero_epoch = 0;
+	// 	internal_t accuracy_epoch = 0;
 
-        unsigned int batch_cnt = 0;
-		std::random_shuffle(idx.begin(), idx.end());
+    //     unsigned int batch_cnt = 0;
+	// 	std::random_shuffle(idx.begin(), idx.end());
 
-        while(cnt < idx.size()) {
-			auto cur_batch_size = std::min(static_cast<int>(X.size() - cnt), static_cast<int>(batch_size));
-			if (cur_batch_size <= 0) break;
+    //     while(cnt < idx.size()) {
+	// 		auto cur_batch_size = std::min(static_cast<int>(X.size() - cnt), static_cast<int>(batch_size));
+	// 		if (cur_batch_size <= 0) break;
 
-			matrix2d<internal_t> XBatch(cur_batch_size, XMat.cols);
-			matrix1d<unsigned int> YBatch(cur_batch_size);
+	// 		matrix2d<internal_t> XBatch(cur_batch_size, XMat.cols);
+	// 		matrix1d<unsigned int> YBatch(cur_batch_size);
 
-			for (unsigned int j = 0; j < cur_batch_size; ++j) {
-				for (unsigned int k = 0; k < XMat.cols; ++k) {
-					XBatch(j,k) = XMat(idx[cnt+j],k);
-				}
-				YBatch(j) = YMat(idx[cnt+j]);
-			}
-			cnt += cur_batch_size;
+	// 		for (unsigned int j = 0; j < cur_batch_size; ++j) {
+	// 			for (unsigned int k = 0; k < XMat.cols; ++k) {
+	// 				XBatch(j,k) = XMat(idx[cnt+j],k);
+	// 			}
+	// 			YBatch(j) = YMat(idx[cnt+j]);
+	// 		}
+	// 		cnt += cur_batch_size;
 
-			auto proba = oest.predict_proba(XBatch);
-			accuracy_epoch += accuracy_score(proba, YBatch);
+	// 		auto proba = oest.predict_proba(XBatch);
+	// 		accuracy_epoch += accuracy_score(proba, YBatch);
 
-            oest.next(XBatch, YBatch);
-			auto losses = mse_loss(proba, YBatch);
-			internal_t loss = mean_all_dim(losses);
+    //         oest.next(XBatch, YBatch);
+	// 		auto losses = mse_loss(proba, YBatch);
+	// 		internal_t loss = mean_all_dim(losses);
 
-            nonzero_epoch += oest.num_trees();
-            loss_epoch += loss;
-            batch_cnt++;
-            std::stringstream ss;
-            ss << std::setprecision(4) << "loss: " << loss_epoch / batch_cnt << " nonzero: " << int(nonzero_epoch / batch_cnt) << " acc " << (accuracy_epoch / batch_cnt);
-			internal_t progress = internal_t(cnt) / X.size();
-            print_progress(i, epochs - 1, progress, ss.str() );
-        }
-        std::cout << std::endl;
-    }
+    //         nonzero_epoch += oest.num_trees();
+    //         loss_epoch += loss;
+    //         batch_cnt++;
+    //         std::stringstream ss;
+    //         ss << std::setprecision(4) << "loss: " << loss_epoch / batch_cnt << " nonzero: " << int(nonzero_epoch / batch_cnt) << " acc " << (accuracy_epoch / batch_cnt);
+	// 		internal_t progress = internal_t(cnt) / X.size();
+    //         print_progress(i, epochs - 1, progress, ss.str() );
+    //     }
+    //     std::cout << std::endl;
+    // }
 
-    end = std::chrono::steady_clock::now();
-	runtime_seconds = end-start;
+    // end = std::chrono::steady_clock::now();
+	// runtime_seconds = end-start;
     
-	std::cout << "=== Testing OSE ===" << std::endl;
-	std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
-    std::cout << "Size is " << oest.num_bytes() << " bytes" << std::endl; 
-    std::cout << "Number of nodes was " << oest.num_nodes() << std::endl; 
-	std::cout << "Accuracy is: " << accuracy_score(oest.predict_proba(XMat), YMat) << std::endl;
-	std::cout << "=== Testing OSE done ===" << std::endl << std::endl;
+	// std::cout << "=== Testing OSE ===" << std::endl;
+	// std::cout << "Runtime was " << runtime_seconds.count() << " seconds" << std::endl; 
+    // std::cout << "Size is " << oest.num_bytes() << " bytes" << std::endl; 
+    // std::cout << "Number of nodes was " << oest.num_nodes() << std::endl; 
+	// std::cout << "Accuracy is: " << accuracy_score(oest.predict_proba(XMat), YMat) << std::endl;
+	// std::cout << "=== Testing OSE done ===" << std::endl << std::endl;
 }

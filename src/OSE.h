@@ -7,8 +7,8 @@
 #include "TreeEnsemble.h"
 #include "Utils.h"
 
-template <typename data_t>
-class OSE : public TreeEnsemble<data_t> {
+template <typename data_t, INIT tree_init>
+class OSE : public TreeEnsemble<data_t, tree_init> {
     
 protected:
     
@@ -24,7 +24,6 @@ public:
         unsigned int n_classes, 
         unsigned int max_depth,
         unsigned int max_features,
-        std::string init = "gini",
         std::string loss = "mse",
         std::string optimizer = "adam",
         internal_t step_size = 0.1,
@@ -37,15 +36,7 @@ public:
         unsigned int batch_size = 0,
         unsigned int bootstrap = true,
         unsigned int epochs = 0
-    ) : TreeEnsemble<data_t>(n_classes, nullptr, nullptr, seed, false, nullptr, nullptr, std::nullopt, l_reg, std::nullopt, 0), burnin_steps(burnin_steps), n_trees(n_trees), batch_size(batch_size), bootstrap(bootstrap), epochs(epochs) {
-        if (init == "gini" || init == "GINI") {
-            this->the_tree = std::make_unique<DecisionTree<data_t, DT::GINI>>(n_classes, max_depth, max_features, seed);
-        } else if (init == "random" || init == "RANDOM") {
-            this->the_tree = std::make_unique<DecisionTree<data_t, DT::RANDOM>>(n_classes, max_depth, max_features, seed);
-        } else {
-            std::runtime_error("Received a parameter that I did not understand. I understand init = {gini, random}, but you gave me " + init);
-        }
-
+    ) : TreeEnsemble<data_t, tree_init>(n_classes, nullptr, nullptr, seed, false, nullptr, nullptr, std::nullopt, l_reg, std::nullopt, 0), burnin_steps(burnin_steps), n_trees(n_trees), batch_size(batch_size), bootstrap(bootstrap), epochs(epochs) {
         if (loss == "mse" || loss == "MSE") {
             this->loss = std::make_unique<MSE>();
         } else if (loss == "CrossEntropy" || loss == "CROSSENTROPY") {
@@ -75,7 +66,8 @@ public:
 
     OSE(
         unsigned int n_classes, 
-        Tree<data_t> const & tree,
+        unsigned int max_depth, 
+        unsigned int max_features, 
         Loss const & loss,
         Optimizer const & optimizer,
         unsigned long seed = 12345,
@@ -87,15 +79,20 @@ public:
         unsigned int batch_size = 0,
         unsigned int bootstrap = true,
         unsigned int epochs = 0
-    ) : TreeEnsemble<data_t>(n_classes, nullptr, nullptr, seed, false, nullptr, nullptr, ensemble_regulizer, l_reg, std::nullopt, 0), burnin_steps(burnin_steps), n_trees(n_trees), batch_size(batch_size), bootstrap(bootstrap), epochs(epochs) {
-        this->the_tree = tree.clone(seed);
+    ) : TreeEnsemble<data_t, tree_init>(n_classes, max_depth, max_features, nullptr, nullptr, seed, false, nullptr, nullptr, ensemble_regulizer, l_reg, std::nullopt, 0), burnin_steps(burnin_steps), n_trees(n_trees), batch_size(batch_size), bootstrap(bootstrap), epochs(epochs) {
         this->loss = loss.clone();
         this->weight_optimizer = optimizer.clone(); 
     }
 
     void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const & Y) {
         this->_weights.push_back(0.0);
-        this->_trees.push_back(this->the_tree->clone(this->seed++));
+
+        if constexpr (tree_init == INIT::CUSTOM) {
+            this->_trees.push_back(DecisionTree<data_t, tree_init>(this->n_classes, this->max_depth, this->max_features, this->seed++, this->score));
+        } else {
+            this->_trees.push_back(DecisionTree<data_t, tree_init>(this->n_classes, this->max_depth, this->max_features, this->seed++));
+        }
+
         this->_trees.back()->fit(X,Y);
         
         this->update_trees(X, Y, burnin_steps, std::nullopt, std::nullopt, this->seed);
@@ -117,7 +114,11 @@ public:
 
                 auto idx = sample_indices(X.rows, batch_size, bootstrap, this->seed + i);
                 this->_weights.push_back(0.0);
-                this->_trees.push_back(this->prototype->clone(this->seed++));
+                if (this->score.has_value()) {
+                    this->_trees.push_back(DecisionTree<data_t, tree_init>(this->n_classes, this->max_depth, this->max_features, this->seed++, this->score));
+                } else {
+                    this->_trees.push_back(DecisionTree<data_t, tree_init>(this->n_classes, this->max_depth, this->max_features, this->seed++));
+                }
                 this->_trees.back().fit(X,Y,idx);
                 
                 this->update_trees(X, Y, burnin_steps, std::nullopt, std::nullopt, this->seed);

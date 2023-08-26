@@ -11,25 +11,18 @@ import ShrubEnsembles
 from sklearn.utils.validation import check_X_y
 from sklearn.base import BaseEstimator, ClassifierMixin
 
-class DistanceDecisionTree(ClassifierMixin, BaseEstimator):
+class DecisionTree(ClassifierMixin, BaseEstimator):
 
     def __init__(self,
         max_depth = 1, 
-        max_samples = 0, 
+        max_features = 0, 
         random_state = 0, 
         step_size = 0,
-        tree_init_mode = "train",
-        lambda_val = 0,
-        distance = "lz4"
+        tree_init_mode = "train"
     ):
 
         tree_init_mode = tree_init_mode.lower()
         assert tree_init_mode in ["train", "random"], f"Currently only the tree_init_modes {{train, random}} are supported but you supplied {tree_init_mode}"
-
-        distance = distance.lower()
-        assert distance in ["lz4", "gzip", "euclidean", "shoco"], f"Currently only the distances {{lz4, gzip, euclidean, shoco}} are supported but you supplied {distance}"
-
-        assert lambda_val <= 1 and lambda_val >= 0, f"lambda_val must be in [0,1], but you provided {lambda_val}"
 
         if step_size < 0:
             print(f"WARNING: You supplied a negative step size of {step_size}. Do you want to de-optimize?")
@@ -44,11 +37,9 @@ class DistanceDecisionTree(ClassifierMixin, BaseEstimator):
         random.seed(self.seed)
         
         self.max_depth = max_depth
-        self.max_samples = max_samples
+        self.max_features = max_features
         self.step_size = step_size
         self.tree_init_mode = tree_init_mode
-        self.distance = distance
-        self.lambda_val = lambda_val
 
         self.model = None
 
@@ -113,34 +104,11 @@ class DistanceDecisionTree(ClassifierMixin, BaseEstimator):
         self.n_classes_ = len(self.classes_)
         self.n_outputs_ = self.n_classes_
         
-        # TODO: DEBUG THIS; ACCURACIES ARE NOT CORRECT :/
-        if self.distance == "lz4":
-            if self.tree_init_mode == "train":
-                from ShrubEnsembles.ShrubEnsembles import DistanceDecisionTree_TRAIN_LZ4
-                self.model = DistanceDecisionTree_TRAIN_LZ4(self.n_classes_, self.max_depth, self.max_samples, self.seed, self.lambda_val, self.step_size)
-            else:
-                from ShrubEnsembles.ShrubEnsembles import DistanceDecisionTree_RANDOM_LZ4
-                self.model = DistanceDecisionTree_RANDOM_LZ4(self.n_classes_, self.max_depth, self.max_samples, self.seed, self.lambda_val, self.step_size)
-        elif self.distance == "zlib":
-            if self.tree_init_mode == "train":
-                from ShrubEnsembles.ShrubEnsembles import DistanceDecisionTree_TRAIN_ZLIB
-                self.model = DistanceDecisionTree_TRAIN_ZLIB(self.n_classes_, self.max_depth, self.max_samples, self.seed, self.lambda_val, self.step_size)
-            else:
-                from ShrubEnsembles.ShrubEnsembles import DistanceDecisionTree_RANDOM_ZLIB
-                self.model = DistanceDecisionTree_RANDOM_ZLIB(self.n_classes_, self.max_depth, self.max_samples, self.seed, self.lambda_val, self.step_size)
-        elif self.distance == "shoco":
-            if self.tree_init_mode == "train":
-                from ShrubEnsembles.ShrubEnsembles import DistanceDecisionTree_TRAIN_SHOCO
-                self.model = DistanceDecisionTree_TRAIN_SHOCO(self.n_classes_, self.max_depth, self.max_samples, self.seed, self.lambda_val, self.step_size)
-            else:
-                from ShrubEnsembles.ShrubEnsembles import DistanceDecisionTree_RANDOM_SHOCO
-                self.model = DistanceDecisionTree_RANDOM_SHOCO(self.n_classes_, self.max_depth, self.max_samples, self.seed, self.lambda_val, self.step_size)
+        if self.tree_init_mode == "train":
+            from ShrubEnsembles.ShrubEnsembles import DecisionTree_DOUBLE_TRAIN
+            self.model = DecisionTree_DOUBLE_TRAIN(self.n_classes_, self.max_depth, self.max_features, self.seed, self.step_size)
         else:
-            if self.tree_init_mode == "train":
-                from ShrubEnsembles.ShrubEnsembles import DistanceDecisionTree_TRAIN_EUCLIDEAN
-                self.model = DistanceDecisionTree_TRAIN_EUCLIDEAN(self.n_classes_, self.max_depth, self.max_samples, self.seed, self.lambda_val, self.step_size)
-            else:
-                from ShrubEnsembles.ShrubEnsembles import DistanceDecisionTree_RANDOM_EUCLIDEAN
-                self.model = DistanceDecisionTree_RANDOM_EUCLIDEAN(self.n_classes_, self.max_depth, self.max_samples, self.seed, self.lambda_val, self.step_size)
+            from ShrubEnsembles.ShrubEnsembles import DecisionTree_DOUBLE_RANDOM
+            self.model = DecisionTree_DOUBLE_RANDOM(self.n_classes_, self.max_depth, self.max_features, self.seed, self.step_size)
         
         self.model.fit(X,y)

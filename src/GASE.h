@@ -7,8 +7,8 @@
 #include "TreeEnsemble.h"
 
 
-template <typename data_t>
-class GASE : public TreeEnsemble<data_t> {
+template <typename data_t, INIT tree_init>
+class GASE : public TreeEnsemble<data_t, tree_init> {
     
 private:
     unsigned int const n_rounds;
@@ -24,7 +24,6 @@ public:
         unsigned int n_classes, 
         unsigned int max_depth,
         unsigned int max_features,
-        std::string init = "gini",
         std::string loss = "mse",
         std::string optimizer = "adam",
         internal_t step_size = 0.1,
@@ -35,15 +34,7 @@ public:
         unsigned int init_batch_size = 0,
         unsigned int batch_size = 0,
         bool bootstrap = true
-    ) : TreeEnsemble<data_t>(n_classes, nullptr, nullptr, seed, false, nullptr , nullptr, std::nullopt, 0, std::nullopt, 0), n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), batch_size(batch_size), bootstrap(bootstrap) {
-        if (init == "gini" || init == "GINI") {
-            this->the_tree = std::make_unique<DecisionTree<data_t, DT::GINI>>(n_classes, max_depth, max_features, seed);
-        } else if (init == "random" || init == "RANDOM") {
-            this->the_tree = std::make_unique<DecisionTree<data_t, DT::RANDOM>>(n_classes, max_depth, max_features, seed);
-        } else {
-            std::runtime_error("Received a parameter that I did not understand. I understand init = {gini, random}, but you gave me " + init);
-        }
-
+    ) : TreeEnsemble<data_t, tree_init>(n_classes, max_depth, max_features, nullptr, seed, false, nullptr , nullptr, std::nullopt, 0, std::nullopt, 0), n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), batch_size(batch_size), bootstrap(bootstrap) {
         if (loss == "mse" || loss == "MSE") {
             this->loss = std::make_unique<MSE>();
         } else if (loss == "CrossEntropy" || loss == "CROSSENTROPY") {
@@ -63,7 +54,8 @@ public:
 
     GASE(
         unsigned int n_classes, 
-        Tree<data_t> const & tree,
+        unsigned int max_depth, 
+        unsigned int max_features, 
         Loss const & loss,
         Optimizer const & optimizer,
         unsigned long seed = 12345,
@@ -73,12 +65,30 @@ public:
         unsigned int init_batch_size = 0,
         unsigned int batch_size = 0,
         bool bootstrap = true
-    ) : TreeEnsemble<data_t>(n_classes, nullptr, nullptr, seed, false, nullptr , nullptr, std::nullopt, 0, std::nullopt, 0), n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), batch_size(batch_size), bootstrap(bootstrap) { 
-        this->the_tree = tree.clone(seed);
+    ) : TreeEnsemble<data_t, tree_init>(n_classes, max_depth, max_features, nullptr, seed, false, nullptr , nullptr, std::nullopt, 0, std::nullopt, 0), n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), batch_size(batch_size), bootstrap(bootstrap) { 
+        this->loss = loss.clone();
+        this->tree_optimizer = optimizer.clone();
+    }
+    
+    GASE(
+        unsigned int n_classes, 
+        unsigned int max_depth, 
+        unsigned int max_features, 
+        std::function< internal_t(std::vector<unsigned int> const &, std::vector<unsigned int> const &)> score,
+        Loss const & loss,
+        Optimizer const & optimizer,
+        unsigned long seed = 12345,
+        unsigned int n_trees = 32, 
+        unsigned int n_worker = 5,
+        unsigned int n_rounds = 5,
+        unsigned int init_batch_size = 0,
+        unsigned int batch_size = 0,
+        bool bootstrap = true
+    ) : TreeEnsemble<data_t, tree_init>(n_classes, max_depth, max_features, score, nullptr, seed, false, nullptr , nullptr, std::nullopt, 0, std::nullopt, 0), n_rounds(n_rounds), n_worker(n_worker), n_trees(n_trees), init_batch_size(init_batch_size), batch_size(batch_size), bootstrap(bootstrap) { 
         this->loss = loss.clone();
         this->the_tree_optimizer = optimizer.clone();
     }
-    
+
     void next(matrix2d<data_t> const &X, matrix1d<unsigned int> const &Y, unsigned int n_worker, unsigned int batch_size) {
         // Put all gradients in all_grad which is populated in parallel by n_worker threads
 
@@ -123,12 +133,12 @@ public:
                     auto xidx = sample_idx[b*b_size + j];
                     auto const & x = X(xidx);
 
-                    auto lidx = this->_trees[i]->leaf_index(x);
+                    auto lidx = this->_trees[i].leaf_index(x);
                     // idx[i][j].push_back(lidx);
 
                     idx(i,j) = lidx;
                     for (unsigned int k = 0; k < this->n_classes; ++k) {
-                        output(j,k) += this->_weights[i] * this->_trees[i]->leaves()[lidx + k];
+                        output(j,k) += this->_weights[i] * this->_trees[i].leaves()[lidx + k];
                     }
                 }
             }
@@ -139,7 +149,7 @@ public:
 
             for (unsigned int i = 0; i < this->_trees.size(); ++i) {
                 // Compute gradient for current tree
-                all_grad[b][i] = std::vector<internal_t>(this->_trees[i]->leaves().size(), 0);
+                all_grad[b][i] = std::vector<internal_t>(this->_trees[i].leaves().size(), 0);
                 for (unsigned int k = 0; k < actual_size; ++k) {
                     // No need to reset loss_deriv because it will be copied anyway
                     auto yidx = sample_idx[b*b_size + k];
@@ -159,7 +169,7 @@ public:
         // Now perform the update for each tree. 
         #pragma omp parallel for
         for (unsigned int j = 0; j < this->_trees.size(); ++j) {
-            matrix1d<internal_t> t_grad(this->_trees[j]->leaves().size());
+            matrix1d<internal_t> t_grad(this->_trees[j].leaves().size());
             std::fill(t_grad.begin(), t_grad.end(), 0);
 
             for (unsigned int i = 0; i < n_worker; ++i) {
@@ -168,8 +178,8 @@ public:
                 }
             }
             std::transform(t_grad.begin(), t_grad.end(), t_grad.begin(), [n_worker](auto& c){return 1.0/n_worker*c;});
-            matrix1d<internal_t> tleafs(this->_trees[j]->leaves().size(), &this->_trees[j]->leaves()[0], false);
-            this->tree_optimizers[j]->step(tleafs, t_grad);
+            matrix1d<internal_t> tleafs(this->_trees[j].leaves().size(), &this->_trees[j].leaves()[0], false);
+            this->tree_optimizer->step(j, tleafs, t_grad);
         }
     }
 

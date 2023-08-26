@@ -16,12 +16,10 @@
 #include "Losses.h"
 // #include "DecisionTree.h"
 
-namespace DT {
-    enum INIT {GINI, RANDOM, CUSTOM};
-}
+enum INIT {GINI, RANDOM, CUSTOM};
 
-template <typename data_t, DT::INIT tree_init>
-class DecisionTree : public Tree<data_t> {
+template <typename data_t, INIT tree_init>
+class DecisionTree {
 
 static_assert(std::is_arithmetic<data_t>::value, "The data type data_t must be an arithmetic data type. See std::is_arithmetic for more details.");
 
@@ -34,7 +32,7 @@ protected:
     unsigned long seed;
 
     /**
-     * This is a trade-off between compile-time performance and usability. Basically, I wanted to have as much speed as possible (without too crazy optimizations) while also being able to exchange score/distance functions quickly. Hence, I decided to mix compile-time constants via templates as well as some dynamic data structures. The idea is that whenever a user uses an INIT and/or DISTANCE function that is implemented in C++ and available during compile-time, we try to hard-code its usage during compile-time. The most straightforward way to do this would be to simply use a class as a template parameter (e.g., write DistanceDecisionTree<double, MyGiniScoreClass, MyGZIPClass>). This is nice from a C++ perspective, but it does not allow us to implement score/distance functions in Python. Hence, we use a special flag DDT::INIT::CUSTOM / DDT::DISTANCE::CUSTOM to use a "dynamic" version of this class. Inside the code, we use constexpr to check during compile time if we are using e.g., the gini score or a custom score function. If we are using a custom score (or distance), then the _score /_distance fields are accessed. If, however, we are using e.g., the gini score, then we will never access _score and directly call the appropriate scoring function. In this case, the _score member basically lies dormant in our code. The reason for this approach is that accessing std::function has a small overhead. While this usually does not impact the performance much, it can be noticeable when a function gets called very often. Unfortunately, this is the case for the Gini score (and to some degree for the distance function). In a small series of benchmarks, I found that training DTs on datasets with many features and (comparably) fewer examples, there can be a performance penalty of up to 50%. For CIFAR10 datasets (50K examples, 32*32*3 =3072 features) the performance difference was around 10 % on average. 
+     * This is a trade-off between compile-time performance and usability. Basically, I wanted to have as much speed as possible (without too crazy optimizations) while also being able to exchange score/distance functions quickly. Hence, I decided to mix compile-time constants via templates as well as some dynamic data structures. The idea is that whenever a user uses an INIT and/or DISTANCE function that is implemented in C++ and available during compile-time, we try to hard-code its usage during compile-time. The most straightforward way to do this would be to simply use a class as a template parameter (e.g., write DistanceDecisionTree<double, MyGiniScoreClass, MyGZIPClass>). This is nice from a C++ perspective, but it does not allow us to implement score/distance functions in Python. Hence, we use a special flag DINIT::CUSTOM / DDT::DISTANCE::CUSTOM to use a "dynamic" version of this class. Inside the code, we use constexpr to check during compile time if we are using e.g., the gini score or a custom score function. If we are using a custom score (or distance), then the _score /_distance fields are accessed. If, however, we are using e.g., the gini score, then we will never access _score and directly call the appropriate scoring function. In this case, the _score member basically lies dormant in our code. The reason for this approach is that accessing std::function has a small overhead. While this usually does not impact the performance much, it can be noticeable when a function gets called very often. Unfortunately, this is the case for the Gini score (and to some degree for the distance function). In a small series of benchmarks, I found that training DTs on datasets with many features and (comparably) fewer examples, there can be a performance penalty of up to 50%. For CIFAR10 datasets (50K examples, 32*32*3 =3072 features) the performance difference was around 10 % on average. 
      * The downside of this approach is, that we have ~ 32 Bytes (tested via godbolt) per std::optional<std::function<..>> construct as overhead in every object. Also, the best_split function now depends on the template parameter and hence cannot be static anymore, increasing the code size. 
      * There might be more room for optimization / making the whole construct nicer, but for regular DTs I also tested a few other methods, including only using std::function and using raw function pointers, which never matched the performance of this approach. In fact, raw function pointers seem to be on par with std::functions here. 
      */
@@ -250,7 +248,7 @@ protected:
             }
             // Compute the corresponding gini score 
             internal_t best_score;
-            if constexpr(tree_init == DT::INIT::GINI) {
+            if constexpr(tree_init == INIT::GINI) {
                 best_score = gini(left_cnts, right_cnts);
             } else {
                 best_score = (*score)(left_cnts, right_cnts);
@@ -271,7 +269,7 @@ protected:
  
                 // internal_t cur_gini = gini(left_cnts, right_cnts);
                 internal_t cur_score;
-                if constexpr(tree_init == DT::INIT::GINI) {
+                if constexpr(tree_init == INIT::GINI) {
                     cur_score = gini(left_cnts, right_cnts);
                 } else {
                     cur_score = (*score)(left_cnts, right_cnts);
@@ -329,11 +327,11 @@ protected:
 
 public:
     DecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),score(std::nullopt) {
-        static_assert(tree_init == DT::INIT::GINI || tree_init == DT::INIT::RANDOM, "You used DT::INIT::CUSTOM, but did not supply a score function. Please use another constructor and supply the score function.");
+        static_assert(tree_init == INIT::GINI || tree_init == INIT::RANDOM, "You used INIT::CUSTOM, but did not supply a score function. Please use another constructor and supply the score function.");
     }
 
     DecisionTree(unsigned int n_classes, unsigned int max_depth, unsigned int max_features, unsigned long seed, std::function< internal_t(std::vector<unsigned int> const &, std::vector<unsigned int> const &)> score) : n_classes(n_classes),max_depth(max_depth),max_features(max_features),seed(seed),score(score)  {
-        static_assert(tree_init == DT::INIT::CUSTOM, "You used DT::INIT::GINI or DT::INIT::SCORE, but also supplied a score function. Please use another constructor that does not require a score function.");
+        static_assert(tree_init == INIT::CUSTOM, "You used INIT::GINI or INIT::SCORE, but also supplied a score function. Please use another constructor that does not require a score function.");
     }
 
     unsigned int num_bytes() const {
@@ -373,25 +371,25 @@ public:
         return _nodes;
     };
 
-    std::unique_ptr<Tree<data_t>> clone(std::optional<unsigned int> seed = std::nullopt) const {
-        std::unique_ptr<DecisionTree<data_t, tree_init>> the_clone;
-        unsigned int the_seed;
-        if (seed.has_value()) {
-            the_seed = *seed;
-        } else {
-            the_seed = this->seed;
-        }
+    // std::unique_ptr<Tree<data_t>> clone(std::optional<unsigned int> seed = std::nullopt) const {
+    //     std::unique_ptr<DecisionTree<data_t, tree_init>> the_clone;
+    //     unsigned int the_seed;
+    //     if (seed.has_value()) {
+    //         the_seed = *seed;
+    //     } else {
+    //         the_seed = this->seed;
+    //     }
 
-        if constexpr(tree_init == DT::INIT::CUSTOM) {
-            the_clone = std::make_unique<DecisionTree<data_t, tree_init>>(n_classes, max_depth, max_features, the_seed, *score);
-        } else {
-            the_clone = std::make_unique<DecisionTree<data_t, tree_init>>(n_classes, max_depth, max_features, the_seed);
-        }
+    //     if constexpr(tree_init == INIT::CUSTOM) {
+    //         the_clone = std::make_unique<DecisionTree<data_t, tree_init>>(n_classes, max_depth, max_features, the_seed, *score);
+    //     } else {
+    //         the_clone = std::make_unique<DecisionTree<data_t, tree_init>>(n_classes, max_depth, max_features, the_seed);
+    //     }
 
-        the_clone->_leaves = _leaves;
-        the_clone->_nodes = _nodes;
-        return the_clone;
-    };
+    //     the_clone->_leaves = _leaves;
+    //     the_clone->_nodes = _nodes;
+    //     return the_clone;
+    // };
 
     void predict_proba(matrix2d<data_t> const &X, matrix2d<internal_t> & preds) {
         for (unsigned int i = 0; i < X.rows; ++i) {
@@ -506,7 +504,7 @@ public:
             
                 // Compute a suitable split
                 std::optional<std::pair<internal_t, unsigned int>> split;
-                if constexpr (tree_init == DT::INIT::GINI || tree_init == DT::INIT::CUSTOM) {
+                if constexpr (tree_init == INIT::GINI || tree_init == INIT::CUSTOM) {
                     split = best_split(X, Y, exp.idx, n_classes, max_features, gen, exp.feature_is_const);
                 } else {
                     split = random_split(X, Y, exp.idx, gen, exp.feature_is_const);

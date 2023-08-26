@@ -91,11 +91,11 @@ setup(
     packages=find_packages('src'),
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
-    package_dir={'': 'src'},
+    package_dir={'': 'python'},
     zip_safe=False,
     # add an extension module named 'python_cpp_example' to the package 
     # 'python_cpp_example'
-    ext_modules=[CMakeExtension('ShrubEnsembles/ShrubEnsembles')],
+    ext_modules=[CMakeExtension('ShrubEnsemblesCPP')],
     # add custom build_ext command
     cmdclass=dict(build_ext=CMakeBuild),
     install_requires = [

@@ -110,7 +110,7 @@ int main() {
 	std::cout << "Training and testing on " << X.rows << " examples with " << X.cols << " features" << std::endl;
 	std::cout << "=== Init Tests Done === " << std::endl;
 
-	DecisionTree<double, DT::INIT::GINI> dt(n_classes,max_depth,max_features,seed);
+	DecisionTree<double, INIT::GINI> dt(n_classes,max_depth,max_features,seed);
 	auto start = std::chrono::steady_clock::now();
 	dt.fit(X,Y);
 	auto end = std::chrono::steady_clock::now();

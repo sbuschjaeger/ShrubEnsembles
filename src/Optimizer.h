@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cmath>
+#include <unordered_map>
 
 #include "Matrix.h"
 #include "Datatypes.h"
@@ -10,7 +11,8 @@ class Optimizer {
 public:
     virtual void reset() = 0;
 
-    virtual void step(matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) = 0;
+    // id can be used to identify groups of parameters
+    virtual void step(unsigned int id, matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) = 0;
 
     virtual unsigned int num_bytes() const = 0;
 
@@ -29,7 +31,7 @@ public:
 
     void reset() {}
 
-    void step(matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) {
+    void step(unsigned int id, matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) {
         for (unsigned int i = 0; i < grad.dim; ++i) {
             weight(i) -= step_size * grad(i); 
         }
@@ -51,9 +53,10 @@ public:
     internal_t step_size;
     internal_t beta1;
     internal_t beta2;
-
-    std::vector<internal_t> m;
-    std::vector<internal_t> v;
+    
+    // TODO replace std::vector with matrix1d
+    std::unordered_map<unsigned int, std::vector<internal_t>> ms;
+    std::unordered_map<unsigned int, std::vector<internal_t>> vs;
 
     // TODO Use this?
     // matrix1d<internal_t> m;
@@ -67,28 +70,33 @@ public:
     Adam() : step_size(1e-1), beta1(0.9), beta2(0.999), t(1) {}
 
     void reset() {
-        m.clear();
-        v.clear();
+        ms.clear();
+        vs.clear();
         t = 1;
     }
 
     unsigned int num_bytes() const {
-        return sizeof(*this) + m.size() * sizeof(internal_t) + v.size()*sizeof(internal_t);
+        auto ms_size = ms.size() > 0 ? ms.size() * ms.begin()->second.size() * sizeof(internal_t) : 0;
+        auto vs_size = vs.size() > 0 ? vs.size() * vs.begin()->second.size() * sizeof(internal_t) : 0;
+        return sizeof(*this) +  ms_size + vs_size;
     }
 
-    void step(matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) {
-        // TODO Also check v / weight?
-        if (m.size() != grad.dim) {
-            // m = matrix1d<internal_t>(grad.dim);
-            // std::fill(m.begin(), m.end(), 0);
-
-            // v = matrix1d<internal_t>(grad.dim);
-            // std::fill(v.begin(), v.end(), 0);
-
-            m = std::vector<internal_t>(grad.dim, 0);
-            v = std::vector<internal_t>(grad.dim, 0);
+    void step(unsigned int id, matrix1d<internal_t> &weight, matrix1d<internal_t> const &grad) {
+        
+        auto me = ms.find(id);
+        if (me == ms.end() || me->second.size() != grad.dim) {
+            ms[id] = std::vector<internal_t>(grad.dim, 0);
             t = 1;
-        }
+        } 
+
+        auto ve = vs.find(id);
+        if (ve == vs.end() || ve->second.size() != grad.dim) {
+            vs[id] = std::vector<internal_t>(grad.dim, 0);
+            t = 1;
+        } 
+        
+        auto & m = ms[id];
+        auto & v = vs[id];
 
         for (unsigned int i = 0; i < grad.dim; ++i) {
             m[i] = beta1 * m[i] + (1.0 - beta1) * grad(i);
@@ -105,9 +113,8 @@ public:
     std::unique_ptr<Optimizer> clone() const {
         std::unique_ptr<Adam> a = std::make_unique<Adam>(step_size, beta1, beta2);
         a->t = this->t;
-        
-        a->m = this->m;
-        a->v = this->v;
+        a->ms = this->ms;
+        a->vs = this->vs;
 
         return a;
     }
